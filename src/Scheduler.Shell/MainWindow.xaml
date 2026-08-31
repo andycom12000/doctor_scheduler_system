@@ -1,0 +1,20 @@
+<Window x:Class="Scheduler.Shell.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="醫院排班系統" Height="800" Width="1280"
+        WindowStartupLocation="CenterScreen">
+
+    <!--
+        正式版殼：此處應為單一 WebView2 控制項，填滿整個視窗。
+        WebView2 環境初始化、虛擬主機對應、WebResourceRequested 攔截與
+        SPA deep link fallback 的規格見 docs/ARCHITECTURE.md §4。
+        尚未實作。
+    -->
+    <Grid>
+        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextAlignment="Center" FontSize="14" Foreground="#666">
+            Scheduler.Shell 骨架<LineBreak />
+            WebView2 宿主尚未實作，見 docs/ARCHITECTURE.md §4
+        </TextBlock>
+    </Grid>
+</Window>

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Scheduler.Shell</RootNamespace>
+    <!-- 使用者看到的執行檔名稱 -->
+    <AssemblyName>HospitalScheduler</AssemblyName>
+    <!-- 觸發 Directory.Build.props 中的 self-contained / win-x64 發佈設定 -->
+    <IsPublishable>true</IsPublishable>
+    <!-- 目標環境含 4K 筆電 + 1080p 外接螢幕，Per-Monitor V2 為必要 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scheduler.Application\Scheduler.Application.csproj" />
+    <ProjectReference Include="..\Scheduler.Solver\Scheduler.Solver.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <!--
+    前端 build 產物。frontend/vite.config.ts 的 outDir 指向此處，
+    因此 wwwroot/ 內容不進版控（見 .gitignore），但需隨建置複製到輸出目錄。
+  -->
+  <ItemGroup>
+    <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

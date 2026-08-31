@@ -1,0 +1,34 @@
+# ---- .NET ----
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+publish/
+
+# ---- Node ----
+node_modules/
+*.log
+.npm/
+
+# ---- 建置產物 ----
+# 前端 build 產物。vite.config.ts 的 outDir 指向此處，由 npm run build 產生，
+# 不進版控（emptyOutDir 每次建置都會清空）。
+src/Scheduler.Shell/wwwroot/
+
+# 由 api-contract.yaml 生成，見 npm run api:types
+frontend/src/api/schema.d.ts
+
+# ---- 隨附 runtime ----
+# WebView2 Fixed Version 約 180MB，由 build/fetch-webview2.ps1 下載，不進版控。
+build/webview2-runtime/
+
+# ---- portable 執行期資料 ----
+# 所有狀態都寫在程式旁的 data/，見 docs/ARCHITECTURE.md §3.2
+data/
+
+# ---- OS ----
+Thumbs.db
+Desktop.ini
+.DS_Store

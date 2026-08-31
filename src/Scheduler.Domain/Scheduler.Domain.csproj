@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Scheduler.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    硬性規則 #1：本專案不得引用任何外部套件，尤其不得引用 OR-Tools。
+    由 tests/Scheduler.ArchitectureTests 自動驗證。
+  -->
+
+</Project>

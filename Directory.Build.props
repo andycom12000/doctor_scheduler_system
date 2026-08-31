@@ -1,0 +1,24 @@
+<Project>
+
+  <!-- 全 solution 共用設定。個別專案僅覆寫確有必要者。 -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- 發佈形態：資料夾式 portable。詳見 docs/ARCHITECTURE.md §6。 -->
+  <PropertyGroup>
+    <RuntimeIdentifier Condition="'$(IsPublishable)' == 'true'">win-x64</RuntimeIdentifier>
+    <SelfContained Condition="'$(IsPublishable)' == 'true'">true</SelfContained>
+    <!-- 自解壓到 %TEMP% 會觸發 AppLocker / EDR 攔截，且冷啟動變慢 -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <!-- OR-Tools 的 P/Invoke wrapper 不保證與 trim / AOT 相容 -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishAot>false</PublishAot>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Scheduler.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scheduler.Application\Scheduler.Application.csproj" />
+    <ProjectReference Include="..\Scheduler.Solver\Scheduler.Solver.csproj" />
+  </ItemGroup>
+
+  <!--
+    開發期 transport。與 Scheduler.Shell 共用同一組 handler（硬性規則 #2）：
+    本專案不得實作任何業務邏輯，只負責 HTTP ←→ Application 的轉換。
+  -->
+
+</Project>

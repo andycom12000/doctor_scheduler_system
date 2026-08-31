@@ -1,0 +1,23 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Microsoft JhengHei UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1f2328;
+  background: #f6f7f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+/*
+  正式版在 WebView2 內執行，沒有瀏覽器分頁與網址列，
+  且核心 UI 是密集格線 —— 版面請以「填滿視窗、內部捲動」為前提設計，
+  不要用一般網頁的置中固定寬度容器。
+*/

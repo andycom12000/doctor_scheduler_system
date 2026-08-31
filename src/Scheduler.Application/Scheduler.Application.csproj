@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Scheduler.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scheduler.Domain\Scheduler.Domain.csproj" />
+  </ItemGroup>
+
+  <!--
+    硬性規則 #1：本專案不得引用 OR-Tools。求解器以介面（ISolverEngine）隔離，
+    實作位於 Scheduler.Solver。由 tests/Scheduler.ArchitectureTests 自動驗證。
+  -->
+
+</Project>

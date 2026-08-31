@@ -1,0 +1,72 @@
+# =============================================================================
+#  前後端唯一耦合點。
+# =============================================================================
+#
+#  這份檔案是前端開發者與後端開發者之間的契約。任何一方要改端點形狀，
+#  都先改這裡、談定，再各自實作。
+#
+#  下游產物（改完契約請一併更新）：
+#    - frontend/src/api/schema.d.ts  ← npm run api:types
+#    - frontend/src/mocks/handlers.ts（手動同步）
+#    - src/Scheduler.Api 的端點（手動同步）
+#
+#  現況：領域模型與 API 契約由下一階段規劃，本檔目前只有存活檢查。
+#  見 docs/ARCHITECTURE.md 前言。
+#
+openapi: 3.1.0
+
+info:
+  title: 醫院排班系統 API
+  version: 0.0.0
+  description: |
+    同一組契約由兩個 transport 提供：
+      - 開發期：Scheduler.Api（Minimal API，http://localhost:5080）
+      - 正式版：Scheduler.Shell（WebView2 WebResourceRequested 攔截，https://app.local）
+    前端一律以相對路徑 `/api/...` 呼叫，兩者逐字相同。
+
+servers:
+  - url: http://localhost:5080
+    description: 開發期 Minimal API 主機
+  - url: https://app.local
+    description: 正式版 WebView2 虛擬主機（由殼攔截，不實際連網）
+
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: 存活檢查
+      description: 前端用來確認 backend transport 是否已就緒。
+      responses:
+        '200':
+          description: 服務正常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  # ---------------------------------------------------------------------------
+  # TODO（下一階段規劃）：領域端點。以下為架構文件已透露的形狀，尚未定案，
+  # 實作前必須先在此定義完整 schema。
+  #
+  #   POST   /api/jobs                 建立求解 job
+  #   GET    /api/jobs/{jobId}         查詢狀態與結果
+  #   GET    /api/jobs/{jobId}/stream  SSE 進度推送
+  #                                    （正式版改由 PostWebMessageAsJson 推送，
+  #                                     前端差異封裝在 frontend/src/realtime.ts）
+  #   DELETE /api/jobs/{jobId}         中止求解
+  # ---------------------------------------------------------------------------
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          examples: ['ok']
+
+    # TODO（下一階段規劃）：
+    #   ScheduleRequest —— 醫師名單、班別定義、期間、硬性/軟性限制
+    #   ScheduleResult  —— 排班結果、目標值、未滿足的軟性限制
+    #   Progress        —— 求解進度（realtime.ts 已先行定義暫時型別）
