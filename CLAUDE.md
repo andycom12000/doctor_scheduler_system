@@ -54,6 +54,22 @@ npm run api:types    # 由 api-contract.yaml 生成 src/api/schema.d.ts
 - **前端一律 `fetch('/api/...')` 相對路徑。** 唯一允許平台分支的檔案是
   `frontend/src/realtime.ts`。
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues（`andycom12000/doctor_scheduler_system`，private），透過 `gh` CLI 操作。
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+五個預設標籤，字串與角色名稱相同，已建在 GitHub 上。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context —— root 一份 `CONTEXT.md` + `docs/adr/`。前後端是同一領域的兩個層，
+不是兩個 bounded context。See `docs/agents/domain.md`.
+
 ## 尚未驗證的高風險項
 
 `docs/ARCHITECTURE.md` §7 列的必驗項目一項都還沒做。最優先的是：
