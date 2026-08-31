@@ -33,6 +33,18 @@ npm run dev           # /api 會 proxy 到 http://localhost:5080
 | `npm run typecheck` | 只跑型別檢查 |
 | `npm run api:types` | 由 `../api-contract.yaml` 生成 `src/api/schema.d.ts` |
 
+## 分支
+
+**從 `develop` 開分支，PR 合回 `develop`**（git-flow，`develop` 是預設分支）。
+不要直接 commit 到 `develop` 或 `main`。
+
+```bash
+git switch develop && git pull
+git switch -c feature/<slug>
+git push -u origin feature/<slug>
+gh pr create        # base 自動是 develop
+```
+
 ## 這個專案跟一般網頁專案不一樣的地方
 
 **這是要塞進 Windows 桌面程式裡的 SPA。** 正式版由一個 WPF 殼用 WebView2 載入，

@@ -40,6 +40,34 @@ npm run api:types    # 由 api-contract.yaml 生成 src/api/schema.d.ts
 
 發佈：`pwsh build/fetch-webview2.ps1`（一次性）→ `pwsh build/publish.ps1`。
 
+## 分支模型（git-flow）
+
+**預設分支是 `develop`，不是 `main`。** 日常工作一律從 `develop` 開分支、合回 `develop`。
+
+| 分支 | 從哪開 | 合回 | 用途 |
+|---|---|---|---|
+| `main` | — | — | 只接受 release / hotfix 合併。每個 commit 都是一次實際交付 |
+| `develop` | — | — | 整合分支，GitHub 預設分支 |
+| `feature/<slug>` | `develop` | `develop` | 功能開發 |
+| `release/<version>` | `develop` | `main` + `develop` | 發佈準備，合進 main 後在 main 上打 tag |
+| `hotfix/<version>` | `main` | `main` + `develop` | 已交付版本的緊急修正 |
+
+**不要直接 commit 到 `main` 或 `develop`**，一律走 PR。
+
+git-flow CLI（AVH edition）沒有安裝，用純 git 指令即可：
+
+```bash
+git switch develop && git pull
+git switch -c feature/<slug>
+# …
+git push -u origin feature/<slug>
+gh pr create --base develop
+```
+
+`gh pr create` 會自動以 `develop` 為 base（預設分支已設定），不需每次加 `--base`。
+
+本專案的版本號對應 portable 發佈包的資料夾版本，tag 只打在 `main` 上。
+
 ## 專案特有的坑
 
 - **`Scheduler.Shell` 裡 `Application` 會撞名。** 本組件同時引用 `Scheduler.Application`

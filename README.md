@@ -69,6 +69,22 @@ dotnet build          # 建置全部
 dotnet test           # 跑架構規則驗證
 ```
 
+## 分支模型
+
+採 git-flow。**預設分支是 `develop`**，`main` 只接受 release / hotfix 合併。
+
+```
+main                只接受 release / hotfix，每個 commit 都是一次交付，tag 打在這裡
+└─ develop          整合分支（GitHub 預設分支）
+   ├─ feature/<slug>        從 develop 開，PR 合回 develop
+   └─ release/<version>     從 develop 開，合回 main + develop
+main
+└─ hotfix/<version>         從 main 開，合回 main + develop
+```
+
+不要直接 commit 到 `main` 或 `develop`，一律走 PR。
+`gh pr create` 會自動以 `develop` 為 base。
+
 ## 發佈
 
 ```powershell
