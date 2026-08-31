@@ -45,6 +45,11 @@ git push -u origin feature/<slug>
 gh pr create        # base 自動是 develop
 ```
 
+git-flow CLI 是選配，用純 git 指令完全等價。若你要用 CLI，
+clone 後要跑一次 `.git/config` 的設定（不隨 repo 進版控），
+指令在 [`../CLAUDE.md` 的「分支模型」一節](../CLAUDE.md)。
+**不要用 `git flow feature finish`**，它會繞過 PR 直接在本機合併。
+
 ## 這個專案跟一般網頁專案不一樣的地方
 
 **這是要塞進 Windows 桌面程式裡的 SPA。** 正式版由一個 WPF 殼用 WebView2 載入，

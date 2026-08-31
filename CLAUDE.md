@@ -54,17 +54,48 @@ npm run api:types    # 由 api-contract.yaml 生成 src/api/schema.d.ts
 
 **不要直接 commit 到 `main` 或 `develop`**，一律走 PR。
 
-git-flow CLI（AVH edition）沒有安裝，用純 git 指令即可：
+### 每個 clone 都要做一次的設定
+
+git-flow 的設定存在 `.git/config`，**不會隨 repo 進版控**。新 clone 後跑一次：
 
 ```bash
-git switch develop && git pull
-git switch -c feature/<slug>
-# …
-git push -u origin feature/<slug>
-gh pr create --base develop
+git config gitflow.branch.master  main      # ← 不是 master，跑 git flow init -d 會猜錯
+git config gitflow.branch.develop develop
+git config gitflow.prefix.feature    "feature/"
+git config gitflow.prefix.bugfix     "bugfix/"
+git config gitflow.prefix.release    "release/"
+git config gitflow.prefix.hotfix     "hotfix/"
+git config gitflow.prefix.support    "support/"
+git config gitflow.prefix.versiontag "v"
+git flow init -d
 ```
 
-`gh pr create` 會自動以 `develop` 為 base（預設分支已設定），不需每次加 `--base`。
+`git flow config` 可確認結果。**先設 config 再 init**——直接跑 `git flow init -d`
+會預設用 `master` 當 production branch，然後真的幫你開一個 `master` 分支出來。
+
+### 日常指令
+
+CLI（AVH edition）已裝在 `~/.local/bin`，也可以完全不用它、用純 git：
+
+```bash
+# 用 CLI
+git flow feature start <slug>          # 從 develop 開 feature/<slug>
+git flow feature publish <slug>        # push 並設 upstream
+
+# 或純 git（等價）
+git switch develop && git pull
+git switch -c feature/<slug>
+git push -u origin feature/<slug>
+```
+
+**不要用 `git flow feature finish`** —— 它會在本機直接合進 develop 並刪掉分支，
+繞過 PR。開 PR 才是合併路徑：
+
+```bash
+gh pr create        # base 自動是 develop（預設分支已設定）
+```
+
+合併後再收尾：`git switch develop && git pull && git branch -d feature/<slug>`。
 
 本專案的版本號對應 portable 發佈包的資料夾版本，tag 只打在 `main` 上。
 
