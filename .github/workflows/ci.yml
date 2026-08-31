@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# 同一個 PR 上有新 push 時，取消還在跑的舊 run，省 Actions 分鐘數。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 後端。ubuntu runner（1x 計費）。
+  #
+  # 不能跑 `dotnet build` 建整個 solution —— Scheduler.Shell 是 net8.0-windows
+  # 的 WPF 專案，在 Linux 上建不起來。所以這裡只建 Scheduler.Api（會連帶建
+  # Application / Domain / Solver），Shell 交給下面的 windows job。
+  # ---------------------------------------------------------------------------
+  backend:
+    name: 後端建置與架構測試
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 快取 NuGet 套件
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          # OR-Tools 套件很大，快取命中與否對執行時間差很多
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: 還原
+        run: |
+          dotnet restore src/Scheduler.Api/Scheduler.Api.csproj
+          dotnet restore tests/Scheduler.ArchitectureTests/Scheduler.ArchitectureTests.csproj
+
+      - name: 建置
+        run: dotnet build src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --no-restore
+
+      # 守住 docs/ARCHITECTURE.md §3.1 的硬性規則 #1：
+      # Domain 與 Application 不得引用 OR-Tools。違反時編譯仍會成功，
+      # 只有這組測試擋得住 —— 所以它必須在 CI 裡跑。
+      - name: 架構規則測試
+        run: dotnet test tests/Scheduler.ArchitectureTests/Scheduler.ArchitectureTests.csproj --configuration Release
+
+  # ---------------------------------------------------------------------------
+  # 前端。ubuntu runner（1x 計費）。
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: 前端型別檢查與建置
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安裝
+        run: npm ci
+
+      # npm run build 已包含 vue-tsc --build，這裡分開跑是為了讓失敗時
+      # 一眼看出是型別問題還是打包問題。
+      - name: 型別檢查
+        run: npm run typecheck
+
+      - name: 建置
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # WPF 殼。windows runner（2x 計費）—— net8.0-windows + WebView2 只能在
+  # Windows 上建。
+  #
+  # 這個 job 每次都跑，不做 path filter。看起來可以只在動到
+  # src/Scheduler.Shell/** 時才跑，但那是錯的：Shell 依賴 Application 與
+  # Solver，改 Application 一樣可能把 Shell 打壞，而 path filter 會讓那種
+  # 改動整個溜過去。
+  # ---------------------------------------------------------------------------
+  shell:
+    name: WPF 殼建置
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 快取 NuGet 套件
+        uses: actions/cache@v4
+        with:
+          path: ~\.nuget\packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: 還原
+        run: dotnet restore src/Scheduler.Shell/Scheduler.Shell.csproj
+
+      - name: 建置
+        run: dotnet build src/Scheduler.Shell/Scheduler.Shell.csproj --configuration Release --no-restore
