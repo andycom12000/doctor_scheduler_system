@@ -4,20 +4,31 @@
 
 ## 先讀
 
+- `CONTEXT.md` — 詞彙表。**兩套點數（額度點數／公平性點數）與兩種假日（假日／國定假日）
+  絕不可混用**，講「點數」或「假日」而不指明是哪一個，一律視為錯誤。
 - `docs/ARCHITECTURE.md` — 技術決策已定案。**第 2 節是「已排除方案」，提任何技術選型前先看過**，
   Blazor / Tauri / Electron / MAUI / Timefold / meta-framework 等都已評估並否決，理由都在裡面。
-- `api-contract.yaml` — 前後端唯一耦合點。
+- `api-contract.yaml` — 前後端唯一耦合點。42 個操作、52 個 schema。
+- `docs/adr/` — 三個領域決策的理由。動到不可排班日、約束模型、變體產生方式之前先讀。
+- `docs/constraint-defaults.md` — 7 硬 / 7 軟約束的唯一預設值。seed、mock、測試 fixture 都從它抄，不得另發明代碼或數字。
 
 ## 現況
 
-骨架階段。領域模型、CP-SAT 建模、API 契約、UI 規格**都還沒開始**，屬下一階段。
-目前 `Scheduler.Domain` / `Application` / `Solver` 只有 `AssemblyMarker`，
-`Scheduler.Shell` 只有空 WPF 視窗，契約只有 `/api/health`。
+**需求已釐清、契約已定案，實作尚未開始。**
+
+- 領域已完整定義：5 區（A、B、C、ICU、總值）、33 位醫師、10 種身分、4 個身分組，
+  7 條硬約束、7 條軟約束，收斂成**九個宣告式原語**（見 ADR-0002）
+- `api-contract.yaml` 是完整的，前端可用 MSW mock 獨立開工
+- `docs/design-revisions.md` 是要回寫到 Claude Design 的畫面修訂清單
+- 程式碼仍是骨架：`Scheduler.Domain` / `Application` / `Solver` 只有 `AssemblyMarker`，
+  `Scheduler.Shell` 只有空 WPF 視窗，`Scheduler.Api` 只實作了 `/api/health`。
+  `Scheduler.Persistence` 尚未建立
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
 1. `Scheduler.Domain` 與 `Scheduler.Application` 不得引用 OR-Tools。
    求解器相依只存在於 `Scheduler.Solver`，由介面隔離。
+   **後果：驗證與求解是兩份實作，必須讀同一份宣告式約束定義才不會漂移——見 ADR-0002。**
 2. `Scheduler.Api` 與 `Scheduler.Shell` 是兩個 transport，共用同一組 handler。
    兩者都不得實作業務邏輯，只做 transport ↔ Application 的轉換。
    遷移到前後端分離時，刪掉 `Scheduler.Shell` 即可。
@@ -104,7 +115,10 @@ gh pr create        # base 自動是 develop（預設分支已設定）
 - **`Scheduler.Shell` 裡 `Application` 會撞名。** 本組件同時引用 `Scheduler.Application`
   命名空間與 `System.Windows.Application` 型別，基底型別必須完整限定。
 - **不要開 trim / AOT。** OR-Tools 的 P/Invoke wrapper 兩者皆不相容，
-  `Directory.Build.props` 已明確關閉。
+  `Directory.Build.props` 已明確關閉。SQLite 的 `e_sqlite3` 同樣是 native，一併受影響。
+- **不要加認證、角色、多單位、`If-Match` 樂觀鎖、伺服器端分頁。**
+  單機、單一使用者、單一 process、單一科部——這些全部沒有防禦對象，已在需求釐清中明確排除。
+  `revision` 只是修改次數計數器，不是併發控制。
 - **不要改成 `PublishSingleFile`。** 自解壓到 `%TEMP%` 會觸發 AppLocker / EDR。
 - **所有執行期狀態寫在程式旁的 `data/`**，不得碰 `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔。
   這是 portable 的硬性要求，也是驗收項目。
@@ -131,6 +145,10 @@ Single-context —— root 一份 `CONTEXT.md` + `docs/adr/`。前後端是同�
 
 ## 尚未驗證的高風險項
 
-`docs/ARCHITECTURE.md` §7 列的必驗項目一項都還沒做。最優先的是：
+`docs/ARCHITECTURE.md` §9 列的必驗項目一項都還沒做。最優先的是：
 **OR-Tools native lib 對 `vcruntime140` 的依賴，必須在一台乾淨的 Windows 上實測**，
 開發機驗不出來。這件事會影響是否需要在發佈包裡帶 VC++ runtime。
+SQLite 的 native 部署（`e_sqlite3.dll` 落到 `runtimes/`）與它一併驗。
+
+另一個容易腐爛的地方：**NP 的四條專屬規則幾乎測不到**——NP 只有 1 人且是後備人力，
+真實資料下極少觸發。必須寫不依賴真實資料的單元測試。

@@ -10,19 +10,35 @@
 #    - frontend/src/mocks/handlers.ts（手動同步）
 #    - src/Scheduler.Api 的端點（手動同步）
 #
-#  現況：領域模型與 API 契約由下一階段規劃，本檔目前只有存活檢查。
-#  見 docs/ARCHITECTURE.md 前言。
+#  領域詞彙見 CONTEXT.md。本檔的 schema 名稱與 CONTEXT.md 的正式術語一一對應，
+#  不得使用 CONTEXT.md 的 _Avoid_ 清單裡的字眼。
 #
 openapi: 3.1.0
 
 info:
-  title: 醫院排班系統 API
-  version: 0.0.0
+  title: 醫師值班排班系統 API
+  version: 1.0.0
   description: |
+    單一科部的月值班表求解器。單機、單一使用者、無認證。
+
     同一組契約由兩個 transport 提供：
       - 開發期：Scheduler.Api（Minimal API，http://localhost:5080）
       - 正式版：Scheduler.Shell（WebView2 WebResourceRequested 攔截，https://app.local）
     前端一律以相對路徑 `/api/...` 呼叫，兩者逐字相同。
+
+    ## 慣例
+
+    - 年月一律 `YYYY-MM` 字串（例：`2026-09`），日期一律 `YYYY-MM-DD`
+    - 值班表的識別子就是年月，**沒有代理鍵**：`/api/schedules/2026-09`
+    - 無認證、無角色、無 `If-Match`。單一使用者、單一 process，不存在併發寫入
+    - `revision` 是「這份值班表被改過幾次」的計數器，供 UI 顯示與前端快取失效，
+      **不是併發控制**
+    - 違規只帶 `code` 與 `severity`，**不帶渲染指示**；上色規則由前端擁有
+    - 違規是**讀取時衍生**的，不儲存。`Violation.id` 為確定性雜湊，同一個違規每次讀都同 id
+    - **跨月邊界**：值休休、NP 連續天數、連值週六三條規則都跨月。求解與驗證都以
+      上個月最後幾天的值班為固定輸入（草稿或已發布皆可，草稿時附 warning）；
+      跨月的違規歸屬**後一個月**
+    - 約束的預設值（代碼、範圍、參數、權重）見 `docs/constraint-defaults.md`
 
 servers:
   - url: http://localhost:5080
@@ -30,43 +46,1833 @@ servers:
   - url: https://app.local
     description: 正式版 WebView2 虛擬主機（由殼攔截，不實際連網）
 
+tags:
+  - name: health
+  - name: schedules
+    description: 值班表的讀取、編輯、驗證、發布、匯出
+  - name: views
+    description: 由值班表推導的檢視，皆為唯讀
+  - name: blocked-days
+    description: 不可排班日登記。獨立於值班表存在，是求解的輸入
+  - name: solver
+    description: 求解工作與變體
+  - name: settings
+  - name: staff
+
 paths:
+
+  # ===========================================================================
+  # health
+  # ===========================================================================
+
   /api/health:
     get:
+      tags: [health]
       operationId: getHealth
       summary: 存活檢查
-      description: 前端用來確認 backend transport 是否已就緒。
       responses:
         '200':
           description: 服務正常
           content:
             application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+
+  # ===========================================================================
+  # 值班表
+  # ===========================================================================
+
+  /api/schedules:
+    get:
+      tags: [schedules]
+      operationId: listSchedules
+      summary: 有值班表的月份清單
+      description: |
+        年月切換器用來標示哪些月份已有值班表、各自是草稿還是已發布。
+        切換器本身可選任意年月；選到清單以外的月份時，前端顯示「值班表尚未產生」。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/HealthStatus'
+                type: object
+                required: [months]
+                properties:
+                  months:
+                    type: array
+                    items: { $ref: '#/components/schemas/ScheduleSummary' }
 
-  # ---------------------------------------------------------------------------
-  # TODO（下一階段規劃）：領域端點。以下為架構文件已透露的形狀，尚未定案，
-  # 實作前必須先在此定義完整 schema。
-  #
-  #   POST   /api/jobs                 建立求解 job
-  #   GET    /api/jobs/{jobId}         查詢狀態與結果
-  #   GET    /api/jobs/{jobId}/stream  SSE 進度推送
-  #                                    （正式版改由 PostWebMessageAsJson 推送，
-  #                                     前端差異封裝在 frontend/src/realtime.ts）
-  #   DELETE /api/jobs/{jobId}         中止求解
-  # ---------------------------------------------------------------------------
+  /api/schedules/{ym}:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    get:
+      tags: [schedules]
+      operationId: getSchedule
+      summary: 取單月完整值班表
+      description: |
+        回傳整月每一格值班。5 區 × 約 30 天 = 約 150 筆，一次全帶，不分頁。
+        未指派的格子**不出現**在 `duties` 裡。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Schedule' }
+        '404':
+          $ref: '#/components/responses/NotFound'
 
+  /api/schedules/{ym}/duties:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    patch:
+      tags: [schedules]
+      operationId: setDuty
+      summary: 指派或清空一格
+      description: |
+        三個檢視分頁共用這一支：區域 × 日改人、日 × 人改區域、單日詳表直接換人。
+        目標格由 `(areaId, date)` 明確指定，**不使用 cellKey 當寫入目標**。
+
+        **打破硬約束時不拒絕寫入**，一律接受並在回應裡帶回改動後的全量違規。
+        排班者是唯一權威；擋人只會逼他放棄使用本系統。硬約束在發布時才把關。
+
+        該月尚無值班表時**自動建立一份空草稿**再寫入——這是「從空白手排」的入口，
+        不需要另設建立端點。**已發布的值班表也可以改**（臨時換人是常態），
+        `revision` 照常遞增；月結轉要重算的話再呼叫一次 `publish`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetDutyRequest' }
+      responses:
+        '200':
+          description: 寫入成功，回傳改動後的格子與全量違規
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MutationResult' }
+        '422':
+          description: |
+            請求本身無效（人員不存在、日期不在本月、區域不存在）。
+            **不含硬約束違反** —— 那個一律接受。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/schedules/{ym}/duties/swap:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    post:
+      tags: [schedules]
+      operationId: swapDuties
+      summary: 對調兩格的值班人員
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SwapDutiesRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MutationResult' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/schedules/{ym}/validate:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    post:
+      tags: [schedules]
+      operationId: validateSchedule
+      summary: 重新驗證整份值班表
+      description: |
+        工具列的「驗證約束」。由 `Scheduler.Domain` 的檢查器執行，**不經求解器**
+        （`Scheduler.Domain` 不得引用 OR-Tools，見 ADR-0002）。
+
+        會讀上個月的尾巴以檢查跨月的值休休與 NP 連續天數。
+
+        **哪些約束會產生逐格違規**：全部硬約束，以及軟約束中的 `Preference` 與
+        `Consistency`（每一個偏離都指得到格子）。`Fairness` 是身分組層級的分數，
+        指不到格子，**不產生違規**，其數值見點數看板與變體指標。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationResult' }
+
+  /api/schedules/{ym}/publish:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    post:
+      tags: [schedules]
+      operationId: publishSchedule
+      summary: 發布值班表
+      description: |
+        發布時結算**月結轉**（同組內剩餘額度偏少者的差額），供下個月的公平性目標
+        當起始偏移使用。
+
+        仍有硬約束違規時回 `409`，**除非** body 帶 `acknowledgeViolations: true`。
+        排班者是唯一權威，系統要求的是明確確認，不是拒絕。
+
+        **可重複呼叫。** 已發布的值班表被逐格改過之後再發布一次，會以當下的內容
+        **覆寫**該月的月結轉，`publishedAt` 更新為最後一次。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acknowledgeViolations:
+                  type: boolean
+                  default: false
+                  description: 明知有硬約束違規仍要發布
+      responses:
+        '200':
+          description: 已發布
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublishResult' }
+        '409':
+          description: 尚有硬約束違規且未確認
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/schedules/{ym}/export:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+      - name: layout
+        in: query
+        description: 版面，跟隨目前的檢視分頁
+        schema:
+          type: string
+          enum: [area-by-day, day-by-staff]
+          default: area-by-day
+    get:
+      tags: [schedules]
+      operationId: exportSchedule
+      summary: 匯出 Excel
+      description: |
+        **直接回檔案位元組**，不回下載連結。前端用 `URL.createObjectURL` 觸發，
+        WebView2 走原生下載流程、跳系統存檔對話框。
+
+        portable 環境沒有可放暫存檔的地方（`data/` 以外都不能寫），
+        也沒有真的 HTTP server 能提供 `expiresAt` 型的連結。
+      responses:
+        '200':
+          description: xlsx 檔案內容
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              example: 'attachment; filename="duty-2026-09.xlsx"'
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+
+  /api/schedules/{ym}/violations:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+      - name: severity
+        in: query
+        schema: { $ref: '#/components/schemas/Severity' }
+      - name: date
+        in: query
+        schema: { type: string, format: date }
+    get:
+      tags: [schedules]
+      operationId: listViolations
+      summary: 違規清單
+      description: |
+        格子上的警示**唯一來源**。前端依 `cellKeys` 索引到格子，
+        依 `code` 與 `severity` 自行決定呈現方式（底色／斜紋／外框）。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [violations]
+                properties:
+                  violations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Violation' }
+
+  # ===========================================================================
+  # 由值班表推導的檢視
+  # ===========================================================================
+
+  /api/schedules/{ym}/point-board:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    get:
+      tags: [views]
+      operationId: getPointBoard
+      summary: 點數看板
+      description: |
+        每人的**額度點數**（主要，排班者日常在看的）與**公平性點數**（次要，實驗性）。
+        依身分組分區，組內以剩餘額度 `quotaRemaining` 比較公平性——
+        因為同組內不同身分的上限不同（例：R2 上限 8、R3 上限 7），比絕對值沒有意義。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups]
+                properties:
+                  groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/PointBoardGroup' }
+
+  /api/schedules/{ym}/days/{date}:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+      - name: date
+        in: path
+        required: true
+        schema: { type: string, format: date }
+    get:
+      tags: [views]
+      operationId: getDayDetail
+      summary: 單日詳表
+      description: |
+        單日全 5 區的值班人。姓名、身分與該人的月負載一併帶回，
+        前端**不需要另外打點數看板或名冊**。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DayDetail' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/schedules/{ym}/vacancies:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    get:
+      tags: [views]
+      operationId: listVacancies
+      summary: 空缺
+      description: 依日期彙總的未填補格子。日 × 人分頁的右側「空缺」欄與變體密度圖共用。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [byDate, total]
+                properties:
+                  total: { type: integer }
+                  byDate:
+                    type: array
+                    items: { $ref: '#/components/schemas/VacancyByDate' }
+
+  /api/schedules/{ym}/candidates:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+      - name: areaId
+        in: query
+        required: true
+        schema: { type: string }
+      - name: date
+        in: query
+        required: true
+        schema: { type: string, format: date }
+    get:
+      tags: [views]
+      operationId: listCandidates
+      summary: 某一格的可指派人員建議
+      description: |
+        依資格、剩餘額度、值休休間隔、不可排班日過濾後排序。
+        `blockingReasons` 非空者代表指派他會產生硬約束違規——仍然列出，
+        由排班者決定（寫入不會被拒絕）。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items: { $ref: '#/components/schemas/Candidate' }
+
+  # ===========================================================================
+  # 不可排班日
+  # ===========================================================================
+
+  /api/blocked-days/{ym}:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    get:
+      tags: [blocked-days]
+      operationId: getBlockedDays
+      summary: 取單月不可排班日登記
+      description: |
+        **不掛在 `/schedules/{ym}` 底下**（見 ADR-0001）。登記發生在值班表存在之前，
+        是求解的輸入，有自己獨立的生命週期。`ym` 是**被登記的月份**（通常是次月）。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlockedDayRegistration' }
+
+  /api/blocked-days/{ym}/{staffId}/{date}:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+      - name: staffId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: date
+        in: path
+        required: true
+        schema: { type: string, format: date }
+    put:
+      tags: [blocked-days]
+      operationId: setBlockedDay
+      summary: 登記一格
+      description: 筆刷式點格寫入。超過每人每月上限時回 `409`。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlockedDayMutationResult' }
+        '409':
+          description: 超過每人每月上限
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    delete:
+      tags: [blocked-days]
+      operationId: clearBlockedDay
+      summary: 清除一格
+      description: 清除筆刷。對未登記的格子呼叫是冪等的，回 200。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlockedDayMutationResult' }
+
+  /api/blocked-days/{ym}/feasibility:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    get:
+      tags: [blocked-days]
+      operationId: getFeasibility
+      summary: 可行性預警
+      description: |
+        在登記階段就回答「以目前的登記量，這個月排得出來嗎」。
+
+        每人上限 16 天，若全員用滿，總供給撐不到每月約 150 班的需求。
+        真正危險的是**總值**——只有 R4/R5/R6 這一組能值，某天他們集體登記
+        就直接無解。
+
+        兩層檢查，都是**必要條件而非充分條件**（不看值休休，只看資格與登記）：
+
+        - `byDate`：逐日、逐區域類型，扣掉登記者之後有資格的人數是否 ≥ 需求
+        - `bySupply`：整月額度的**巢狀累計**檢查。資格是巢狀的
+          （總值 ⊂ R4~R6；ICU ⊂ R2~R6；一般病房 ⊂ 全體），所以不能逐區域類型
+          各算各的——R2 會同時被算進 ICU 與一般病房。正確的三道不等式：
+          總值需求 ≤ 資深供給；總值＋ICU 需求 ≤ 資深＋中階供給；全部需求 ≤ 全部供給。
+          其中「一般病房需求 vs 低年級剩餘供給」那一層最值得盯——它一旦吃緊，
+          資深就會被拉進 ICU 擠掉 R2/R3，「R2/R3 優先 ICU」這條偏好就會被犧牲。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeasibilityReport' }
+
+  # ===========================================================================
+  # 求解
+  # ===========================================================================
+
+  /api/solver-jobs:
+    post:
+      tags: [solver]
+      operationId: createSolverJob
+      summary: 建立求解工作
+      description: |
+        非同步。回 `jobId` 後由推送通道回報進度（見 `/stream` 與 realtime.ts）。
+
+        變體以**不同的軟約束權重組合**產生，而非列舉次佳解（見 ADR-0003）——
+        每份變體代表一種取捨立場，比較畫面才有話講。三份序列求解，
+        因為多樣性約束需要看到前一份的結果。
+
+        **覆蓋在求解器裡不是硬約束。** 「每日每區恰好 1 人」在驗證層是硬違規，
+        但求解器把它建成極高權重的軟項——登記過多導致無解時，仍然回傳
+        「空缺最少」的變體，讓排班者看得到缺在哪裡，而不是拿到一句 INFEASIBLE。
+        這是驗證層與求解層對同一份定義**刻意不同**的唯一解讀（見 ADR-0002）。
+
+        讀上個月的尾巴當固定輸入（跨月的值休休、NP 連續天數、連值週六）；
+        上月仍是草稿或尚未發布（月結轉為空）時，回應的 `warnings` 會說。
+
+        單一 process、CP-SAT 吃滿核心，**同時只能有一個工作在跑**，否則回 `409`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSolverJobRequest' }
+      responses:
+        '202':
+          description: 已排入
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SolverJob' }
+        '409':
+          description: 已有求解工作在執行中
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/solver-jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [solver]
+      operationId: getSolverJob
+      summary: 查詢求解工作
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SolverJob' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [solver]
+      operationId: cancelSolverJob
+      summary: 中止求解
+      description: 已完成的工作呼叫此端點是冪等的，回 200 且狀態不變。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SolverJob' }
+
+  /api/solver-jobs/{jobId}/stream:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [solver]
+      operationId: streamSolverJob
+      summary: 求解進度推送（SSE）
+      description: |
+        **僅開發期 transport 使用。** 正式版由 `Scheduler.Shell` 以
+        `CoreWebView2.PostWebMessageAsJson` 推送同樣形狀的事件，
+        前端的平台分支封裝在 `frontend/src/realtime.ts`（全專案唯一有平台分支的檔案）。
+
+        **不提供完成百分比。** CP-SAT 不是逐步推進到 100% 的演算法，
+        給不出可信的完成度。回報的是耗時、已找到解數與最佳化收斂間隙。
+      responses:
+        '200':
+          description: 事件流
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/SolverProgress' }
+
+  /api/solver-jobs/{jobId}/variants:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [solver]
+      operationId: listVariants
+      summary: 變體清單、指標與完整內容
+      description: |
+        每份變體帶**完整的值班清單**（約 150 筆），密度圖與逐格差異都由前端
+        就地計算，不需要額外端點。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variants]
+                properties:
+                  variants:
+                    type: array
+                    items: { $ref: '#/components/schemas/Variant' }
+
+  /api/schedules/{ym}/apply-variant:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    post:
+      tags: [solver]
+      operationId: applyVariant
+      summary: 套用變體為草稿
+      description: |
+        覆蓋該月值班表的全部值班；該月尚無值班表時建立一份。
+        已發布的值班表不可整份套用（幾乎一定是誤操作），回 `409`——
+        要改就逐格改。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId, variantId]
+              properties:
+                jobId: { type: string }
+                variantId: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Schedule' }
+        '409':
+          description: 該月值班表已發布
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ===========================================================================
+  # 設定
+  # ===========================================================================
+
+  /api/settings/areas:
+    get:
+      tags: [settings]
+      operationId: getAreaSettings
+      summary: 取區域與區域類型
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AreaSettings' }
+    put:
+      tags: [settings]
+      operationId: putAreaSettings
+      summary: 整份取代區域與區域類型
+      description: |
+        5 個區域、3 種區域類型是一份小文件，**整份取代**而非逐項 CRUD。
+        彈性完全相同，端點少 8 支，且與其他設定端點形態一致。
+
+        刪除仍被值班表引用的區域、或仍被區域引用的區域類型，回 `409`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AreaSettings' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AreaSettings' }
+        '409':
+          description: 有區域或區域類型仍被引用（`AREA_IN_USE` / `AREA_TYPE_IN_USE`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/settings/ranks:
+    get:
+      tags: [settings]
+      operationId: getRankSettings
+      summary: 取身分與身分組
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RankSettings' }
+    put:
+      tags: [settings]
+      operationId: putRankSettings
+      summary: 整份取代身分與身分組
+      description: |
+        刪除仍被人員、資格矩陣或約束 `scope` 引用的身分代碼回 `409`；
+        刪除仍被身分引用的身分組同樣回 `409`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RankSettings' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RankSettings' }
+        '409':
+          description: 有身分或身分組仍被引用（`RANK_IN_USE`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/settings/eligibility-matrix:
+    get:
+      tags: [settings]
+      operationId: getEligibilityMatrix
+      summary: 取資格矩陣
+      description: 身分 × 區域類型 可否值班。是資格的**唯一真相**，人員的可值類型由此推導。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityMatrix' }
+    put:
+      tags: [settings]
+      operationId: putEligibilityMatrix
+      summary: 整份取代資格矩陣
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EligibilityMatrix' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibilityMatrix' }
+
+  /api/settings/point-rules:
+    get:
+      tags: [settings]
+      operationId: getPointRules
+      summary: 取兩套點數的規則
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PointRules' }
+    put:
+      tags: [settings]
+      operationId: putPointRules
+      summary: 整份取代點數規則
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PointRules' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PointRules' }
+
+  /api/settings/constraints:
+    get:
+      tags: [settings]
+      operationId: getConstraints
+      summary: 取約束定義
+      description: |
+        **這份文件就是宣告式的約束定義本身**（見 ADR-0002）。
+        `Scheduler.Domain` 的檢查器與 `Scheduler.Solver` 的建模器
+        解讀的是同一份，不存在兩份會漂移的實作。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConstraintSettings' }
+    put:
+      tags: [settings]
+      operationId: putConstraints
+      summary: 整份取代約束定義
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConstraintSettings' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConstraintSettings' }
+
+  /api/settings/monthly-overrides/{ym}:
+    parameters:
+      - $ref: '#/components/parameters/YearMonth'
+    get:
+      tags: [settings]
+      operationId: getMonthlyOverride
+      summary: 取當月設定覆寫
+      description: |
+        目前唯一的用途是 **R6 的當月額度上限**。刻意做窄——
+        其他設定是否需要逐月覆寫尚無實證，等真的需要再擴充。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonthlyOverride' }
+    put:
+      tags: [settings]
+      operationId: putMonthlyOverride
+      summary: 設定當月覆寫
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MonthlyOverride' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonthlyOverride' }
+
+  /api/calendars/{year}:
+    parameters:
+      - name: year
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [settings]
+      operationId: getCalendar
+      summary: 取整年度行事曆
+      description: |
+        以**年**為單位載入。公平性點數表要看「隔日」，月底最後一天需要
+        下個月第一天的資訊，按月載入會在跨月處斷掉。
+
+        12/31 的「隔日」是隔年 1/1——**後端查表必須跨年**，前端不需處理
+        （前端不算點數，只顯示後端算好的值）。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Calendar' }
+
+  /api/calendars/{year}/{date}:
+    parameters:
+      - name: year
+        in: path
+        required: true
+        schema: { type: integer }
+      - name: date
+        in: path
+        required: true
+        schema: { type: string, format: date }
+    patch:
+      tags: [settings]
+      operationId: overrideCalendarDay
+      summary: 覆寫單日的假日屬性
+      description: 用於補班日修正與臨時放假。內建行事曆每年更新，覆寫處理例外。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalendarDayOverride' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarDay' }
+
+  # ===========================================================================
+  # 人員
+  # ===========================================================================
+
+  /api/staff:
+    get:
+      tags: [staff]
+      operationId: listStaff
+      summary: 人員名冊
+      description: |
+        全院約 34 人，**一次全帶、不分頁**。篩選由前端做——
+        為 34 列資料實作伺服器端分頁是憑空發明的複雜度。
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/StaffStatus' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, counts]
+                properties:
+                  counts: { $ref: '#/components/schemas/StaffCounts' }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Staff' }
+    post:
+      tags: [staff]
+      operationId: createStaff
+      summary: 新增人員
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffWrite' }
+      responses:
+        '201':
+          description: 已建立
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Staff' }
+        '409':
+          description: 員編重複
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/staff/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [staff]
+      operationId: updateStaff
+      summary: 編輯人員
+      description: |
+        `eligibleAreaTypes` 由資格矩陣依 `rankCode` 重算，**不由 client 送入**。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffWrite' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Staff' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [staff]
+      operationId: deleteStaff
+      summary: 刪除人員
+      description: |
+        已有值班紀錄者不可刪除，只能停用，回 `409`。
+        該人的不可排班日登記**級聯刪除**——登記是求解輸入，不是歷史事實。
+      responses:
+        '204':
+          description: 已刪除
+        '409':
+          description: 已有值班紀錄
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/staff/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [staff]
+      operationId: setStaffStatus
+      summary: 狀態變更
+      description: |
+        停用／復職**不影響歷史值班表**；停用者不納入後續求解。
+        **沒有生效日**——求解器沒有逐日可用性模型（那是不可排班日的事），
+        七月輪動在月邊界切狀態即可。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/StaffStatus' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Staff' }
+
+# =============================================================================
 components:
+# =============================================================================
+
+  parameters:
+    YearMonth:
+      name: ym
+      in: path
+      required: true
+      description: 年月，`YYYY-MM`
+      schema:
+        type: string
+        pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+      example: '2026-09'
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    NotFound:
+      description: 找不到
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
   schemas:
+
+    # -- 通用 ---------------------------------------------------------------
+
     HealthStatus:
       type: object
       required: [status]
       properties:
-        status:
-          type: string
-          examples: ['ok']
+        status: { type: string, examples: ['ok'] }
 
-    # TODO（下一階段規劃）：
-    #   ScheduleRequest —— 醫師名單、班別定義、期間、硬性/軟性限制
-    #   ScheduleResult  —— 排班結果、目標值、未滿足的軟性限制
-    #   Progress        —— 求解進度（realtime.ts 已先行定義暫時型別）
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string, description: 可直接顯示給使用者的中文訊息 }
+            details: { type: object, additionalProperties: true }
+
+    ErrorCode:
+      type: string
+      enum:
+        - NOT_FOUND
+        - INVALID_REQUEST
+        - BLOCKED_DAY_CAP_EXCEEDED       # 超過每人每月不可排班日上限
+        - HARD_VIOLATIONS_PRESENT        # 發布時仍有硬約束違規且未確認
+        - SCHEDULE_ALREADY_PUBLISHED     # 對已發布的值班表套用變體
+        - AREA_IN_USE                    # 刪除仍被值班表引用的區域
+        - AREA_TYPE_IN_USE               # 刪除仍被區域引用的區域類型
+        - RANK_IN_USE                    # 刪除仍被人員／矩陣／約束引用的身分或身分組
+        - EMPLOYEE_NO_TAKEN              # 員編重複
+        - STAFF_HAS_DUTIES               # 已有值班紀錄者不可硬刪
+        - SOLVER_BUSY                    # 已有求解工作在執行中
+        - SOLVER_FAILED
+
+    Severity:
+      type: string
+      enum: [hard, soft]
+
+    Metric:
+      type: string
+      description: |
+        度量。`Budget` 與 `Fairness` 兩個原語對它參數化，
+        因此兩套點數與天數上限共用同一份程式碼。
+
+        `Fairness` 對 `quota_point` 比的是**剩餘額度**（上限 − 已排 − 月結轉偏移），
+        對 `fairness_point` 比的是累計值。離散程度一律定義為組內 **max − min**——
+        線性、CP-SAT 直接可建，也是案主例子「7, 7, 8」的直覺。
+      enum: [quota_point, fairness_point, duty_day]
+
+    # -- 值班表 -------------------------------------------------------------
+
+    ScheduleStatus:
+      type: string
+      enum: [draft, published]
+
+    ScheduleSummary:
+      type: object
+      required: [yearMonth, status, revision]
+      properties:
+        yearMonth: { type: string, examples: ['2026-09'] }
+        status: { $ref: '#/components/schemas/ScheduleStatus' }
+        revision: { type: integer }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        hardViolationCount: { type: integer }
+
+    Schedule:
+      type: object
+      required: [yearMonth, status, revision, dayCount, areas, duties]
+      properties:
+        yearMonth: { type: string, examples: ['2026-09'] }
+        status: { $ref: '#/components/schemas/ScheduleStatus' }
+        revision:
+          type: integer
+          description: |
+            被改過幾次。供 UI 顯示（「草稿 v2」）與前端快取失效，
+            **不是併發控制**——單一使用者、單一 process，不存在併發寫入。
+        publishedAt: { type: [string, 'null'], format: date-time }
+        dayCount: { type: integer }
+        staffCount: { type: integer }
+        areas:
+          type: array
+          items: { $ref: '#/components/schemas/Area' }
+        duties:
+          type: array
+          description: 未指派的格子**不出現**在此
+          items: { $ref: '#/components/schemas/Duty' }
+
+    Duty:
+      type: object
+      required: [areaId, date, staffId]
+      properties:
+        areaId: { type: string }
+        date: { type: string, format: date }
+        staffId: { type: string }
+        cellKey:
+          type: string
+          description: |
+            前端的渲染索引鍵，形如 `area:{areaId}:{date}`。
+            **不是領域識別子，不可作為寫入目標。**
+          examples: ['area:ICU:2026-09-14']
+
+    SetDutyRequest:
+      type: object
+      required: [areaId, date]
+      properties:
+        areaId: { type: string }
+        date: { type: string, format: date }
+        staffId:
+          type: [string, 'null']
+          description: null 代表清空這一格
+
+    SwapDutiesRequest:
+      type: object
+      required: [a, b]
+      properties:
+        a: { $ref: '#/components/schemas/CellRef' }
+        b: { $ref: '#/components/schemas/CellRef' }
+
+    CellRef:
+      type: object
+      required: [areaId, date]
+      properties:
+        areaId: { type: string }
+        date: { type: string, format: date }
+
+    MutationResult:
+      type: object
+      required: [duties, violations, revision]
+      properties:
+        revision: { type: integer }
+        duties:
+          type: array
+          description: 本次改動後的格子
+          items: { $ref: '#/components/schemas/Duty' }
+        violations:
+          type: array
+          description: |
+            改動後**整份值班表的全量違規**，前端整個取代本地清單。
+            不是「受影響的」——那樣表達不了被這次改動**消除**的違規。
+            150 格、十來條違規，全帶沒有成本。
+          items: { $ref: '#/components/schemas/Violation' }
+
+    ValidationResult:
+      type: object
+      required: [ok, violations, summary]
+      properties:
+        ok: { type: boolean, description: 無硬約束違規時為 true }
+        violations:
+          type: array
+          items: { $ref: '#/components/schemas/Violation' }
+        summary:
+          type: object
+          properties:
+            hard: { type: integer }
+            soft: { type: integer }
+
+    PublishResult:
+      type: object
+      required: [status, publishedAt, revision]
+      properties:
+        status: { $ref: '#/components/schemas/ScheduleStatus' }
+        publishedAt: { type: string, format: date-time }
+        revision: { type: integer }
+        carryOver:
+          type: array
+          description: 本次發布結算出的月結轉，供下個月的公平性目標當起始偏移。重複發布時覆寫
+          items: { $ref: '#/components/schemas/CarryOverEntry' }
+
+    CarryOverEntry:
+      type: object
+      required: [staffId, points]
+      properties:
+        staffId: { type: string }
+        points:
+          type: integer
+          minimum: 0
+          description: |
+            `組內最大剩餘額度 − 本人剩餘額度`，與 `Fairness` 用同一把尺（剩餘額度，
+            不是原始點數——R2 上限 8、R3 上限 7，比原始點數沒有意義）。
+            剩餘最多的人為 0。下個月的公平性計算以此為起始偏移，讓他少值一點。
+            **不累積跨越兩個月。**
+
+    Violation:
+      type: object
+      required: [id, code, severity, cellKeys, message]
+      properties:
+        id:
+          type: string
+          description: |
+            確定性雜湊（`code` + 排序後的 `cellKeys`）。違規是讀取時衍生的，
+            不儲存，所以 id 不能是流水號——同一個違規每次讀都必須同 id，
+            前端才能做 diff 與去重。
+        code:
+          type: string
+          description: 對應 ConstraintSettings 裡的約束代碼
+          examples: ['H1_AREA_COVERAGE']
+        severity: { $ref: '#/components/schemas/Severity' }
+        cellKeys:
+          type: array
+          description: 前端索引用。可能是 `area:{areaId}:{date}` 或 `staff:{staffId}:{date}`
+          items: { type: string }
+        message: { type: string }
+
+    # -- 檢視 ---------------------------------------------------------------
+
+    PointBoardGroup:
+      type: object
+      required: [groupCode, groupName, rows]
+      properties:
+        groupCode: { type: string }
+        groupName: { type: string }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/PointBoardRow' }
+
+    PointBoardRow:
+      type: object
+      required: [staffId, name, rankCode, quotaPoints, quotaCap, quotaRemaining, duties, holidayDuties]
+      properties:
+        staffId: { type: string }
+        name: { type: string }
+        rankCode: { type: string }
+        quotaPoints: { type: integer, description: 已排的額度點數 }
+        quotaCap: { type: [integer, 'null'], description: 額度上限。NP 不計，為 null }
+        quotaRemaining:
+          type: [integer, 'null']
+          description: '`quotaCap - quotaPoints`。組內公平性比較的就是這個值'
+        carryOverApplied: { type: integer, description: 由上月帶入的起始偏移 }
+        fairnessPoints: { type: [integer, 'null'], description: 公平性點數（實驗性，次要顯示） }
+        duties: { type: integer }
+        holidayDuties: { type: integer }
+
+    DayDetail:
+      type: object
+      required: [date, isHoliday, isPublicHoliday, quotaPointValue, areas]
+      properties:
+        date: { type: string, format: date }
+        isHoliday: { type: boolean, description: 六、日或國定假日 }
+        isPublicHoliday: { type: boolean, description: 國定假日，不含一般週末 }
+        quotaPointValue: { type: integer, description: 該日值一班的額度點數 }
+        areas:
+          type: array
+          items:
+            type: object
+            required: [areaId, code, areaTypeCode, filled]
+            properties:
+              areaId: { type: string }
+              code: { type: string }
+              areaTypeCode: { type: string }
+              filled: { type: boolean }
+              staff:
+                type: [object, 'null']
+                properties:
+                  staffId: { type: string }
+                  name: { type: string }
+                  rankCode: { type: string }
+                  monthQuotaPoints: { type: integer }
+                  monthQuotaCap: { type: [integer, 'null'] }
+                  monthHolidayDuties: { type: integer }
+
+    VacancyByDate:
+      type: object
+      required: [date, areaIds, count]
+      properties:
+        date: { type: string, format: date }
+        areaIds:
+          type: array
+          items: { type: string }
+        count: { type: integer }
+
+    Candidate:
+      type: object
+      required: [staffId, name, rankCode, quotaRemaining, blockingReasons]
+      properties:
+        staffId: { type: string }
+        name: { type: string }
+        rankCode: { type: string }
+        quotaRemaining: { type: [integer, 'null'] }
+        areaConsistency:
+          type: number
+          description: 這個月他值過此區域的比例，用於「盡量讓同一人值同一區」
+        blockingReasons:
+          type: array
+          description: |
+            非空代表指派他會產生硬約束違規。**仍然列出**——
+            寫入不會被拒絕，由排班者決定。
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+
+    # -- 不可排班日 ---------------------------------------------------------
+
+    BlockedDayRegistration:
+      type: object
+      required: [yearMonth, monthlyCap, entries, byStaff, byDate]
+      properties:
+        yearMonth: { type: string }
+        monthlyCap: { type: integer, description: 每人每月上限，預設 16 }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/BlockedDayEntry' }
+        byStaff:
+          type: array
+          items:
+            type: object
+            properties:
+              staffId: { type: string }
+              count: { type: integer }
+              remaining: { type: integer }
+        byDate:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              count: { type: integer }
+
+    BlockedDayEntry:
+      type: object
+      required: [staffId, date]
+      properties:
+        staffId: { type: string }
+        date: { type: string, format: date }
+
+    BlockedDayMutationResult:
+      type: object
+      required: [staffTotals, dateTotals]
+      properties:
+        staffTotals:
+          type: object
+          properties:
+            count: { type: integer }
+            remaining: { type: integer }
+        dateTotals:
+          type: object
+          properties:
+            count: { type: integer }
+
+    FeasibilityReport:
+      type: object
+      required: [feasible, byDate, bySupply]
+      properties:
+        feasible: { type: boolean }
+        byDate:
+          type: array
+          description: 逐日檢查各身分組的可用人數是否足以覆蓋需求
+          items:
+            type: object
+            required: [date, shortages]
+            properties:
+              date: { type: string, format: date }
+              shortages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    areaTypeCode: { type: string }
+                    required: { type: integer }
+                    availableStaff: { type: integer }
+        bySupply:
+          type: array
+          description: |
+            整月額度的**巢狀累計**供需。每一列是「資格最窄的前 k 種區域類型」
+            合起來的需求，對上「有資格值其中任一種的人」合起來的供給。
+            資格是巢狀的，所以這三列就是 Hall 條件；逐區域類型各算各的會把
+            R2 同時算進 ICU 與一般病房，是錯的。
+          items:
+            type: object
+            required: [areaTypeCodes, demandPoints, supplyPoints, headroom]
+            properties:
+              areaTypeCodes:
+                type: array
+                description: 這一層累計涵蓋的區域類型，例：`[CHIEF]`、`[CHIEF, ICU]`、`[CHIEF, ICU, WARD]`
+                items: { type: string }
+              demandPoints: { type: integer }
+              supplyPoints: { type: integer, description: 扣掉不可排班日之後 }
+              headroom: { type: integer, description: '`supply − demand`，負數即無解' }
+        warnings:
+          type: array
+          description: 非阻斷的提醒，例：上月尚未發布、月結轉為空
+          items: { type: string }
+
+    # -- 求解 ---------------------------------------------------------------
+
+    CreateSolverJobRequest:
+      type: object
+      required: [yearMonth]
+      properties:
+        yearMonth: { type: string }
+        variantCount:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 3
+          description: 上限 3——只有三個具名立場（重視公平／重視延續性／平衡），見 ADR-0003
+        timeLimitSecPerVariant: { type: integer, default: 15 }
+
+    SolverJobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+
+    SolverJob:
+      type: object
+      required: [jobId, yearMonth, status, variantCount]
+      properties:
+        jobId: { type: string }
+        yearMonth: { type: string }
+        status: { $ref: '#/components/schemas/SolverJobStatus' }
+        variantCount: { type: integer }
+        elapsedSec: { type: number }
+        scale:
+          type: object
+          properties:
+            staff: { type: integer }
+            areas: { type: integer }
+            days: { type: integer }
+            variables: { type: integer }
+        constraintCount:
+          type: object
+          properties:
+            hard: { type: integer }
+            soft: { type: integer }
+        progress: { $ref: '#/components/schemas/SolverProgress' }
+        warnings:
+          type: array
+          description: |
+            非阻斷的提醒。例：「上月值班表仍是草稿，跨月間隔以草稿計」、
+            「上月尚未發布，月結轉為空」。
+          items: { type: string }
+        failureReason: { type: [string, 'null'] }
+
+    SolverProgress:
+      type: object
+      description: |
+        推送的 payload。**沒有完成百分比**——CP-SAT 給不出可信的完成度。
+      required: [status, variantIndex, variantCount, elapsedSec]
+      properties:
+        status: { $ref: '#/components/schemas/SolverJobStatus' }
+        variantIndex: { type: integer, description: 目前在求第幾份變體，1-based }
+        variantCount: { type: integer }
+        elapsedSec: { type: number }
+        timeLimitSec: { type: number }
+        solutionCount: { type: integer, description: 目前這份變體已找到幾個可行解 }
+        bestObjective: { type: [number, 'null'] }
+        bestBound: { type: [number, 'null'] }
+        gap:
+          type: [number, 'null']
+          description: |
+            最佳化收斂間隙。0 代表已證明最佳。找到第一個可行解之前為 null。
+            **會跳動，不單調**，前端不可拿它當進度條。
+
+    Variant:
+      type: object
+      required: [id, label, metrics, hardViolationCount, softScore, duties]
+      properties:
+        id: { type: string, examples: ['v-a'] }
+        label: { type: string, examples: ['重視公平'] }
+        description: { type: string, description: 這份變體的取捨立場 }
+        weightProfile:
+          type: object
+          description: |
+            產生這份變體所用的權重**乘數**，鍵為軟約束代碼。
+            實際權重 = 使用者在 `/settings/constraints` 設的權重 × 乘數；
+            使用者設 0（停用）的約束乘任何數仍是 0，變體不會偷偷把它打開。
+            「平衡」變體全部為 1。未列出的代碼乘數為 1。
+          additionalProperties: { type: number }
+        metrics:
+          type: object
+          properties:
+            vacancies:
+              type: integer
+              description: |
+                未填的格子數。求解器把覆蓋建成極高權重軟項而非硬約束，
+                所以登記過多時這裡會 > 0 而不是整份無解。
+            quotaFairness:
+              type: number
+              description: 各身分組內剩餘額度 `max − min` 的總和，越小越公平
+            areaConsistency:
+              type: number
+              description: 每人「值班數 − 最常值的那一區的值班數」的總和，即離開主區的次數
+            rankPreference:
+              type: number
+              description: |
+                身分區域偏好的未滿足次數。登記少時兩條偏好通常都能滿足；
+                低年級的不可排班日一多，資深就會被拉進 ICU 擠掉 R2/R3，
+                此值隨之上升——它是登記量的函數，不是結構定局。
+            fairnessPoint: { type: [number, 'null'] }
+        hardViolationCount: { type: integer }
+        softScore: { type: number }
+        duties:
+          type: array
+          description: |
+            完整的值班清單。密度圖與逐格差異都由前端就地計算，不另設端點。
+          items: { $ref: '#/components/schemas/Duty' }
+
+    # -- 設定 ---------------------------------------------------------------
+
+    AreaSettings:
+      type: object
+      required: [areaTypes, areas]
+      properties:
+        areaTypes:
+          type: array
+          items: { $ref: '#/components/schemas/AreaType' }
+        areas:
+          type: array
+          items: { $ref: '#/components/schemas/Area' }
+
+    AreaType:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, examples: ['WARD', 'ICU', 'CHIEF'] }
+        name: { type: string, examples: ['一般病房', '加護病房', '總值'] }
+
+    Area:
+      type: object
+      required: [id, code, name, areaTypeCode, requiredPerDay]
+      properties:
+        id: { type: string }
+        code: { type: string, examples: ['A', 'B', 'C', 'ICU', 'CHIEF'] }
+        name: { type: string }
+        areaTypeCode: { type: string }
+        requiredPerDay:
+          type: integer
+          default: 1
+          description: 每日需求人數。目前 5 個區域皆為 1，**無主責／支援之分**
+
+    RankSettings:
+      type: object
+      required: [ranks, groups]
+      properties:
+        ranks:
+          type: array
+          items: { $ref: '#/components/schemas/Rank' }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/RankGroup' }
+
+    Rank:
+      type: object
+      required: [code, name, groupCode, quotaCap, pointType]
+      properties:
+        code: { type: string, examples: ['PGY1', 'R4', 'PTR', 'NP'] }
+        name: { type: string, examples: ['PGY1', 'R4', '打工R', 'NP'] }
+        groupCode: { type: string }
+        quotaCap:
+          type: [integer, 'null']
+          description: |
+            額度點數上限，**硬門檻**。**`null` 專屬 NP**，代表不計。
+            R6 在這裡放**預設值**（例：5），`/settings/monthly-overrides/{ym}`
+            只做逐月覆寫——當月忘了設不會讓 R6 變成無上限。
+        pointType:
+          type: [string, 'null']
+          enum: ['A', 'B', null]
+          description: 公平性點數要查哪一張表。NP 不計，為 null
+
+    RankGroup:
+      type: object
+      description: |
+        公平性**只在組內比較，不跨組**。目前 4 組：
+        `{PGY1,PGY2,R1,PTR}`、`{R2,R3}`、`{R4,R5,R6}`、`{NP}`。
+
+        成員關係**只由 `Rank.groupCode` 表達**，這裡不重複列 `rankCodes`——
+        雙向連結會讓整份 PUT 送進不一致的資料。
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+
+    EligibilityMatrix:
+      type: object
+      required: [matrix]
+      properties:
+        matrix:
+          type: object
+          description: 身分代碼 → (區域類型代碼 → 可否值班)
+          additionalProperties:
+            type: object
+            additionalProperties: { type: boolean }
+          examples:
+            - R2: { WARD: true, ICU: true, CHIEF: false }
+              R4: { WARD: false, ICU: true, CHIEF: true }
+
+    PointRules:
+      type: object
+      required: [quota, fairness]
+      properties:
+        quota:
+          type: object
+          description: |
+            **額度點數**——排班者日常在看的那一套，有硬上限。
+          required: [weekday, holiday]
+          properties:
+            weekday: { type: integer, default: 1 }
+            holiday:
+              type: integer
+              default: 2
+              description: |
+                「假日」＝週六、週日與國定假日。**補班日視為平日。**
+        fairness:
+          type: object
+          description: |
+            **公平性點數**——案主提案的實驗性第二套度量，沒有上限，
+            預設權重 0（停用）。兼作變體比較的參考指標。
+          required: [tables, consecutiveSaturdayBonus]
+          properties:
+            tables:
+              type: object
+              description: |
+                點數類型 → 查表。表由「當日」與「隔日」是否為假日決定，
+                兩者都是行事曆常數，因此每一格的點數是**純查表的常數**。
+              additionalProperties:
+                type: array
+                items:
+                  type: object
+                  required: [today, tomorrow, points]
+                  properties:
+                    today: { type: string, enum: [holiday, weekday] }
+                    tomorrow: { type: string, enum: [holiday, weekday] }
+                    points: { type: integer }
+              examples:
+                - A:
+                    - { today: holiday, tomorrow: holiday, points: 3 }
+                    - { today: holiday, tomorrow: weekday, points: 2 }
+                    - { today: weekday, tomorrow: holiday, points: 2 }
+                    - { today: weekday, tomorrow: weekday, points: 1 }
+                  B:
+                    - { today: holiday, tomorrow: holiday, points: 2 }
+                    - { today: holiday, tomorrow: weekday, points: 3 }
+                    - { today: weekday, tomorrow: holiday, points: 1 }
+                    - { today: weekday, tomorrow: weekday, points: 2 }
+            consecutiveSaturdayBonus:
+              type: object
+              description: |
+                連值兩個週六且中間沒有國定假日可以喘息時的加分。
+                **這裡的「假日」特指國定假日，不含一般週末**——
+                若含週末，條件永遠為假，規則不會觸發。
+
+                這是全部規則裡**唯一決策相依**的點數項（兩個值班變數的乘積），
+                需要 reification。其餘皆為行事曆常數。
+              properties:
+                points: { type: integer, default: 1 }
+                windowDays: { type: integer, default: 10 }
+
+    ConstraintSettings:
+      type: object
+      description: |
+        **宣告式的約束定義**。`Scheduler.Domain` 的檢查器與 `Scheduler.Solver`
+        的 CP-SAT 建模器解讀同一份，因此規則只有一個真相（見 ADR-0002）。
+
+        這份文件持有的是**規則的身分與參數**；幾個原語的資料本體住在別的聚合根，
+        由原語自己去讀，**不複製進 `params`**：
+        `Eligible` 讀資格矩陣、`Forbidden` 讀不可排班日、`ExactCount` 讀
+        `Area.requiredPerDay`、`Budget(quota_point)` 讀 `Rank.quotaCap` 與當月覆寫、
+        `Fairness(quota_point)` 讀上月月結轉。
+
+        預設的 7 硬 / 7 軟見 `docs/constraint-defaults.md`。
+      required: [hard, soft]
+      properties:
+        hard:
+          type: array
+          items: { $ref: '#/components/schemas/HardConstraint' }
+        soft:
+          type: array
+          items: { $ref: '#/components/schemas/SoftConstraint' }
+
+    Primitive:
+      type: string
+      description: |
+        九個約束原語。constraints.md 的每一條規則都對應到其中之一。
+      enum:
+        - ExactCount        # 每日每區恰好 n 人（求解器建成極高權重軟項，見 createSolverJob）
+        - Eligible          # 身分 × 區域類型 資格
+        - Budget            # 度量上限（額度點數上限、NP 每月天數）
+        - MinGap            # 兩次值班的最小間隔（值休休）。跨月
+        - MaxConsecutive    # 連續天數上限。跨月
+        - Forbidden         # 不可排班日
+        - Preference        # 身分集合對「區域類型 × 日類」的偏好，params.direction 決定 prefer / avoid
+        - Fairness          # 身分組內某度量的公平性（max − min）
+        - Consistency       # 同一人盡量值同一區（離開主區的次數）
+
+    HardConstraint:
+      type: object
+      required: [code, name, primitive, enabled]
+      properties:
+        code: { type: string, examples: ['H1_AREA_COVERAGE', 'H4_MIN_GAP'] }
+        name: { type: string }
+        primitive: { $ref: '#/components/schemas/Primitive' }
+        enabled: { type: boolean }
+        scope: { $ref: '#/components/schemas/ConstraintScope' }
+        metric:
+          $ref: '#/components/schemas/Metric'
+          description: 僅 Budget 與 Fairness 兩個原語使用。**度量放這裡，不放 `params`**
+        params:
+          type: object
+          additionalProperties: true
+          examples:
+            - { days: 3 }
+            - { cap: 20 }
+            - { direction: avoid }
+
+    SoftConstraint:
+      type: object
+      required: [code, name, primitive, weight]
+      properties:
+        code: { type: string, examples: ['S1_QUOTA_FAIRNESS'] }
+        name: { type: string }
+        primitive: { $ref: '#/components/schemas/Primitive' }
+        weight:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            原始值先正規化到 0–1 再乘上本權重。**填 0 等於停用這條軟約束。**
+            權重**沒有負值**——「避開」用 `params.direction: avoid` 表達，
+            讓 0–100 對所有軟約束都是同一個意思。
+        scope: { $ref: '#/components/schemas/ConstraintScope' }
+        metric:
+          $ref: '#/components/schemas/Metric'
+          description: 僅 Budget 與 Fairness 兩個原語使用。**度量放這裡，不放 `params`**
+        params:
+          type: object
+          additionalProperties: true
+          examples:
+            - { direction: prefer }
+            - { direction: avoid }
+
+    ConstraintScope:
+      type: object
+      description: |
+        約束的適用範圍，三個維度：身分、區域類型、日類。
+        NP 的四條特例（豁免值休休、天數上限、最多連六、盡量不用）與
+        「NP 避開假日」全部透過範圍表達，**不在程式裡寫 if**。
+      properties:
+        rankCodes:
+          type: array
+          description: 適用的身分。省略代表全體
+          items: { type: string }
+        exemptRankCodes:
+          type: array
+          description: 豁免的身分
+          items: { type: string }
+        areaTypeCodes:
+          type: array
+          description: 適用的區域類型。省略代表全部
+          items: { type: string }
+        dayKinds:
+          type: array
+          description: |
+            適用的日類。省略代表所有日子。「NP 避開假日」= `Preference` +
+            `rankCodes: [NP]` + `dayKinds: [holiday]` + `direction: avoid`。
+            沒有這個維度，該規則用九原語表達不出來。
+          items:
+            type: string
+            enum: [weekday, holiday, publicHoliday]
+
+    MonthlyOverride:
+      type: object
+      required: [yearMonth]
+      properties:
+        yearMonth: { type: string }
+        quotaCapByRank:
+          type: object
+          description: 覆寫特定身分的額度上限。目前唯一的用途是 R6
+          additionalProperties: { type: integer }
+          examples:
+            - { R6: 5 }
+
+    Calendar:
+      type: object
+      required: [year, days]
+      properties:
+        year: { type: integer }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/CalendarDay' }
+
+    CalendarDay:
+      type: object
+      required: [date, weekday, isHoliday, isPublicHoliday, quotaPointValue]
+      properties:
+        date: { type: string, format: date }
+        weekday: { type: integer, minimum: 0, maximum: 6, description: 0 = 週日 }
+        isHoliday:
+          type: boolean
+          description: 週六、週日或國定假日。決定額度點數與公平性點數查表
+        isPublicHoliday:
+          type: boolean
+          description: 國定假日，**不含一般週末**。只用於連值兩個週六的加分判斷
+        isMakeUpWorkday:
+          type: boolean
+          description: 補班日。視為平日，`isHoliday` 為 false
+        holidayName: { type: [string, 'null'] }
+        quotaPointValue: { type: integer }
+        overridden: { type: boolean, description: 是否被排班者手動覆寫過 }
+
+    CalendarDayOverride:
+      type: object
+      properties:
+        isHoliday: { type: boolean }
+        isPublicHoliday: { type: boolean }
+        isMakeUpWorkday: { type: boolean }
+        holidayName: { type: [string, 'null'] }
+
+    # -- 人員 ---------------------------------------------------------------
+
+    StaffStatus:
+      type: string
+      enum: [active, inactive]
+
+    StaffCounts:
+      type: object
+      properties:
+        active: { type: integer }
+        inactive: { type: integer }
+
+    Staff:
+      type: object
+      required: [id, employeeNo, name, rankCode, status, eligibleAreaTypes]
+      properties:
+        id: { type: string }
+        employeeNo: { type: string }
+        name: { type: string }
+        rankCode: { type: string }
+        status: { $ref: '#/components/schemas/StaffStatus' }
+        eligibleAreaTypes:
+          type: array
+          description: 由資格矩陣依 rankCode 推導，**唯讀**
+          items: { type: string }
+
+    StaffWrite:
+      type: object
+      required: [employeeNo, name, rankCode]
+      properties:
+        employeeNo: { type: string }
+        name: { type: string }
+        rankCode: { type: string }
