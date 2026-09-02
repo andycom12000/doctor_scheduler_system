@@ -49,6 +49,7 @@ jobs:
         run: |
           dotnet restore src/Scheduler.Api/Scheduler.Api.csproj
           dotnet restore tests/Scheduler.ArchitectureTests/Scheduler.ArchitectureTests.csproj
+          dotnet restore tests/Scheduler.Domain.Tests/Scheduler.Domain.Tests.csproj
 
       - name: 建置
         run: dotnet build src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --no-restore
@@ -58,6 +59,11 @@ jobs:
       # 只有這組測試擋得住 —— 所以它必須在 CI 裡跑。
       - name: 架構規則測試
         run: dotnet test tests/Scheduler.ArchitectureTests/Scheduler.ArchitectureTests.csproj --configuration Release
+
+      # 九個原語與違規檢查器的單元測試。NP 的四條專屬規則真實資料下幾乎不會觸發，
+      # 只有這組憑空造情境的測試守得住（ADR-0002）。
+      - name: 領域規則測試
+        run: dotnet test tests/Scheduler.Domain.Tests/Scheduler.Domain.Tests.csproj --configuration Release
 
   # ---------------------------------------------------------------------------
   # 前端。ubuntu runner（1x 計費）。
