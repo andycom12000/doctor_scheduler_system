@@ -7,8 +7,13 @@
     <RootNamespace>Scheduler.Shell</RootNamespace>
     <!-- 使用者看到的執行檔名稱 -->
     <AssemblyName>HospitalScheduler</AssemblyName>
-    <!-- 觸發 Directory.Build.props 中的 self-contained / win-x64 發佈設定 -->
-    <IsPublishable>true</IsPublishable>
+    <!--
+      唯一的發佈專案：self-contained、win-x64。必須寫在這裡而不是 Directory.Build.props
+      （props 在專案本體之前匯入，看不到專案裡的屬性，條件式設定不會生效）。
+      trim / single-file / AOT 由 Directory.Build.props 統一關閉。
+    -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
     <!-- 目標環境含 4K 筆電 + 1080p 外接螢幕，Per-Monitor V2 為必要 -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
@@ -16,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Scheduler.Application\Scheduler.Application.csproj" />
     <ProjectReference Include="..\Scheduler.Solver\Scheduler.Solver.csproj" />
+    <ProjectReference Include="..\Scheduler.Persistence\Scheduler.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>
