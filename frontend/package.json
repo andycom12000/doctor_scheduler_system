@@ -6,12 +6,17 @@
     "node": ">=20.19"
   },
   "scripts": {
+    "predev": "npm run api:types",
     "dev": "vite",
+    "predev:mock": "npm run api:types",
     "dev:mock": "vite --mode mock",
+    "prebuild": "npm run api:types",
     "build": "vue-tsc --build && vite build",
     "preview": "vite preview",
+    "pretypecheck": "npm run api:types",
     "typecheck": "vue-tsc --build",
-    "api:types": "openapi-typescript ../api-contract.yaml -o src/api/schema.d.ts"
+    "api:types": "openapi-typescript ../api-contract.yaml -o src/api/schema.d.ts",
+    "mock:smoke": "tsx scripts/smoke-mock.ts"
   },
   "dependencies": {
     "vue": "^3.5.42"
@@ -20,6 +25,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
+    "tsx": "^4.23.13",
     "typescript": "~5.9.3",
     "vite": "^8.2.2",
     "vue-tsc": "^3.3.11"
