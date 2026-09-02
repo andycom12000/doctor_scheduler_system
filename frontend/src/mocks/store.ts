@@ -72,17 +72,21 @@ export interface MockStore {
 }
 
 function buildInitialStore(): MockStore {
+  // 矩陣先算好、給 eligibilityMatrix 與 makeStaffFixture 共用同一份——
+  // 兩者必須從同一個來源推導，PUT 矩陣之後才不會各吃各的（見 ranks.ts 的 eligibleAreaTypesOf 註解）。
+  const matrix = structuredClone(eligibilityMatrixFixture.matrix)
+
   const store: MockStore = {
     areaTypes: areaTypeFixture.map((a) => ({ ...a })),
     areas: areaFixture.map((a) => ({ ...a })),
     ranks: ranks.map((r) => ({ ...r })),
     rankGroups: rankGroups.map((g) => ({ ...g })),
-    eligibilityMatrix: { matrix: structuredClone(eligibilityMatrixFixture.matrix) },
+    eligibilityMatrix: { matrix },
     pointRules: structuredClone(pointRulesFixture),
     constraints: structuredClone(constraintSettings),
     monthlyOverrides: new Map(),
     calendarOverrides: new Map(),
-    staff: makeStaffFixture(),
+    staff: makeStaffFixture(matrix),
     nextStaffSeq: 35,
     schedules: new Map(),
     blockedDays: new Map(),

@@ -122,11 +122,16 @@ export function diffDays(a: string, b: string): number {
   return Math.round((da - db) / 86_400_000)
 }
 
+/** `date` 加 `days` 天（可負、可跨月／跨年）。連值週六 bonus 的視窗計算要用它。 */
+export function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 /** `date` 的隔一天（可能跨月／跨年，公平性點數表要看這個）。 */
 export function nextDate(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + 1)
-  return d.toISOString().slice(0, 10)
+  return addDays(dateStr, 1)
 }
 
 /** `date` 的前一天（可能跨月／跨年，跨月尾巴查詢要看這個）。 */

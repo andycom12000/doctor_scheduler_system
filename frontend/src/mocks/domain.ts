@@ -9,11 +9,14 @@
 import type {
   Candidate,
   CarryOverEntry,
+  ConstraintScope,
   DayDetail,
   Duty,
   FeasibilityReport,
+  HardConstraint,
   PointBoardGroup,
   Severity,
+  SoftConstraint,
   Variant,
   VacancyByDate,
   ValidationResult,
@@ -21,6 +24,7 @@ import type {
 } from '@/api/types'
 import { areaFillOrder } from './fixtures/areas'
 import {
+  addDays,
   baseIsHoliday,
   calendarDayFacts,
   datesOfYearMonth,
@@ -32,6 +36,29 @@ import {
 } from './fixtures/calendar'
 import type { MockStore } from './store'
 import type { Staff } from '@/api/types'
+
+// ---------------------------------------------------------------------------
+// 約束範圍（ConstraintScope）——NP 的四條特例與其他身分限定規則全部走這裡，
+// 不在程式裡寫 `if (rankCode === 'NP')`（見 api-contract.yaml 的 ConstraintScope 說明）。
+// ---------------------------------------------------------------------------
+
+/** `rankCodes` 是命中清單（省略代表全體），`exemptRankCodes` 是豁免清單，兩者可同時存在。 */
+export function appliesToRank(scope: ConstraintScope | undefined, rankCode: string): boolean {
+  if (scope?.exemptRankCodes?.includes(rankCode)) return false
+  if (scope?.rankCodes && !scope.rankCodes.includes(rankCode)) return false
+  return true
+}
+
+function findHardConstraint(store: MockStore, code: string): HardConstraint | undefined {
+  return store.constraints.hard.find((h) => h.code === code)
+}
+
+function findSoftConstraint(store: MockStore, code: string): SoftConstraint | undefined {
+  return store.constraints.soft.find((s) => s.code === code)
+}
+
+/** S3/S4/S5/S6：目前唯一會產生逐格違規／影響產生器評分的四條 `Preference`（見 F10：S1/S2/S7 不算）。 */
+const PREFERENCE_SOFT_CODES = ['S3_R2R3_PREFER_ICU', 'S4_R4R6_PREFER_CHIEF', 'S5_NP_LAST_RESORT', 'S6_NP_AVOID_HOLIDAY']
 
 // ---------------------------------------------------------------------------
 // 格子索引
@@ -206,16 +233,39 @@ function staffDutyTimeline(
   return [...dates].sort()
 }
 
-function hasPublicHolidayBetween(store: MockStore, a: string, b: string): boolean {
-  let cursor = nextDate(a)
-  while (cursor < b) {
-    if (getCalendarDay(store, cursor).isPublicHoliday) return true
-    cursor = nextDate(cursor)
+/**
+ * `staffId` 在 `date` 這天是否有值班——查任何月份的值班表，不限定 `ym`。
+ * 連值週六 bonus 要看「7 天後」，那天可能落在下個月。
+ *
+ * **跨月是 best-effort**：只查 `store.schedules` 裡已經存在的月份；下個月的值班表
+ * 若還沒產生（mock 常見情境），就查不到、bonus 就不會算給這個月——這一點刻意不強求
+ * （F6：8 月最後一個週六 + 9 月第一個週六的情形，8 月結算時 9 月資料通常還沒有）。
+ */
+function hasDutyOnDate(store: MockStore, ym: string, staffId: string, date: string, dutyMapOverride?: Map<string, string>): boolean {
+  const dateYm = date.slice(0, 7)
+  const map = dateYm === ym ? dutyMapOf(store, ym, dutyMapOverride) : store.schedules.get(dateYm)?.duties
+  if (!map) return false
+  for (const [key, sid] of map) {
+    if (sid === staffId && parseDutyKey(key).date === date) return true
   }
   return false
 }
 
-/** 公平性點數（實驗性）：查表 + 連值兩個週六加分。NP 不計，回 null。 */
+/** 自 `date` 起（含當日）`windowDays` 天內有沒有國定假日可以喘息。 */
+function hasPublicHolidayInWindow(store: MockStore, date: string, windowDays: number): boolean {
+  for (let i = 0; i < windowDays; i++) {
+    if (getCalendarDay(store, addDays(date, i)).isPublicHoliday) return true
+  }
+  return false
+}
+
+/**
+ * 公平性點數（實驗性）：查表 + 連值兩個週六加分。NP 不計，回 null。
+ *
+ * 連值週六 bonus 的語義（對齊 `MetricEvaluator.FairnessPointOf`）：**當日是週六**、
+ * **7 天後同一人也有值班**、且**自當日起 `windowDays` 天內（含當日）沒有國定假日**
+ * 可以喘息——bonus 記在「較早」的那個週六，不是兩個週六之間的間隔判斷。
+ */
 export function fairnessPointsForStaffInMonth(
   store: MockStore,
   ym: string,
@@ -228,6 +278,7 @@ export function fairnessPointsForStaffInMonth(
   if (!staff || !pointType) return null
 
   const table = store.pointRules.fairness.tables[pointType] ?? []
+  const bonus = store.pointRules.fairness.consecutiveSaturdayBonus
   const dutyDates = [...dutyMapOf(store, ym, dutyMapOverride).entries()]
     .filter(([, sid]) => sid === staffId)
     .map(([key]) => parseDutyKey(key).date)
@@ -239,13 +290,12 @@ export function fairnessPointsForStaffInMonth(
     const tomorrow = isHolidayDate(store, nextDate(date)) ? 'holiday' : 'weekday'
     const row = table.find((r) => r.today === today && r.tomorrow === tomorrow)
     total += row?.points ?? 0
-  }
 
-  const bonus = store.pointRules.fairness.consecutiveSaturdayBonus
-  const saturdays = dutyDates.filter((d) => getCalendarDay(store, d).weekday === 6)
-  for (let i = 1; i < saturdays.length; i++) {
-    const gap = diffDays(saturdays[i], saturdays[i - 1])
-    if (gap > 0 && gap <= bonus.windowDays && !hasPublicHolidayBetween(store, saturdays[i - 1], saturdays[i])) {
+    if (
+      getCalendarDay(store, date).weekday === 6 &&
+      hasDutyOnDate(store, ym, staffId, addDays(date, 7), dutyMapOverride) &&
+      !hasPublicHolidayInWindow(store, date, bonus.windowDays)
+    ) {
       total += bonus.points
     }
   }
@@ -278,6 +328,65 @@ function dayKindMatches(store: MockStore, date: string, kind: string): boolean {
   if (kind === 'holiday') return day.isHoliday
   if (kind === 'publicHoliday') return day.isPublicHoliday
   return !day.isHoliday
+}
+
+function metricName(metric: string): string {
+  if (metric === 'quota_point') return '額度點數'
+  if (metric === 'fairness_point') return '公平性點數'
+  if (metric === 'duty_day') return '值班天數'
+  return metric
+}
+
+/** 每一格在該度量下的值：`quota_point` 看行事曆，`duty_day` 固定 1（F4）。 */
+function budgetMetricValue(store: MockStore, metric: string, date: string): number {
+  if (metric === 'quota_point') return quotaPointValueOf(store, date)
+  if (metric === 'duty_day') return 1
+  return 0
+}
+
+/**
+ * `Budget` 原語的共用實作：H3（額度點數上限）與 H6（NP 每月天數上限）都是它，
+ * 差別只在 `metric` 與 `scope`——對齊 `ViolationChecker.Budget`。
+ *
+ * 逐格按日期排序累加，**只標「累計超出上限」那幾格**（F5），不是整個人整段格子；
+ * `params.cap` 沒填時，只有 `quota_point` 能從 `Rank.quotaCap`／當月覆寫推出上限，
+ * 其餘度量沒有 cap 就跳過（讀出 `null` 代表不計，不是 0）。
+ */
+function checkBudget(store: MockStore, ym: string, dutyMap: Map<string, string>, constraint: HardConstraint): Violation[] {
+  const metric = constraint.metric
+  if (!metric) return []
+  const violations: Violation[] = []
+
+  for (const staff of store.staff) {
+    if (!appliesToRank(constraint.scope, staff.rankCode)) continue
+    const paramsCap = (constraint.params as { cap?: number } | undefined)?.cap
+    const cap = paramsCap ?? (metric === 'quota_point' ? quotaCapFor(store, staff.rankCode, ym) : null)
+    if (cap === null || cap === undefined) continue
+
+    const cells = [...dutyMap.entries()]
+      .filter(([, sid]) => sid === staff.id)
+      .map(([key]) => parseDutyKey(key))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    let running = 0
+    const excess: string[] = []
+    for (const cell of cells) {
+      running += budgetMetricValue(store, metric, cell.date)
+      if (running > cap) excess.push(staffCellKey(staff.id, cell.date))
+    }
+
+    if (excess.length > 0) {
+      violations.push(
+        makeViolation(
+          constraint.code,
+          'hard',
+          excess,
+          `${staff.name}（${staff.rankCode}）本月${metricName(metric)} ${running} 超過上限 ${cap}`,
+        ),
+      )
+    }
+  }
+  return violations
 }
 
 /**
@@ -329,30 +438,22 @@ export function computeViolationsForDuties(
     }
   }
 
-  // H3 額度點數上限（NP 豁免）
-  if (hardByCode.get('H3_QUOTA_CAP')?.enabled) {
-    for (const staff of store.staff) {
-      if (staff.rankCode === 'NP') continue
-      const cap = quotaCapFor(store, staff.rankCode, ym)
-      const points = quotaPointsForStaffInMonth(store, ym, staff.id, dutyMap)
-      if (cap !== null && points > cap) {
-        const cellKeys = [...dutyMap.entries()]
-          .filter(([, sid]) => sid === staff.id)
-          .map(([key]) => staffCellKey(staff.id, parseDutyKey(key).date))
-        violations.push(
-          makeViolation('H3_QUOTA_CAP', 'hard', cellKeys, `${staff.name} 額度點數 ${points} 超過上限 ${cap}`),
-        )
-      }
-    }
+  // H3 額度點數上限（Budget，metric=quota_point）。scope.exemptRankCodes 豁免 NP，
+  // 只標「累計超出上限」那幾格（F5），不是整段格子。
+  const h3 = hardByCode.get('H3_QUOTA_CAP')
+  if (h3?.enabled) {
+    violations.push(...checkBudget(store, ym, dutyMap, h3))
   }
 
-  // H4 值休休（MinGap days:3，NP 豁免，跨月讀上月尾巴）
-  if (hardByCode.get('H4_MIN_GAP')?.enabled) {
+  // H4 值休休（MinGap，scope 決定適用對象，跨月讀上月尾巴）
+  const h4 = hardByCode.get('H4_MIN_GAP')
+  if (h4?.enabled) {
+    const gapDays = (h4.params as { days?: number } | undefined)?.days ?? 3
     for (const staff of store.staff) {
-      if (staff.rankCode === 'NP') continue
+      if (!appliesToRank(h4.scope, staff.rankCode)) continue
       const timeline = staffDutyTimeline(store, ym, staff.id, dutyMap)
       for (let i = 1; i < timeline.length; i++) {
-        if (diffDays(timeline[i], timeline[i - 1]) < 3) {
+        if (diffDays(timeline[i], timeline[i - 1]) < gapDays) {
           const cellKeys = [timeline[i - 1], timeline[i]]
             .filter((d) => d.startsWith(ym))
             .map((d) => staffCellKey(staff.id, d))
@@ -362,7 +463,7 @@ export function computeViolationsForDuties(
               'H4_MIN_GAP',
               'hard',
               cellKeys,
-              `${staff.name} 值班間隔不足 3 天（${timeline[i - 1]} → ${timeline[i]}）`,
+              `${staff.name} 值班間隔不足 ${gapDays} 天（${timeline[i - 1]} → ${timeline[i]}）`,
             ),
           )
         }
@@ -389,52 +490,48 @@ export function computeViolationsForDuties(
     }
   }
 
-  // H6 NP 每月天數上限
-  const npStaff = store.staff.find((s) => s.rankCode === 'NP')
-  if (hardByCode.get('H6_NP_MONTHLY_DAYS')?.enabled && npStaff) {
-    const cap = (hardByCode.get('H6_NP_MONTHLY_DAYS')?.params as { cap?: number } | undefined)?.cap ?? 20
-    const npDates = [...new Set([...dutyMap.entries()].filter(([, sid]) => sid === npStaff.id).map(([key]) => parseDutyKey(key).date))]
-    if (npDates.length > cap) {
-      violations.push(
-        makeViolation(
-          'H6_NP_MONTHLY_DAYS',
-          'hard',
-          npDates.map((d) => staffCellKey(npStaff.id, d)),
-          `${npStaff.name} 本月值班 ${npDates.length} 天，超過上限 ${cap} 天`,
-        ),
-      )
-    }
+  // H6 每月值班天數上限（Budget，metric=duty_day，逐格累加——F4：不是相異日期數）。
+  // scope.rankCodes:[NP] 決定適用對象，不寫 if (rankCode === 'NP')。
+  const h6 = hardByCode.get('H6_NP_MONTHLY_DAYS')
+  if (h6?.enabled) {
+    violations.push(...checkBudget(store, ym, dutyMap, h6))
   }
 
-  // H7 NP 最多連六（跨月）
-  if (hardByCode.get('H7_NP_MAX_CONSECUTIVE')?.enabled && npStaff) {
-    const maxDays = (hardByCode.get('H7_NP_MAX_CONSECUTIVE')?.params as { days?: number } | undefined)?.days ?? 6
-    const timeline = staffDutyTimeline(store, ym, npStaff.id, dutyMap)
-    let runStart = 0
-    for (let i = 1; i <= timeline.length; i++) {
-      const broke = i === timeline.length || diffDays(timeline[i], timeline[i - 1]) !== 1
-      if (broke) {
-        const runLength = i - runStart
-        if (runLength > maxDays) {
-          const run = timeline.slice(runStart, i).filter((d) => d.startsWith(ym))
-          if (run.length > 0) {
-            violations.push(
-              makeViolation(
-                'H7_NP_MAX_CONSECUTIVE',
-                'hard',
-                run.map((d) => staffCellKey(npStaff.id, d)),
-                `${npStaff.name} 連續值班 ${runLength} 天，超過上限 ${maxDays} 天`,
-              ),
-            )
+  // H7 最多連續值班天數（MaxConsecutive，scope 決定適用對象，跨月）。
+  // 只標超出上限的那幾格（第 limit+1 格起，F5），且只標本月的。
+  const h7 = hardByCode.get('H7_NP_MAX_CONSECUTIVE')
+  if (h7?.enabled) {
+    const maxDays = (h7.params as { days?: number } | undefined)?.days ?? 6
+    for (const staff of store.staff) {
+      if (!appliesToRank(h7.scope, staff.rankCode)) continue
+      const timeline = staffDutyTimeline(store, ym, staff.id, dutyMap)
+      let runStart = 0
+      for (let i = 1; i <= timeline.length; i++) {
+        const broke = i === timeline.length || diffDays(timeline[i], timeline[i - 1]) !== 1
+        if (broke) {
+          const runLength = i - runStart
+          if (runLength > maxDays) {
+            const run = timeline.slice(runStart, i)
+            const excess = run.slice(maxDays).filter((d) => d.startsWith(ym))
+            if (excess.length > 0) {
+              violations.push(
+                makeViolation(
+                  'H7_NP_MAX_CONSECUTIVE',
+                  'hard',
+                  excess.map((d) => staffCellKey(staff.id, d)),
+                  `${staff.name} 自 ${run[0]} 起連續值班 ${runLength} 天，超過上限 ${maxDays} 天`,
+                ),
+              )
+            }
           }
+          runStart = i
         }
-        runStart = i
       }
     }
   }
 
   // S3/S4/S5/S6：Preference 逐格違規
-  for (const code of ['S3_R2R3_PREFER_ICU', 'S4_R4R6_PREFER_CHIEF', 'S5_NP_LAST_RESORT', 'S6_NP_AVOID_HOLIDAY']) {
+  for (const code of PREFERENCE_SOFT_CODES) {
     const constraint = softByCode.get(code)
     if (!constraint || constraint.weight <= 0) continue
     const scope = constraint.scope ?? {}
@@ -445,7 +542,7 @@ export function computeViolationsForDuties(
       const staff = store.staff.find((s) => s.id === staffId)
       const area = store.areas.find((a) => a.id === areaId)
       if (!staff || !area) continue
-      if (scope.rankCodes && !scope.rankCodes.includes(staff.rankCode)) continue
+      if (!appliesToRank(constraint.scope, staff.rankCode)) continue
 
       if (direction === 'prefer') {
         if (scope.areaTypeCodes && !scope.areaTypeCodes.includes(area.areaTypeCode)) {
@@ -488,6 +585,28 @@ export function computeValidationResult(store: MockStore, ym: string): Validatio
 // 月結轉
 // ---------------------------------------------------------------------------
 
+/**
+ * `Fairness(quota_point)` 真正比較的量——`cap − 已排 − 月結轉偏移`（對齊
+ * `MetricEvaluator.QuotaRemaining`）。**不是** `PointBoardRow.quotaRemaining`：
+ * 那個欄位契約明定就是 `quotaCap − quotaPoints`，是給排班者看的原始數字，
+ * 不能把月結轉偏移混進去（會跟契約對不上）。這裡是給「公平性比較」與
+ * 「下個月結轉的結算」兩處內部使用的度量，两者必须用同一個定義（ADR-0002）。
+ */
+function quotaRemainingForFairness(
+  store: MockStore,
+  ym: string,
+  staffId: string,
+  dutyMapOverride?: Map<string, string>,
+): number | null {
+  const staff = store.staff.find((s) => s.id === staffId)
+  if (!staff) return null
+  const cap = quotaCapFor(store, staff.rankCode, ym)
+  if (cap === null) return null
+  const points = quotaPointsForStaffInMonth(store, ym, staffId, dutyMapOverride)
+  const carryIn = (store.carryOver.get(ym) ?? []).find((e) => e.staffId === staffId)?.points ?? 0
+  return cap - points - carryIn
+}
+
 /** `組內最大剩餘額度 − 本人剩餘額度`，發布時結算，供下個月使用。NP 不參與。 */
 export function computeCarryOverEntries(store: MockStore, ym: string): CarryOverEntry[] {
   const entries: CarryOverEntry[] = []
@@ -497,11 +616,10 @@ export function computeCarryOverEntries(store: MockStore, ym: string): CarryOver
       (s) => s.status === 'active' && store.ranks.find((r) => r.code === s.rankCode)?.groupCode === group.code,
     )
     if (members.length === 0) continue
-    const remainders = members.map((s) => {
-      const cap = quotaCapFor(store, s.rankCode, ym)
-      const points = quotaPointsForStaffInMonth(store, ym, s.id)
-      return { staffId: s.id, remaining: cap === null ? 0 : cap - points }
-    })
+    const remainders = members
+      .map((s) => ({ staffId: s.id, remaining: quotaRemainingForFairness(store, ym, s.id) }))
+      .filter((r): r is { staffId: string; remaining: number } => r.remaining !== null)
+    if (remainders.length === 0) continue
     const maxRemaining = Math.max(...remainders.map((r) => r.remaining))
     for (const r of remainders) {
       entries.push({ staffId: r.staffId, points: Math.max(0, maxRemaining - r.remaining) })
@@ -605,6 +723,11 @@ export function computeCandidates(store: MockStore, ym: string, areaId: string, 
     }
   }
 
+  // 候選人的阻擋理由讀 H3/H4/H6 的 scope 與 params，不寫死 rankCode（F7）。
+  const h3 = findHardConstraint(store, 'H3_QUOTA_CAP')
+  const h4 = findHardConstraint(store, 'H4_MIN_GAP')
+  const h6 = findHardConstraint(store, 'H6_NP_MONTHLY_DAYS')
+
   const out: Candidate[] = []
   for (const staff of store.staff) {
     if (staff.status !== 'active') continue
@@ -617,14 +740,24 @@ export function computeCandidates(store: MockStore, ym: string, areaId: string, 
 
     const cap = quotaCapFor(store, staff.rankCode, ym)
     const points = quotaPointsForStaffInMonth(store, ym, staff.id)
-    if (staff.rankCode !== 'NP') {
+
+    if (h4?.enabled && appliesToRank(h4.scope, staff.rankCode)) {
+      const gapDays = (h4.params as { days?: number } | undefined)?.days ?? 3
       const timeline = staffDutyTimeline(store, ym, staff.id).filter((d) => d !== date)
-      if (timeline.some((d) => Math.abs(diffDays(date, d)) < 3)) blockingReasons.push('值休休間隔不足 3 天')
-      if (cap !== null && points + quotaPointValueOf(store, date) > cap) blockingReasons.push('超過額度點數上限')
-    } else {
-      const npDates = new Set(staffDutyTimeline(store, ym, staff.id).filter((d) => d.startsWith(ym)))
-      if (npDates.size >= 20) blockingReasons.push('NP 本月天數已達上限')
-      warnings.push('NP 為最後人力，優先考慮一般身分')
+      if (timeline.some((d) => Math.abs(diffDays(date, d)) < gapDays)) {
+        blockingReasons.push(`值休休間隔不足 ${gapDays} 天`)
+      }
+    }
+    if (h3?.enabled && appliesToRank(h3.scope, staff.rankCode)) {
+      if (cap !== null && points + quotaPointValueOf(store, date) > cap) {
+        blockingReasons.push('超過額度點數上限')
+      }
+    }
+    if (h6?.enabled && appliesToRank(h6.scope, staff.rankCode)) {
+      const dayCap = (h6.params as { cap?: number } | undefined)?.cap ?? 20
+      const scopedDates = new Set(staffDutyTimeline(store, ym, staff.id).filter((d) => d.startsWith(ym)))
+      if (scopedDates.size >= dayCap) blockingReasons.push(`本月值班天數已達上限 ${dayCap} 天`)
+      warnings.push('屬於後備人力範圍，優先考慮一般身分')
     }
 
     const quotaRemaining = cap === null ? null : cap - points
@@ -678,8 +811,10 @@ export function computeFeasibility(store: MockStore, ym: string): FeasibilityRep
       const required = store.areas
         .filter((a) => a.areaTypeCode === areaType.code)
         .reduce((sum, a) => sum + a.requiredPerDay, 0)
+      // byDate 不排除 NP：NP 有一般病房資格，逐日可用人數該把他算進去（F12）。
+      // bySupply 才排除 NP——那是額度點數的巢狀累計，NP 沒有 quotaCap，見下方。
       const eligible = store.staff.filter(
-        (s) => s.status === 'active' && s.rankCode !== 'NP' && s.eligibleAreaTypes.includes(areaType.code),
+        (s) => s.status === 'active' && s.eligibleAreaTypes.includes(areaType.code),
       )
       const availableStaff = eligible.filter((s) => !blockedByStaff.get(s.id)?.has(date)).length
       if (availableStaff < required) shortages.push({ areaTypeCode: areaType.code, required, availableStaff })
@@ -732,9 +867,13 @@ export interface GenerateOptions {
 
 /**
  * 簡化版貪婪排班：逐日、依 `areaFillOrder` 逐區指派，盡量滿足硬約束
- * （資格、額度、值休休、不可排班日、NP 天數與連續上限），
- * 用權重乘數 + 決定性雜湊排序在可行候選人裡挑一個。
+ * （資格、額度、值休休、不可排班日、Budget／MaxConsecutive 的 scope 對象），
+ * 用「store 裡的權重 × 乘數」+ 決定性雜湊排序在可行候選人裡挑一個。
  * 找不到可行候選人時該格留空（H1 由驗證層抓，這裡不擋寫入）。
+ *
+ * H3/H4/H6/H7 的適用對象一律讀 `store.constraints` 的 `scope`，不寫死
+ * `rankCode === 'NP'`（F7）——H6/H7 因此對每一位落在 scope 內的人各自追蹤，
+ * 不假設「只有一位 NP」。
  *
  * 只讀上個月（`previousYearMonth(ym)`）的值班尾巴當固定輸入，
  * **不讀 `ym` 本身現有的值班表**——變體是全新假設性排班，不是在既有草稿上疊加。
@@ -743,7 +882,6 @@ export function generateAssignment(store: MockStore, ym: string, options: Genera
   const dates = datesOfYearMonth(ym)
   const result = new Map<string, string>()
   const quotaUsed = new Map<string, number>()
-  const npDutyDays = new Set<string>()
   const lastDutyDate = new Map<string, string>()
   const areaCountByStaff = new Map<string, Map<string, number>>()
   const blockedByStaff = new Map<string, Set<string>>()
@@ -754,6 +892,14 @@ export function generateAssignment(store: MockStore, ym: string, options: Genera
   }
   const carryMap = new Map((store.carryOver.get(ym) ?? []).map((e) => [e.staffId, e.points]))
 
+  const h3 = findHardConstraint(store, 'H3_QUOTA_CAP')
+  const h4 = findHardConstraint(store, 'H4_MIN_GAP')
+  const h6 = findHardConstraint(store, 'H6_NP_MONTHLY_DAYS')
+  const h7 = findHardConstraint(store, 'H7_NP_MAX_CONSECUTIVE')
+  const h6DayCap = (h6?.params as { cap?: number } | undefined)?.cap ?? 20
+  const h7Limit = (h7?.params as { days?: number } | undefined)?.days ?? 6
+  const gapDays = (h4?.params as { days?: number } | undefined)?.days ?? 3
+
   const prevSchedule = store.schedules.get(previousYearMonth(ym))
   if (prevSchedule) {
     for (const [key, staffId] of prevSchedule.duties) {
@@ -763,24 +909,37 @@ export function generateAssignment(store: MockStore, ym: string, options: Genera
     }
   }
 
-  const npId = store.staff.find((s) => s.rankCode === 'NP')?.id
-  let npStreak = 0
-  if (npId && prevSchedule) {
-    const npDatesInPrevMonth = new Set(
-      [...prevSchedule.duties.entries()].filter(([, sid]) => sid === npId).map(([key]) => parseDutyKey(key).date),
-    )
-    for (const d of [...datesOfYearMonth(previousYearMonth(ym))].reverse()) {
-      if (npDatesInPrevMonth.has(d)) npStreak++
-      else break
+  // H6（Budget，metric=duty_day）本月累計，只看 scope 內的人；H7（MaxConsecutive）
+  // 的連續天數需要從上月尾巴接續，一樣只算 scope 內的人。
+  const scopedDutyCount = new Map<string, number>()
+  const streakByStaff = new Map<string, number>()
+  if (h7 && prevSchedule) {
+    const prevDates = datesOfYearMonth(previousYearMonth(ym))
+    for (const staff of store.staff) {
+      if (!appliesToRank(h7.scope, staff.rankCode)) continue
+      const datesWorked = new Set(
+        [...prevSchedule.duties.entries()].filter(([, sid]) => sid === staff.id).map(([key]) => parseDutyKey(key).date),
+      )
+      let streak = 0
+      for (const d of [...prevDates].reverse()) {
+        if (datesWorked.has(d)) streak++
+        else break
+      }
+      streakByStaff.set(staff.id, streak)
     }
   }
 
-  const weight = (code: string) => options.weightMultipliers?.[code] ?? 1
+  /** 有效權重 = store 設定的 weight × 變體乘數（F2）。停用／weight=0 的約束乘任何數仍是 0。 */
+  const effectiveWeight = (code: string): number => {
+    const constraint = findSoftConstraint(store, code)
+    if (!constraint) return 0
+    const multiplier = options.weightMultipliers?.[code] ?? 1
+    return constraint.weight * multiplier
+  }
 
   for (const date of dates) {
     const day = getCalendarDay(store, date)
     const assignedToday = new Set<string>()
-    let npWorkedToday = false
 
     for (const areaId of areaFillOrder) {
       const area = store.areas.find((a) => a.id === areaId)
@@ -792,16 +951,23 @@ export function generateAssignment(store: MockStore, ym: string, options: Genera
         if (assignedToday.has(s.id)) return false
         if (blockedByStaff.get(s.id)?.has(date)) return false
 
-        if (s.rankCode === 'NP') {
-          if (npDutyDays.size >= 20) return false
-          if (npStreak + 1 > 6) return false
-          return true
+        if (h4?.enabled && appliesToRank(h4.scope, s.rankCode)) {
+          const last = lastDutyDate.get(s.id)
+          if (last && diffDays(date, last) < gapDays) return false
         }
-        const last = lastDutyDate.get(s.id)
-        if (last && diffDays(date, last) < 3) return false
-        const cap = quotaCapFor(store, s.rankCode, ym)
-        const used = quotaUsed.get(s.id) ?? 0
-        if (cap !== null && used + day.quotaPointValue > cap) return false
+        if (h3?.enabled && appliesToRank(h3.scope, s.rankCode)) {
+          const cap = quotaCapFor(store, s.rankCode, ym)
+          const used = quotaUsed.get(s.id) ?? 0
+          if (cap !== null && used + day.quotaPointValue > cap) return false
+        }
+        if (h6?.enabled && appliesToRank(h6.scope, s.rankCode)) {
+          const used = scopedDutyCount.get(s.id) ?? 0
+          if (used + 1 > h6DayCap) return false
+        }
+        if (h7?.enabled && appliesToRank(h7.scope, s.rankCode)) {
+          const streak = streakByStaff.get(s.id) ?? 0
+          if (streak + 1 > h7Limit) return false
+        }
         return true
       })
       if (feasible.length === 0) continue
@@ -813,22 +979,24 @@ export function generateAssignment(store: MockStore, ym: string, options: Genera
         const cap = quotaCapFor(store, s.rankCode, ym)
         const used = quotaUsed.get(s.id) ?? 0
         const remaining = cap === null ? 0 : cap - used
-        score += remaining * 2 * (weight('S1_QUOTA_FAIRNESS') / 100)
+        score += remaining * 2 * effectiveWeight('S1_QUOTA_FAIRNESS')
         score -= (carryMap.get(s.id) ?? 0) * 0.5
 
         const thisAreaCount = areaCountByStaff.get(s.id)?.get(areaId) ?? 0
-        score += thisAreaCount * 3 * (weight('S2_AREA_CONSISTENCY') / 40)
+        score += thisAreaCount * 3 * effectiveWeight('S2_AREA_CONSISTENCY')
 
-        if ((s.rankCode === 'R2' || s.rankCode === 'R3') && area.areaTypeCode === 'ICU') {
-          score += 5 * (weight('S3_R2R3_PREFER_ICU') / 50)
+        for (const code of PREFERENCE_SOFT_CODES) {
+          const constraint = findSoftConstraint(store, code)
+          if (!constraint || !appliesToRank(constraint.scope, s.rankCode)) continue
+          const direction = (constraint.params as { direction?: string } | undefined)?.direction
+          const areaMatch = !constraint.scope?.areaTypeCodes || constraint.scope.areaTypeCodes.includes(area.areaTypeCode)
+          const dayMatch = !constraint.scope?.dayKinds || constraint.scope.dayKinds.some((k) => dayKindMatches(store, date, k))
+          const targetMatch = areaMatch && dayMatch
+          const w = effectiveWeight(code)
+          if (direction === 'prefer') score += (targetMatch ? 1 : -1) * w
+          else if (direction === 'avoid' && targetMatch) score -= w
         }
-        if (['R4', 'R5', 'R6'].includes(s.rankCode) && area.areaTypeCode === 'CHIEF') {
-          score += 5 * (weight('S4_R4R6_PREFER_CHIEF') / 50)
-        }
-        if (s.rankCode === 'NP') {
-          score -= 8 * (weight('S5_NP_LAST_RESORT') / 60)
-          if (day.isHoliday) score -= 6 * (weight('S6_NP_AVOID_HOLIDAY') / 30)
-        }
+
         score += pseudoRandom(`${options.seedOffset}:${date}:${areaId}:${s.id}`) * 1.5
 
         if (score > bestScore) {
@@ -845,13 +1013,18 @@ export function generateAssignment(store: MockStore, ym: string, options: Genera
       const areaCounts = areaCountByStaff.get(best.id) ?? new Map<string, number>()
       areaCounts.set(areaId, (areaCounts.get(areaId) ?? 0) + 1)
       areaCountByStaff.set(best.id, areaCounts)
-      if (best.rankCode === 'NP') {
-        npDutyDays.add(date)
-        npWorkedToday = true
+      if (h6?.enabled && appliesToRank(h6.scope, best.rankCode)) {
+        scopedDutyCount.set(best.id, (scopedDutyCount.get(best.id) ?? 0) + 1)
       }
     }
 
-    npStreak = npWorkedToday ? npStreak + 1 : 0
+    if (h7?.enabled) {
+      for (const staff of store.staff) {
+        if (!appliesToRank(h7.scope, staff.rankCode)) continue
+        const worked = assignedToday.has(staff.id)
+        streakByStaff.set(staff.id, worked ? (streakByStaff.get(staff.id) ?? 0) + 1 : 0)
+      }
+    }
   }
 
   return result
@@ -979,14 +1152,19 @@ export function computeVariantMetrics(store: MockStore, ym: string, dutyMap: Map
   return { vacancies, quotaFairness, areaConsistency, rankPreference, fairnessPoint }
 }
 
-/** ADR-0003：三份具名變體，序列產生並套用多樣性約束（≥15 格不同）。 */
+/**
+ * ADR-0003：最多三份具名變體，序列產生並套用多樣性約束（≥15 格不同）。
+ * `variantCount` 來自 `CreateSolverJobRequest`，1～3 之間；只產生請求的份數，
+ * 不永遠固定 3 份——`v-b`／`v-c` 是否存在、要不要對誰做多樣性比較都看這個數字。
+ */
 export function generateVariants(
   store: MockStore,
   ym: string,
   weightProfiles: Record<string, Record<string, number>>,
   labels: Record<string, { label: string; description: string }>,
+  variantCount = 3,
 ): Variant[] {
-  const ids = ['v-a', 'v-b', 'v-c']
+  const ids = ['v-a', 'v-b', 'v-c'].slice(0, Math.min(Math.max(variantCount, 1), 3))
   const rawDuties = new Map<string, Map<string, string>>()
   ids.forEach((id, index) => {
     rawDuties.set(
@@ -996,16 +1174,16 @@ export function generateVariants(
   })
 
   const dutiesA = rawDuties.get('v-a')!
-  let dutiesB = rawDuties.get('v-b')!
-  let dutiesC = rawDuties.get('v-c')!
-  dutiesB = diversifyAgainst(store, ym, dutiesA, dutiesB, 15, 202)
-  dutiesC = diversifyAgainst(store, ym, dutiesA, dutiesC, 15, 303)
-  dutiesC = diversifyAgainst(store, ym, dutiesB, dutiesC, 15, 304)
-  const finalDuties = new Map([
-    ['v-a', dutiesA],
-    ['v-b', dutiesB],
-    ['v-c', dutiesC],
-  ])
+  const finalDuties = new Map<string, Map<string, string>>([['v-a', dutiesA]])
+  if (ids.includes('v-b')) {
+    finalDuties.set('v-b', diversifyAgainst(store, ym, dutiesA, rawDuties.get('v-b')!, 15, 202))
+  }
+  if (ids.includes('v-c')) {
+    let dutiesC = diversifyAgainst(store, ym, dutiesA, rawDuties.get('v-c')!, 15, 303)
+    const dutiesB = finalDuties.get('v-b')
+    if (dutiesB) dutiesC = diversifyAgainst(store, ym, dutiesB, dutiesC, 15, 304)
+    finalDuties.set('v-c', dutiesC)
+  }
 
   return ids.map((id) => {
     const dutyMap = finalDuties.get(id)!

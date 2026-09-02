@@ -51,9 +51,16 @@ export const eligibilityMatrix: EligibilityMatrix = {
   },
 }
 
-/** 由資格矩陣依 rankCode 推導可值區域類型；Staff.eligibleAreaTypes 唯讀，由此算出。 */
-export function eligibleAreaTypesOf(rankCode: string): string[] {
-  const row = eligibilityMatrix.matrix[rankCode] ?? {}
+/**
+ * 由資格矩陣依 rankCode 推導可值區域類型；Staff.eligibleAreaTypes 唯讀，由此算出。
+ *
+ * **矩陣由呼叫端傳入，不讀這個模組的常數** `eligibilityMatrix`——那份只是出廠預設值。
+ * `PUT /api/settings/eligibility-matrix` 會改動 `store.eligibilityMatrix`，
+ * 若這裡改讀模組常數，矩陣更新後只有 H2 檢查看得到新資料，
+ * `GET /api/staff`／候選人／可行性／產生器全部還在用舊矩陣，會互相矛盾。
+ */
+export function eligibleAreaTypesOf(matrix: EligibilityMatrix['matrix'], rankCode: string): string[] {
+  const row = matrix[rankCode] ?? {}
   return Object.entries(row)
     .filter(([, ok]) => ok)
     .map(([areaTypeCode]) => areaTypeCode)

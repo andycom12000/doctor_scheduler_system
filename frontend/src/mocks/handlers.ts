@@ -407,7 +407,7 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
     () => {
       const job = store.solverJobs.get(jobId)
       if (!job || job.status === 'cancelled') return
-      const variants = generateVariants(store, ym, variantWeightProfiles, variantLabels)
+      const variants = generateVariants(store, ym, variantWeightProfiles, variantLabels, variantCount)
       store.variants.set(jobId, variants)
       job.status = 'succeeded'
       job.elapsedSec = (Date.now() - startMs) / 1000
@@ -619,7 +619,7 @@ const settingsHandlers = [
     const body = (await request.json()) as EligibilityMatrix
     store.eligibilityMatrix = { matrix: structuredClone(body.matrix) }
     // eligibleAreaTypes 是唯讀衍生欄位，矩陣一變就重算全體人員。
-    store.staff = store.staff.map((s) => ({ ...s, eligibleAreaTypes: eligibleAreaTypesOf(s.rankCode) }))
+    store.staff = store.staff.map((s) => ({ ...s, eligibleAreaTypes: eligibleAreaTypesOf(store.eligibilityMatrix.matrix, s.rankCode) }))
     return HttpResponse.json(store.eligibilityMatrix)
   }),
 
@@ -695,7 +695,7 @@ const staffHandlers = [
       name: body.name,
       rankCode: body.rankCode,
       status: 'active',
-      eligibleAreaTypes: eligibleAreaTypesOf(body.rankCode),
+      eligibleAreaTypes: eligibleAreaTypesOf(store.eligibilityMatrix.matrix, body.rankCode),
     }
     store.staff.push(staff)
     return HttpResponse.json(staff, { status: 201 })
@@ -710,7 +710,7 @@ const staffHandlers = [
     staff.employeeNo = body.employeeNo
     staff.name = body.name
     staff.rankCode = body.rankCode
-    staff.eligibleAreaTypes = eligibleAreaTypesOf(body.rankCode)
+    staff.eligibleAreaTypes = eligibleAreaTypesOf(store.eligibilityMatrix.matrix, body.rankCode)
     return HttpResponse.json(staff)
   }),
 

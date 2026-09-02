@@ -3,7 +3,7 @@
  * R4×4、R5×5、R6×4、R2×3、R3×4、PGY1×2、PGY2×4、R1×4、PTR×3、NP×1。
  * 姓名為假名、員編 `E001…`、staff id `staff-001…`。
  */
-import type { Staff } from '@/api/types'
+import type { EligibilityMatrix, Staff } from '@/api/types'
 import { eligibleAreaTypesOf } from './ranks'
 
 interface StaffSeed {
@@ -49,7 +49,7 @@ const seeds: StaffSeed[] = [
   { rankCode: 'NP', name: '游芷若' },
 ]
 
-export function makeStaffFixture(): Staff[] {
+export function makeStaffFixture(matrix: EligibilityMatrix['matrix']): Staff[] {
   return seeds.map((seed, index) => {
     const n = index + 1
     const idSuffix = String(n).padStart(3, '0')
@@ -59,7 +59,7 @@ export function makeStaffFixture(): Staff[] {
       name: seed.name,
       rankCode: seed.rankCode,
       status: 'active',
-      eligibleAreaTypes: eligibleAreaTypesOf(seed.rankCode),
+      eligibleAreaTypes: eligibleAreaTypesOf(matrix, seed.rankCode),
     }
   })
 }

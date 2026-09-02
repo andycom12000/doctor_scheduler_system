@@ -70,12 +70,14 @@ async function main() {
       const body = await calendar.json()
       assert(body.days.length === 365, 'calendar 2026 有 365 天')
 
-      const overridden = await fetch(`${BASE}/calendars/2026/2026-09-05`, {
+      // 刻意挑 seed 月（2026-08／2026-09）以外的日期——這支腳本後面還會斷言
+      // 額度點數與公平性點數，若覆寫落在 seed 月內會汙染那些數字。
+      const overridden = await fetch(`${BASE}/calendars/2026/2026-11-05`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isMakeUpWorkday: true, isHoliday: false }),
       })
-      assert(overridden.status === 200, 'PATCH /calendars/2026/2026-09-05 → 200')
+      assert(overridden.status === 200, 'PATCH /calendars/2026/2026-11-05 → 200')
       const overriddenBody = await overridden.json()
       assert(overriddenBody.overridden === true, '覆寫後 overridden === true')
     }
