@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Scheduler.Persistence</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scheduler.Application\Scheduler.Application.csproj" />
+  </ItemGroup>
+
+  <!--
+    SQLite 走 Microsoft.Data.Sqlite（bundled e_sqlite3）。native 的 e_sqlite3.dll 由
+    SQLitePCLRaw.lib.e_sqlite3 隨 RID 落到 runtimes/win-x64/native/，與 OR-Tools 的
+    google-ortools-native.dll 同一個機制。兩者都是 native，因此 Directory.Build.props
+    關掉的 trim / AOT / single-file 對本專案同樣是硬性要求。
+
+    資料庫檔案一律放在程式旁的 data/（portable 要求），不得碰 %APPDATA% 或登錄檔。
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+  </ItemGroup>
+
+</Project>

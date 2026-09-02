@@ -27,7 +27,8 @@
   cellKey 慣例：逐格規則用 `area:{areaId}:{date}`，個人序列／累計規則用 `staff:{staffId}:{date}`，
   額度與連值只標超出上限的那幾格
 - `Application` / `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
-  `Scheduler.Api` 只實作了 `/api/health`。`Scheduler.Persistence` 尚未建立
+  `Scheduler.Api` 只實作了 `/api/health`。
+  `Scheduler.Persistence` 只有 `Microsoft.Data.Sqlite` 的相依與一個載入自檢（`SqliteRuntimeProbe`）
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
@@ -55,7 +56,9 @@ npm run build        # 型別檢查 + 建置到 ../src/Scheduler.Shell/wwwroot
 npm run api:types    # 由 api-contract.yaml 生成 src/api/schema.d.ts
 ```
 
-發佈：`pwsh build/fetch-webview2.ps1`（一次性）→ `pwsh build/publish.ps1`。
+發佈：`pwsh build/fetch-webview2.ps1`（一次性）→ `pwsh build/publish.ps1`
+（內含 VC++ runtime app-local 複製與 `build/check-native-deps.ps1` 的 import table 檢查；
+開發機沒有 pwsh 7 時用 `powershell -File` 跑也可以，腳本是 5.1 相容的）。
 
 ## 分支模型（git-flow）
 
@@ -122,6 +125,13 @@ gh pr create        # base 自動是 develop（預設分支已設定）
   命名空間與 `System.Windows.Application` 型別，基底型別必須完整限定。
 - **不要開 trim / AOT。** OR-Tools 的 P/Invoke wrapper 兩者皆不相容，
   `Directory.Build.props` 已明確關閉。SQLite 的 `e_sqlite3` 同樣是 native，一併受影響。
+- **OR-Tools 的 native DLL 依賴 `msvcp140` / `vcruntime140` / `vcruntime140_1`，NuGet 不附帶。**
+  `build/publish.ps1` 會從 VS Build Tools 的 Redist 目錄 app-local 複製進發佈包，
+  `build/check-native-deps.ps1` 掃 import table 守住它。不要「為了省檔案」把這三個 DLL 拿掉，
+  也不要改成要求使用者安裝 vc_redist。見 `docs/ARCHITECTURE.md` §9.2。
+- **`RuntimeIdentifier` / `SelfContained` 要寫在 `Scheduler.Shell.csproj` 裡，不能移回
+  `Directory.Build.props` 用條件式設定**——props 在專案本體前匯入，條件看不到專案屬性，
+  publish 會默默變成 framework-dependent。
 - **不要加認證、角色、多單位、`If-Match` 樂觀鎖、伺服器端分頁。**
   單機、單一使用者、單一 process、單一科部——這些全部沒有防禦對象，已在需求釐清中明確排除。
   `revision` 只是修改次數計數器，不是併發控制。
@@ -151,10 +161,8 @@ Single-context —— root 一份 `CONTEXT.md` + `docs/adr/`。前後端是同�
 
 ## 尚未驗證的高風險項
 
-`docs/ARCHITECTURE.md` §9 列的必驗項目一項都還沒做。最優先的是：
-**OR-Tools native lib 對 `vcruntime140` 的依賴，必須在一台乾淨的 Windows 上實測**，
-開發機驗不出來。這件事會影響是否需要在發佈包裡帶 VC++ runtime。
-SQLite 的 native 部署（`e_sqlite3.dll` 落到 `runtimes/`）與它一併驗。
+`docs/ARCHITECTURE.md` §9 的 VC++ runtime 與 SQLite native 兩項已用靜態分析確認並處理
+（§9.2）。**還欠一次乾淨 Windows 上的實際啟動**——靜態分析證明不了載入順序與版本相容。
 
 另一個容易腐爛的地方：**NP 的四條專屬規則幾乎測不到**——NP 只有 1 人且是後備人力，
 真實資料下極少觸發。`tests/Scheduler.Domain.Tests/NpRulesTests.cs` 用憑空造的情境

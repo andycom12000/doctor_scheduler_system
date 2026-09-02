@@ -378,15 +378,32 @@ core.Settings.AreDevToolsEnabled = true;   // Debug 建置開啟，Release 關�
 ```
 
 - **不要開 trim，不要開 AOT** — OR-Tools 的 P/Invoke wrapper 兩者皆不保證相容
+- `RuntimeIdentifier` / `SelfContained` **寫在 `Scheduler.Shell.csproj` 本身**。
+  曾經放在 `Directory.Build.props` 用 `IsPublishable` 條件式設定，結果條件永遠為假
+  （props 在專案本體之前匯入，看不到專案裡宣告的屬性），publish 出來是 framework-dependent
+  的 26 個檔案——沒裝 .NET 的機器直接起不來。這件事靠 §9 的 native 相依檢查與檔案數才發現
 - WebView2 Fixed Version 由 `build/fetch-webview2.ps1` 下載，版本釘選在 `build/webview2.json`
+- **VC++ runtime 三個檔案 app-local 隨附**（`msvcp140.dll`、`vcruntime140.dll`、`vcruntime140_1.dll`），
+  由 `build/publish.ps1` 從 Visual Studio / Build Tools 的 `VC\Redist\MSVC\<ver>\x64\Microsoft.VC143.CRT`
+  複製到發佈包根目錄。理由見 §9
+- `build/check-native-deps.ps1` 掃描發佈包內每個 PE 檔的 import table，任何既不在包內、
+  也不是 Windows 自帶的 DLL 都會讓 publish 失敗。它是靜態分析，**取代不了乾淨機器實測**，
+  但能在開發機上擋住「少帶一個 DLL」這一類的退化
 
 發佈產物：
 
 ```
 HospitalScheduler/
 ├─ HospitalScheduler.exe
-├─ *.dll                         # .NET self-contained runtime
-├─ runtimes/                     # OR-Tools 與 SQLite native libraries
+├─ *.dll                         # .NET self-contained runtime + 受管組件
+├─ ortools.dll, google-ortools-native.dll, abseil_dll.dll, libprotobuf.dll,
+│  libscip.dll, highs.dll, re2.dll, zlib1.dll, bz2.dll, libutf8_validity.dll
+│                                # OR-Tools native（RID-specific publish 時直接落在根目錄，
+│                                #  不在 runtimes/ 之下）
+├─ e_sqlite3.dll                 # SQLite native，同上
+├─ msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll
+│                                # VC++ runtime，app-local，由 publish.ps1 放入
+├─ runtimes/win-x64/native/      # 只剩 WebView2Loader.dll 的副本（套件行為，無害）
 ├─ webview2/                     # Fixed Version runtime（~180MB）
 ├─ wwwroot/                      # 前端 build 產物
 └─ data/                         # 所有狀態，含 scheduler.db 與 WebView2 user data
@@ -398,8 +415,8 @@ HospitalScheduler/
 
 | 項目 | 說明 | 何時驗 |
 |---|---|---|
-| **VC++ Runtime** | OR-Tools native lib 可能依賴 `vcruntime140`。**必須在一台乾淨的 Windows 實測** | **最優先** |
-| **SQLite native 部署** | `Microsoft.Data.Sqlite` 的 `e_sqlite3.dll` 需隨 RID 正確落到 `runtimes/`，與 OR-Tools 一併驗 | 與上一項同時 |
+| **VC++ Runtime** | **已確認依賴，已處理。** 見 §9.2 | 乾淨機器實測仍列在 §10 |
+| **SQLite native 部署** | **已確認。** `e_sqlite3.dll` 只 import `KERNEL32.dll`（CRT 靜態連結），RID-specific publish 時落在根目錄，載入正常 | 已完成 |
 | **NP 路徑幾乎測不到** | NP 只有 1 人且是後備人力，四條專屬規則在真實資料下極少觸發。**必須寫不依賴真實資料的單元測試**，否則是最容易腐爛的一塊 | 實作 Solver 時 |
 | 唯讀路徑 | 程式可能被放在無寫入權限的位置，啟動時需檢查並明確報錯 | 早期 |
 | SmartScreen | 未簽章 exe 會觸發警告。需事先告知案主 | 交付前 |
@@ -422,6 +439,37 @@ R2/R3 剩 13 點去一般病房 → 病房 117 − 13 = 104 點由低年級（PG
 - 可行性預警的 `bySupply` 用巢狀累計（總值 ⊂ 資深；總值＋ICU ⊂ 資深＋中階；全部 ⊂ 全部）
   算供需，「一般病房需求 vs 低年級剩餘供給」那一層就是這條偏好會不會被犧牲的先行指標
 - 逐區域類型各算各的供給是錯的——R2 會同時被算進 ICU 與一般病房
+
+### 9.2 OR-Tools native 程式庫依賴 MSVC runtime——已確認，app-local 隨附
+
+2026-09-02 以 `Google.OrTools 9.15.6755` + `Microsoft.Data.Sqlite 8.0.11` 做 self-contained
+win-x64 publish，解析每個 native DLL 的 PE import table（`build/check-native-deps.ps1`），結果：
+
+| DLL | 依賴 |
+|---|---|
+| `ortools.dll`、`google-ortools-native.dll`、`abseil_dll.dll`、`libprotobuf.dll`、`libscip.dll`、`highs.dll`、`re2.dll` | `MSVCP140.dll`、`VCRUNTIME140.dll`、`VCRUNTIME140_1.dll` + UCRT（`api-ms-win-crt-*`） |
+| `zlib1.dll`、`bz2.dll`、`libutf8_validity.dll` | `VCRUNTIME140.dll` + UCRT |
+| `e_sqlite3.dll` | 只有 `KERNEL32.dll` |
+| .NET runtime 自身（`coreclr.dll`、`clrjit.dll`、`hostfxr.dll`…） | 只有 UCRT |
+| WPF native（`wpfgfx_cor3.dll`、`PresentationNative_cor3.dll`…） | 自帶 `vcruntime140_cor3.dll`，不依賴系統版 |
+
+結論：
+
+- **`Google.OrTools` 的 NuGet 套件不附帶 `msvcp140` / `vcruntime140` / `vcruntime140_1`。**
+  開發機因為裝了 Visual Studio 所以載得起來，乾淨的 Windows 上會在第一次呼叫 CP-SAT 時
+  `DllNotFoundException`（實際錯的是它的相依，訊息只會說找不到 `google-ortools-native`）
+- UCRT（`api-ms-win-crt-*`、`ucrtbase`）自 Windows 10 起是作業系統元件，**不需要**隨附
+- 處置：把三個 DLL **app-local** 放在 exe 旁。Microsoft 允許此部署方式（它們在 VC redist
+  的可轉散發清單裡），Windows 的 DLL 搜尋順序會先找應用程式目錄，所以就算目標機器裝了
+  別的版本也不互相干擾。**不需要**執行 `vc_redist.x64.exe`，portable 前提維持
+- `build/publish.ps1` 第 3 步負責複製，找不到來源時直接失敗並說明要裝哪個元件；第 6 步跑
+  `check-native-deps.ps1` 再驗一次。這條檢查對 OR-Tools 升版同樣有效——哪天它多依賴一個
+  DLL，publish 會當場擋下
+
+同一次驗證順帶抓到 §8 說的 `IsPublishable` 條件失效問題：之前的 publish 根本不是 self-contained。
+
+**還沒做的**：在一台沒有 .NET、沒有 VC++ Redist 的 Windows 上實際啟動並跑一次求解。
+靜態分析證明「沒有懸空的 import」，證明不了「載入順序與版本相容都對」。這一項留在 §10。
 
 ---
 

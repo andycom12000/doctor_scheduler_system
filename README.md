@@ -96,5 +96,7 @@ pwsh build/publish.ps1          # 產出 publish/HospitalScheduler/
 腳本會告訴你去哪裡抓、要抓哪個版本。版本釘選在 `build/webview2.json`。
 
 **交付前必須跑過 [`docs/ARCHITECTURE.md` §8 的驗收清單](docs/ARCHITECTURE.md#8-架構驗收檢查清單)**，
-其中最優先的是在一台**沒有 .NET、沒有 WebView2、沒有 VC++ Redist 的乾淨 Windows** 上實測——
-OR-Tools 的 native library 可能依賴 `vcruntime140`，這件事不可能在開發機上驗出來。
+其中最優先的是在一台**沒有 .NET、沒有 WebView2、沒有 VC++ Redist 的乾淨 Windows** 上實測。
+OR-Tools 的 native library **確實**依賴 `msvcp140` / `vcruntime140`（見 `docs/ARCHITECTURE.md` §9.2），
+`publish.ps1` 會把它們 app-local 放進發佈包並以 `check-native-deps.ps1` 靜態驗證，
+但載入順序與版本相容仍只有乾淨機器驗得出來。
