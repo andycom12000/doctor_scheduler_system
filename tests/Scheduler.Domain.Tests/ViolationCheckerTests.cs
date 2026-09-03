@@ -156,6 +156,31 @@ public class ViolationCheckerTests
         Assert.DoesNotContain(result.Violations, v => v.Code is DefaultConstraints.S1QuotaFairness or DefaultConstraints.S2AreaConsistency or DefaultConstraints.S7FairnessPoint);
     }
 
+    // ---- 結構不變式：同人同日最多一格（不是約束，寫入端拒絕，這裡是最後防線） ----
+
+    [Fact]
+    public void 同一人同一天排在兩個區域_不是違規而是資料不一致_NP也一樣()
+    {
+        var np = new ContextBuilder().WithStaff("np-1", DefaultRanks.NP)
+            .WithDuty("np-1", 1, "area-a").WithDuty("np-1", 1, "area-b").Build();
+        var r2 = new ContextBuilder().WithStaff("r2-1", DefaultRanks.R2)
+            .WithDuty("r2-1", 1, "area-a").WithDuty("r2-1", 1, "area-b").Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ViolationChecker(np).Check(Defaults));
+        Assert.Contains("np-1", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("2026-09-01", ex.Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => new ViolationChecker(r2).Check(Defaults));
+    }
+
+    [Fact]
+    public void 同一人不同天在不同區域_是合法狀態()
+    {
+        var ctx = new ContextBuilder().WithStaff("np-1", DefaultRanks.NP)
+            .WithDuty("np-1", 1, "area-a").WithDuty("np-1", 2, "area-b").Build();
+
+        _ = new ViolationChecker(ctx).Check(Defaults);
+    }
+
     // ---- Violation.id ----
 
     [Fact]

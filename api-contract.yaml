@@ -138,6 +138,14 @@ paths:
         該月尚無值班表時**自動建立一份空草稿**再寫入——這是「從空白手排」的入口，
         不需要另設建立端點。**已發布的值班表也可以改**（臨時換人是常態），
         `revision` 照常遞增；月結轉要重算的話再呼叫一次 `publish`。
+
+        **唯一會拒絕的排班狀態：同一人同一天已在另一區。** 這不是約束、是值班表的
+        結構不變式（跟「同一格兩個人」同一層次），不在約束設定裡、使用者不能停用，
+        回 `409 STAFF_ALREADY_ON_DUTY`，`details` 帶他當天已在的 `areaId`。
+        求解器端以「每人每天最多一格」建模，與此一致。
+
+        清空一格（`staffId: null`）時回應的 `duties` 仍帶那一格，`staffId` 為 `null`，
+        前端才能就地更新。
       requestBody:
         required: true
         content:
@@ -149,6 +157,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MutationResult' }
+        '409':
+          description: 同一人同一天已在另一區（`STAFF_ALREADY_ON_DUTY`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
           description: |
             請求本身無效（人員不存在、日期不在本月、區域不存在）。
@@ -164,6 +177,9 @@ paths:
       tags: [schedules]
       operationId: swapDuties
       summary: 對調兩格的值班人員
+      description: |
+        兩格日期不同時，對調後任一人若在新日期已在另一區，
+        與 `setDuty` 一樣回 `409 STAFF_ALREADY_ON_DUTY`。
       requestBody:
         required: true
         content:
@@ -177,6 +193,11 @@ paths:
               schema: { $ref: '#/components/schemas/MutationResult' }
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: 同一人同一天已在另一區（`STAFF_ALREADY_ON_DUTY`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/schedules/{ym}/validate:
     parameters:
@@ -191,15 +212,20 @@ paths:
 
         會讀上個月的尾巴以檢查跨月的值休休與 NP 連續天數。
 
-        **哪些約束會產生逐格違規**：全部硬約束，以及軟約束中的 `Preference` 與
-        `Consistency`（每一個偏離都指得到格子）。`Fairness` 是身分組層級的分數，
-        指不到格子，**不產生違規**，其數值見點數看板與變體指標。
+        **哪些約束會產生逐格違規**：全部硬約束，以及軟約束中的 `Preference`
+        （每一格本身就偏離）。`Fairness` 是身分組層級的分數、`Consistency` 是個人
+        層級的分數（「主區」隨其他格子變動，逐格標示會隨編輯翻轉），兩者都
+        指不到格子，**不產生違規**，其數值見點數看板、候選人與變體指標。
+
+        該月尚無值班表時回 `404`，不會憑空當成空白表檢查。
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ValidationResult' }
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/schedules/{ym}/publish:
     parameters:
@@ -217,6 +243,8 @@ paths:
 
         **可重複呼叫。** 已發布的值班表被逐格改過之後再發布一次，會以當下的內容
         **覆寫**該月的月結轉，`publishedAt` 更新為最後一次。
+
+        該月尚無值班表時回 `404`，不會憑空建一份空表發布。
       requestBody:
         required: false
         content:
@@ -234,6 +262,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PublishResult' }
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           description: 尚有硬約束違規且未確認
           content:
@@ -287,6 +317,8 @@ paths:
       description: |
         格子上的警示**唯一來源**。前端依 `cellKeys` 索引到格子，
         依 `code` 與 `severity` 自行決定呈現方式（底色／斜紋／外框）。
+
+        該月尚無值班表時回 `404`（點數看板、空缺、候選人同此）。
       responses:
         '200':
           description: OK
@@ -300,6 +332,8 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Violation' }
 
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ===========================================================================
   # 由值班表推導的檢視
   # ===========================================================================
@@ -328,6 +362,8 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/PointBoardGroup' }
 
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/schedules/{ym}/days/{date}:
     parameters:
       - $ref: '#/components/parameters/YearMonth'
@@ -373,6 +409,8 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/VacancyByDate' }
 
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/schedules/{ym}/candidates:
     parameters:
       - $ref: '#/components/parameters/YearMonth'
@@ -405,6 +443,8 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Candidate' }
 
+        '404':
+          $ref: '#/components/responses/NotFound'
   # ===========================================================================
   # 不可排班日
   # ===========================================================================
@@ -618,7 +658,7 @@ paths:
       description: |
         覆蓋該月值班表的全部值班；該月尚無值班表時建立一份。
         已發布的值班表不可整份套用（幾乎一定是誤操作），回 `409`——
-        要改就逐格改。
+        要改就逐格改。`jobId` 或 `variantId` 不存在時回 `404`。
       requestBody:
         required: true
         content:
@@ -635,6 +675,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Schedule' }
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           description: 該月值班表已發布
           content:
@@ -970,6 +1012,8 @@ paths:
       responses:
         '204':
           description: 已刪除
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           description: 已有值班紀錄
           content:
@@ -1063,6 +1107,7 @@ components:
         - BLOCKED_DAY_CAP_EXCEEDED       # 超過每人每月不可排班日上限
         - HARD_VIOLATIONS_PRESENT        # 發布時仍有硬約束違規且未確認
         - SCHEDULE_ALREADY_PUBLISHED     # 對已發布的值班表套用變體
+        - STAFF_ALREADY_ON_DUTY          # 同一人同一天已在另一區（結構不變式，非約束）
         - AREA_IN_USE                    # 刪除仍被值班表引用的區域
         - AREA_TYPE_IN_USE               # 刪除仍被區域引用的區域類型
         - RANK_IN_USE                    # 刪除仍被人員／矩陣／約束引用的身分或身分組
@@ -1138,6 +1183,16 @@ components:
             **不是領域識別子，不可作為寫入目標。**
           examples: ['area:ICU:2026-09-14']
 
+    MutatedCell:
+      type: object
+      description: 一次寫入後某一格的狀態；與 `Duty` 的差別只在 `staffId` 可為 `null`（已清空）
+      required: [areaId, date, staffId]
+      properties:
+        areaId: { type: string }
+        date: { type: string, format: date }
+        staffId: { type: [string, 'null'] }
+        cellKey: { type: string, examples: ['area:ICU:2026-09-14'] }
+
     SetDutyRequest:
       type: object
       required: [areaId, date]
@@ -1169,8 +1224,10 @@ components:
         revision: { type: integer }
         duties:
           type: array
-          description: 本次改動後的格子
-          items: { $ref: '#/components/schemas/Duty' }
+          description: |
+            本次改動後的格子。清空的格子也在裡面，`staffId` 為 `null`，
+            前端才知道是哪一格被清了。
+          items: { $ref: '#/components/schemas/MutatedCell' }
         violations:
           type: array
           description: |
@@ -1341,16 +1398,20 @@ components:
           items: { $ref: '#/components/schemas/BlockedDayEntry' }
         byStaff:
           type: array
+          description: 每位**在職**人員一列，沒登記的也列（count 為 0）——這是表格，不是清單
           items:
             type: object
+            required: [staffId, count, remaining]
             properties:
               staffId: { type: string }
               count: { type: integer }
               remaining: { type: integer }
         byDate:
           type: array
+          description: 只列有登記的日期，依日期遞增
           items:
             type: object
+            required: [date, count]
             properties:
               date: { type: string, format: date }
               count: { type: integer }

@@ -116,15 +116,65 @@ async function main() {
 
     console.log('6. PATCH /schedules/2026-09/duties')
     {
+      // 先從當天的值班表挑一位「9/10 沒班」的在職人員，避免撞到同人同日不變式
+      const scheduleRes = await fetch(`${BASE}/schedules/2026-09`)
+      const schedule = await scheduleRes.json()
+      const onDuty = new Set(
+        (schedule.duties as Array<{ date: string; staffId: string }>).filter((d) => d.date === '2026-09-10').map((d) => d.staffId),
+      )
+      const staffRes = await fetch(`${BASE}/staff?status=active`)
+      const staff = ((await staffRes.json()) as { items: Array<{ id: string; rankCode: string }> }).items
+      const free = staff.find((s) => !onDuty.has(s.id) && s.rankCode !== 'NP')
+      assert(free, '找得到 9/10 沒班的人')
+      const busy = [...onDuty][0]
+      assert(busy, '9/10 至少有一人在班')
+
       const res = await fetch(`${BASE}/schedules/2026-09/duties`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ areaId: 'area-c', date: '2026-09-10', staffId: 'staff-001' }),
+        body: JSON.stringify({ areaId: 'area-c', date: '2026-09-10', staffId: free.id }),
       })
       assert(res.status === 200, 'PATCH duties → 200')
       const body = await res.json()
       assert(body.revision === revision + 1, 'revision 遞增 1')
       assert(Array.isArray(body.violations), 'violations 是陣列')
+      assert(body.duties.length === 1 && body.duties[0].staffId === free.id, 'duties 帶回改動的那一格')
+      revision = body.revision
+
+      // 同一人同一天已在另一區 → 409 STAFF_ALREADY_ON_DUTY（結構不變式，非約束）
+      const conflict = await fetch(`${BASE}/schedules/2026-09/duties`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ areaId: 'area-c', date: '2026-09-10', staffId: busy }),
+      })
+      assert(conflict.status === 409, '同人同日另一區 → 409')
+      const conflictBody = await conflict.json()
+      assert(conflictBody.error.code === 'STAFF_ALREADY_ON_DUTY', '錯誤碼 STAFF_ALREADY_ON_DUTY')
+      assert(typeof conflictBody.error.details?.areaId === 'string', 'details 帶他當天已在的 areaId')
+
+      // 清空一格：回應仍帶那一格，staffId 為 null
+      const clear = await fetch(`${BASE}/schedules/2026-09/duties`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ areaId: 'area-c', date: '2026-09-10', staffId: null }),
+      })
+      assert(clear.status === 200, '清空一格 → 200')
+      const clearBody = await clear.json()
+      assert(clearBody.duties.length === 1 && clearBody.duties[0].staffId === null, '清空後 duties 帶回該格且 staffId 為 null')
+      revision = clearBody.revision
+    }
+
+    console.log('6b. 不存在的月份：validate / violations / publish / point-board 一律 404')
+    {
+      for (const [method, path] of [
+        ['POST', '/schedules/2099-03/validate'],
+        ['GET', '/schedules/2099-03/violations'],
+        ['POST', '/schedules/2099-03/publish'],
+        ['GET', '/schedules/2099-03/point-board'],
+      ] as const) {
+        const res = await fetch(`${BASE}${path}`, { method })
+        assert(res.status === 404, `${method} ${path} → 404`)
+      }
     }
 
     console.log('7. POST /schedules/2026-09/validate')
@@ -147,6 +197,10 @@ async function main() {
     console.log('9. blocked-days PUT/feasibility')
     let ym10 = '2026-10'
     {
+      const before = await (await fetch(`${BASE}/blocked-days/${ym10}`)).json()
+      const activeCount = ((await (await fetch(`${BASE}/staff?status=active`)).json()) as { counts: { active: number } }).counts.active
+      assert(before.byStaff.length === activeCount, 'byStaff 每位在職人員一列（0 也列）')
+      assert(before.byStaff.every((r: { count: number }) => typeof r.count === 'number'), 'byStaff 每列都有 count')
       const put = await fetch(`${BASE}/blocked-days/${ym10}/staff-002/2026-10-05`, { method: 'PUT' })
       assert(put.status === 200, 'PUT blocked-day → 200')
       const putBody = await put.json()
