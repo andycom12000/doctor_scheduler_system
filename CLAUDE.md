@@ -14,14 +14,20 @@
 
 ## 現況
 
-**需求已釐清、契約已定案，實作尚未開始。**
+**需求已釐清、契約已定案，領域層已落地，其餘層仍是骨架。**
 
 - 領域已完整定義：5 區（A、B、C、ICU、總值）、33 位醫師、10 種身分、4 個身分組，
   7 條硬約束、7 條軟約束，收斂成**九個宣告式原語**（見 ADR-0002）
 - `api-contract.yaml` 是完整的，前端可用 MSW mock 獨立開工
 - `docs/design-revisions.md` 是要回寫到 Claude Design 的畫面修訂清單
-- 程式碼仍是骨架：`Scheduler.Domain` / `Application` / `Solver` 只有 `AssemblyMarker`，
-  `Scheduler.Shell` 只有空 WPF 視窗，`Scheduler.Api` 只實作了 `/api/health`。
+- `Scheduler.Domain` 已實作：`Model/`（聚合根與行事曆）、`Constraints/`（九原語的宣告式定義，
+  範圍是資料不是 `if`）、`Defaults/`（`docs/constraint-defaults.md` 的程式碼版）、
+  `Scheduling/`（`SchedulingContext`、cellKey、兩套點數的 `MetricEvaluator`）、
+  `Validation/`（`ViolationChecker` 與 `ScheduleScores`）。零 PackageReference。
+  cellKey 慣例：逐格規則用 `area:{areaId}:{date}`，個人序列／累計規則用 `staff:{staffId}:{date}`，
+  額度與連值只標超出上限的那幾格
+- `Application` / `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
+  `Scheduler.Api` 只實作了 `/api/health`。
   `Scheduler.Persistence` 只有 `Microsoft.Data.Sqlite` 的相依與一個載入自檢（`SqliteRuntimeProbe`）
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
@@ -34,12 +40,13 @@
    遷移到前後端分離時，刪掉 `Scheduler.Shell` 即可。
 
 `tests/Scheduler.ArchitectureTests` 驗證規則 1。規則 2 目前沒有自動化驗證，靠 review。
+`tests/Scheduler.Domain.Tests` 驗證九原語與違規檢查器的行為，fixture 全用出廠值憑空造。
 
 ## 指令
 
 ```bash
 dotnet build                              # 建置全部
-dotnet test                               # 架構規則驗證
+dotnet test                               # 架構規則 + 領域規則測試
 dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
 
 cd frontend
@@ -158,4 +165,6 @@ Single-context —— root 一份 `CONTEXT.md` + `docs/adr/`。前後端是同�
 （§9.2）。**還欠一次乾淨 Windows 上的實際啟動**——靜態分析證明不了載入順序與版本相容。
 
 另一個容易腐爛的地方：**NP 的四條專屬規則幾乎測不到**——NP 只有 1 人且是後備人力，
-真實資料下極少觸發。必須寫不依賴真實資料的單元測試。
+真實資料下極少觸發。`tests/Scheduler.Domain.Tests/NpRulesTests.cs` 用憑空造的情境
+守著這四條（含跨月 tail 與豁免名單），動到 NP 規則或 `ConstraintScope` 時先跑它。
+求解器端（`Scheduler.Solver`）對應的測試尚未存在。
