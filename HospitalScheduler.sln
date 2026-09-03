@@ -19,6 +19,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{1DB0EBB5
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.ArchitectureTests", "tests\Scheduler.ArchitectureTests\Scheduler.ArchitectureTests.csproj", "{124A52AA-9E6C-48AB-BA1F-FDBFE2767C76}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Persistence", "src\Scheduler.Persistence\Scheduler.Persistence.csproj", "{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,6 +54,10 @@ Global
 		{124A52AA-9E6C-48AB-BA1F-FDBFE2767C76}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{124A52AA-9E6C-48AB-BA1F-FDBFE2767C76}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{124A52AA-9E6C-48AB-BA1F-FDBFE2767C76}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{77FACCCF-5606-4555-A526-476CFCD413F4} = {11951F66-270D-4DE6-BA38-EA996EB99804}
@@ -60,5 +66,6 @@ Global
 		{18E7E27E-1BA7-4245-B9A6-30CE09AE471C} = {11951F66-270D-4DE6-BA38-EA996EB99804}
 		{E5790676-1C67-42DD-8396-CA7188D43218} = {11951F66-270D-4DE6-BA38-EA996EB99804}
 		{124A52AA-9E6C-48AB-BA1F-FDBFE2767C76} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
+		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD} = {11951F66-270D-4DE6-BA38-EA996EB99804}
 	EndGlobalSection
 EndGlobal

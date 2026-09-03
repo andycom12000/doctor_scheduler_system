@@ -10,10 +10,15 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!-- 發佈形態：資料夾式 portable。詳見 docs/ARCHITECTURE.md §6。 -->
+  <!--
+    發佈形態：資料夾式 portable。詳見 docs/ARCHITECTURE.md §6。
+
+    RuntimeIdentifier / SelfContained 寫在 Scheduler.Shell.csproj 本身，不在這裡：
+    Directory.Build.props 在專案檔本體之前匯入，此時專案裡宣告的屬性（例如舊版的
+    IsPublishable）尚不存在，條件永遠為假 —— 結果是 publish 出 framework-dependent
+    的產物，在沒裝 .NET 的機器上直接起不來。這個坑已經踩過一次。
+  -->
   <PropertyGroup>
-    <RuntimeIdentifier Condition="'$(IsPublishable)' == 'true'">win-x64</RuntimeIdentifier>
-    <SelfContained Condition="'$(IsPublishable)' == 'true'">true</SelfContained>
     <!-- 自解壓到 %TEMP% 會觸發 AppLocker / EDR 攔截，且冷啟動變慢 -->
     <PublishSingleFile>false</PublishSingleFile>
     <!-- OR-Tools 的 P/Invoke wrapper 不保證與 trim / AOT 相容 -->
