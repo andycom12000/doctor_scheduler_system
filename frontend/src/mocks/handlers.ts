@@ -76,14 +76,47 @@ function toScheduleResponse(schedule: ReturnType<typeof ensureSchedule>): Schedu
   }
 }
 
-function toMutationResult(schedule: ReturnType<typeof ensureSchedule>, changedKeys: string[]): MutationResult {
-  const allDuties = scheduleToDuties(schedule)
-  const changed = new Set(changedKeys)
+/**
+ * 本次改動的格子。清空的格子也要帶回（staffId 為 null），前端才知道是哪一格被清了。
+ * changed 以 [areaId, date] 指定，不從 dutyKey 反解。
+ */
+function toMutationResult(
+  schedule: ReturnType<typeof ensureSchedule>,
+  changed: Array<{ areaId: string; date: string }>,
+): MutationResult {
   return {
     revision: schedule.revision,
-    duties: allDuties.filter((d) => changed.has(dutyKey(d.areaId, d.date))),
+    duties: changed.map(({ areaId, date }) => ({
+      areaId,
+      date,
+      staffId: schedule.duties.get(dutyKey(areaId, date)) ?? null,
+      cellKey: `area:${areaId}:${date}`,
+    })),
     violations: computeViolations(store, schedule.yearMonth),
   }
+}
+
+/**
+ * 結構不變式：同一人同一天最多一格。回他當天已在的另一區 areaId，沒有就 null。
+ * 這不是約束（不在約束設定裡、不能停用），跟「同一格兩個人」同一層次，
+ * 所以在寫入時直接拒絕，而不是產生違規。
+ */
+function otherAreaOnDate(
+  schedule: ReturnType<typeof ensureSchedule>,
+  staffId: string,
+  date: string,
+  exceptAreaId: string,
+): string | null {
+  for (const area of store.areas) {
+    if (area.id === exceptAreaId) continue
+    if (schedule.duties.get(dutyKey(area.id, date)) === staffId) return area.id
+  }
+  return null
+}
+
+function staffAlreadyOnDuty(staffId: string, date: string, areaId: string) {
+  const name = store.staff.find((s) => s.id === staffId)?.name ?? staffId
+  return errorResponse(409, 'STAFF_ALREADY_ON_DUTY', `${name} 在 ${date} 已排在另一區`, { staffId, date, areaId })
 }
 
 // ---------------------------------------------------------------------------
@@ -132,12 +165,17 @@ const scheduleHandlers = [
     // 該月尚無值班表時自動建立一份空草稿——這是「從空白手排」的入口。
     // 已發布的值班表也可以改，revision 照常遞增。
     const schedule = ensureSchedule(store, ym)
+    if (body.staffId) {
+      const other = otherAreaOnDate(schedule, body.staffId, body.date, body.areaId)
+      if (other) return staffAlreadyOnDuty(body.staffId, body.date, other)
+    }
+
     const key = dutyKey(body.areaId, body.date)
     if (body.staffId) schedule.duties.set(key, body.staffId)
     else schedule.duties.delete(key)
     schedule.revision++
 
-    return HttpResponse.json(toMutationResult(schedule, [key]))
+    return HttpResponse.json(toMutationResult(schedule, [{ areaId: body.areaId, date: body.date }]))
   }),
 
   http.post('/api/schedules/:ym/duties/swap', async ({ params, request }) => {
@@ -151,24 +189,38 @@ const scheduleHandlers = [
     const staffA = schedule.duties.get(keyA)
     const staffB = schedule.duties.get(keyB)
 
+    // 對調後 A 的人落到 b 格、B 的人落到 a 格；日期不同時可能撞到同人同日另一區。
+    // 兩格互為對方的來源，檢查時把對方那格排除。
+    if (staffA && body.a.date !== body.b.date) {
+      const other = otherAreaOnDate(schedule, staffA, body.b.date, body.b.areaId)
+      if (other && other !== body.a.areaId) return staffAlreadyOnDuty(staffA, body.b.date, other)
+    }
+    if (staffB && body.a.date !== body.b.date) {
+      const other = otherAreaOnDate(schedule, staffB, body.a.date, body.a.areaId)
+      if (other && other !== body.b.areaId) return staffAlreadyOnDuty(staffB, body.a.date, other)
+    }
+
     if (staffB) schedule.duties.set(keyA, staffB)
     else schedule.duties.delete(keyA)
     if (staffA) schedule.duties.set(keyB, staffA)
     else schedule.duties.delete(keyB)
     schedule.revision++
 
-    return HttpResponse.json(toMutationResult(schedule, [keyA, keyB]))
+    return HttpResponse.json(toMutationResult(schedule, [body.a, body.b]))
   }),
 
   http.post('/api/schedules/:ym/validate', ({ params }) => {
     const ym = params.ym as string
+    if (!store.schedules.has(ym)) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
     return HttpResponse.json(computeValidationResult(store, ym))
   }),
 
   http.post('/api/schedules/:ym/publish', async ({ params, request }) => {
     const ym = params.ym as string
     const body = (await request.json().catch(() => null)) as { acknowledgeViolations?: boolean } | null
-    const schedule = ensureSchedule(store, ym)
+    // 不會憑空建一份空表發布
+    const schedule = store.schedules.get(ym)
+    if (!schedule) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
 
     const violations = computeViolations(store, ym)
     const hasHardViolations = violations.some((v) => v.severity === 'hard')
@@ -217,6 +269,7 @@ const scheduleHandlers = [
     const url = new URL(request.url)
     const severity = url.searchParams.get('severity')
     const date = url.searchParams.get('date')
+    if (!store.schedules.has(ym)) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
 
     let violations = computeViolations(store, ym)
     if (severity) violations = violations.filter((v) => v.severity === severity)
@@ -233,6 +286,7 @@ const scheduleHandlers = [
 const viewHandlers = [
   http.get('/api/schedules/:ym/point-board', ({ params }) => {
     const ym = params.ym as string
+    if (!store.schedules.has(ym)) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
     return HttpResponse.json({ groups: computePointBoard(store, ym) })
   }),
 
@@ -245,6 +299,7 @@ const viewHandlers = [
 
   http.get('/api/schedules/:ym/vacancies', ({ params }) => {
     const ym = params.ym as string
+    if (!store.schedules.has(ym)) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
     return HttpResponse.json(computeVacancies(store, ym))
   }),
 
@@ -253,6 +308,7 @@ const viewHandlers = [
     const url = new URL(request.url)
     const areaId = url.searchParams.get('areaId') ?? ''
     const date = url.searchParams.get('date') ?? ''
+    if (!store.schedules.has(ym)) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
     return HttpResponse.json({ candidates: computeCandidates(store, ym, areaId, date) })
   }),
 ]
@@ -273,7 +329,7 @@ const blockedDayHandlers = [
         const count = entries.filter((e) => e.staffId === s.id).length
         return { staffId: s.id, count, remaining: monthlyCap - count }
       })
-      .filter((row) => row.count > 0)
+    // byStaff 是表格（每位在職人員一列，0 也列）；byDate 是清單（只列有登記的日期）
 
     const dateCounts = new Map<string, number>()
     for (const e of entries) dateCounts.set(e.date, (dateCounts.get(e.date) ?? 0) + 1)
