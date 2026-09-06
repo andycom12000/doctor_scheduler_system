@@ -336,7 +336,7 @@ EF Core 的規矩：
 | `carry_over` | 某月**發布時結算出**的月結轉（該月的輸出）。重複發布整份覆寫 |
 | `carry_over_applied` | 某月**第一次發布時凍結**的上月月結轉（該月的輸入）。之後重新發布不重拍。見 ADR-0004 |
 | `staff` | 人員名冊 |
-| `area_type` / `area` / `rank_group` / `rank` / `eligibility` / `point_rule*` / `constraint*` / `monthly_override` | 設定，正規化。PUT 整份取代時 delete + insert |
+| `area_type` / `area` / `rank_group` / `rank` / `eligibility` / `point_rule*` / `constraint*` / `monthly_override` | 設定，正規化。PUT 整份取代時就地同步（同鍵更新、多的刪、缺的補） |
 | `calendar_day` | 行事曆**只存例外日**：國定假日、補班日、使用者覆寫。週六日讀取時算出來。內建只有 2026，之後年份先由使用者逐日覆寫 |
 | `solver_job` / `variant` / `variant_duty` | 求解紀錄。**全部保留，不做清理**。進度不寫，只寫狀態轉換 |
 

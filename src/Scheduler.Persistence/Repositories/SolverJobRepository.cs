@@ -60,7 +60,9 @@ internal sealed class SolverJobRepository : ISolverJobRepository
 
     public async Task AddVariantAsync(VariantRecord variant, CancellationToken cancellationToken = default)
     {
-        var sortOrder = await _db.Variants.CountAsync(v => v.JobId == variant.JobId, cancellationToken);
+        // 已落盤的 + 同一個工作單元裡剛加、還沒 commit 的，兩者都算，順序才不會撞號
+        var sortOrder = await _db.Variants.CountAsync(v => v.JobId == variant.JobId, cancellationToken)
+            + _db.Variants.Local.Count(v => v.JobId == variant.JobId && _db.Entry(v).State == EntityState.Added);
         _db.Variants.Add(new VariantEntity
         {
             JobId = variant.JobId,

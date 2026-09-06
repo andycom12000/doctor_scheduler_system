@@ -220,6 +220,32 @@ public class SolverJobRepositoryTests
     }
 
     [Fact]
+    public async Task 同一個工作單元加多個變體_讀回順序照加入順序()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        var t0 = new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.FromHours(8));
+        static VariantRecord V(string id) => new(
+            "job-1", id, id, new Dictionary<string, double>(),
+            new VariantMetrics(0, 0, 0, 0, null), 0, 0, Array.Empty<Duty>());
+
+        using (var scope = db.Scope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<ISolverJobRepository>();
+            await repo.AddAsync(Queued("job-1", t0));
+            await repo.AddVariantAsync(V("v-c"));
+            await repo.AddVariantAsync(V("v-a"));
+            await repo.AddVariantAsync(V("v-b"));
+            await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
+        }
+
+        using (var scope = db.Scope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<ISolverJobRepository>();
+            Assert.Equal(new[] { "v-c", "v-a", "v-b" }, (await repo.GetVariantsAsync("job-1")).Select(v => v.Id));
+        }
+    }
+
+    [Fact]
     public async Task 啟動時把沒跑完的工作標成失敗_已結束的不動()
     {
         await using var db = await SqliteDatabase.CreateAsync();
