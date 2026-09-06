@@ -45,3 +45,8 @@ CP-SAT 建模器**各自解讀同一份定義**，而不是各寫一份規則實
   （`409 STAFF_ALREADY_ON_DUTY`），`SchedulingContext.EnsureConsistent` 是最後防線。
   它之所以不能靠原語：NP 豁免 `MinGap`，同日兩區沒有任何原語抓得到。
   求解器端以「每人每天最多一格」建模，與此一致。（2026-09 拍板，見 issue #7。）
+- **「同一份定義」有自動化守門，且對外報的數字只有 Domain 一份。** Solver 只回值班清單，
+  變體的 `metrics`／`hardViolationCount`／`softScore` 由 Application 拿 `ViolationChecker` 與
+  `ScheduleScores` 重算，求解器的目標值只用來搜尋。另加一條測試：Solver 的任一輸出丟給
+  `ViolationChecker`，硬違規必須為零，唯一例外是覆蓋（空缺）。情境含 NP 四條、跨月、登記爆量，
+  每個 Solver PR 必過。（2026-09-06 拍板，見 `docs/ARCHITECTURE.md` §4.8。）

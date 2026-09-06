@@ -244,6 +244,9 @@ paths:
         **可重複呼叫。** 已發布的值班表被逐格改過之後再發布一次，會以當下的內容
         **覆寫**該月的月結轉，`publishedAt` 更新為最後一次。
 
+        本月**第一次**發布時，把當下由上月帶入的起始偏移**凍結**存下來；
+        之後重新發布不重拍，上月再怎麼改都不影響本月已發布的點數看板（ADR-0004）。
+
         該月尚無值班表時回 `404`，不會憑空建一份空表發布。
       requestBody:
         required: false
@@ -1321,7 +1324,9 @@ components:
         quotaRemaining:
           type: [integer, 'null']
           description: '`quotaCap - quotaPoints`。組內公平性比較的就是這個值'
-        carryOverApplied: { type: integer, description: 由上月帶入的起始偏移 }
+        carryOverApplied:
+          type: integer
+          description: 由上月帶入的起始偏移。本月為草稿時即時讀上月；本月已發布則是第一次發布時凍結的值（ADR-0004）
         fairnessPoints: { type: [integer, 'null'], description: 公平性點數（實驗性，次要顯示） }
         duties: { type: integer }
         holidayDuties: { type: integer }
