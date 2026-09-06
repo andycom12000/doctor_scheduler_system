@@ -320,6 +320,10 @@ EF Core 的規矩：
   與 Domain record 互轉的程式碼住在 Persistence。
 - Migration 進版控，程式啟動時自動套用（`Database.Migrate()`）。
 - 不開 lazy loading，每個查詢明寫要載什麼。
+- 列舉存字串且與契約相同（`draft`、`quota_point`……），時間戳存 UTC ISO-8601 字串——
+  SQLite provider 拒絕對 `DateTimeOffset` 排序，固定 UTC 之後字串順序就是時間順序。
+- 「整份取代」就地同步（同主鍵更新、多的刪、缺的補），不做 delete-all + insert-all：
+  同一批裡刪掉再插回同一個主鍵會撞外鍵，change tracker 也不接受。
 
 **設定資料正規化拆表，不存 JSON blob**——資料不能綁死在本程式的序列化格式裡。
 主要資料表（概要，實際 schema 由 migration 定義）：

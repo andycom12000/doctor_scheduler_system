@@ -10,15 +10,23 @@
   </ItemGroup>
 
   <!--
-    SQLite 走 Microsoft.Data.Sqlite（bundled e_sqlite3）。native 的 e_sqlite3.dll 由
-    SQLitePCLRaw.lib.e_sqlite3 隨 RID 落到 runtimes/win-x64/native/，與 OR-Tools 的
-    google-ortools-native.dll 同一個機制。兩者都是 native，因此 Directory.Build.props
-    關掉的 trim / AOT / single-file 對本專案同樣是硬性要求。
+    存取層用 EF Core + SQLite（docs/ARCHITECTURE.md §5）。只有本專案可以引用 EF Core，
+    由 tests/Scheduler.ArchitectureTests 守。Domain 的 record 不直接當 entity，
+    Entities/ 是本專案自己的一套，與 Domain 互轉的程式碼在 Mapping/。
+
+    SQLite 的 native e_sqlite3.dll 由 SQLitePCLRaw.bundle_e_sqlite3 隨 RID 落到
+    runtimes/win-x64/native/，與 OR-Tools 的 google-ortools-native.dll 同一個機制。
+    兩者都是 native，因此 Directory.Build.props 關掉的 trim / AOT / single-file
+    對本專案同樣是硬性要求。
 
     資料庫檔案一律放在程式旁的 data/（portable 要求），不得碰 %APPDATA% 或登錄檔。
   -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.30" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.30">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

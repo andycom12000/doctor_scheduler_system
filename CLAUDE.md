@@ -26,10 +26,18 @@
   `Validation/`（`ViolationChecker` 與 `ScheduleScores`）。零 PackageReference。
   cellKey 慣例：逐格規則用 `area:{areaId}:{date}`，個人序列／累計規則用 `staff:{staffId}:{date}`，
   額度與連值只標超出上限的那幾格
-- `Application` / `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
-  `Scheduler.Api` 只實作了 `/api/health`。
-  `Scheduler.Persistence` 只有 `Microsoft.Data.Sqlite` 的相依與一個載入自檢（`SqliteRuntimeProbe`），
-  已決定改用 EF Core（`docs/ARCHITECTURE.md` §5）
+- `Scheduler.Persistence` 已落地（EF Core + SQLite）：`Entities/`（自己的一套 entity，不拿 Domain
+  record 當 entity）、`Repositories/`（六個 repository 實作 + `EfUnitOfWork`）、`Mapping/`
+  （列舉字串與契約一致；時間戳一律 UTC ISO-8601 字串，SQLite 才能排序）、`Seed/`（出廠值與 2026
+  行事曆例外日）、`Migrations/`（進版控，啟動時自動套用）。`SchedulerDatabase.InitializeAsync`
+  是啟動流程，`SchedulerDatabase.DefaultPath` 是程式旁的 `data/scheduler.db`。
+  改了 `SchedulerDbContext` 要跑 `dotnet ef migrations add <Name> --project src/Scheduler.Persistence`，
+  否則 `tests/Scheduler.Persistence.Tests` 的 snapshot 比對會失敗
+- `Scheduler.Application` 目前只有 repository 介面（`Persistence/`）與生命週期型別
+  （`Schedules/ScheduleHeader`、`Solving/SolverJobRecord`、`Settings/`）。寫入走 `IUnitOfWork.CommitAsync`：
+  repository 只登記變更、不落盤。`SchedulingContextLoader` 與 handler 尚未開始
+- `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
+  `Scheduler.Api` 只接了 Persistence 的啟動流程與 `/api/health`
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
@@ -45,8 +53,8 @@
 層內附帶規則：只有 `Scheduler.Persistence` 引用 EF Core；repository 介面在 Application、實作在
 Persistence；Application 不引用 Persistence。
 
-`tests/Scheduler.ArchitectureTests` 目前只驗證規則 1。規則 2 與層內附帶規則要補進去，
-在 Persistence／Shell 動工的同一個 PR 補。
+`tests/Scheduler.ArchitectureTests` 已驗證規則 1 與層內附帶規則（EF Core 只在 Persistence、
+Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shell 動工的同一個 PR 補。
 
 **2026-09-06 拍板、尚未實作的後端設計**全部在 `docs/ARCHITECTURE.md` §3.2、§4.8、§5、§7
 與 ADR-0004，動工前先讀。
@@ -56,7 +64,7 @@ Persistence；Application 不引用 Persistence。
 
 ```bash
 dotnet build                              # 建置全部
-dotnet test                               # 架構規則 + 領域規則測試
+dotnet test                               # 架構規則 + 領域規則 + 存取層測試
 dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
 
 cd frontend

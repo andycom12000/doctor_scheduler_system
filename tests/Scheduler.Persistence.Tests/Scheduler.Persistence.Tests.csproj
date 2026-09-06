@@ -2,9 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -21,9 +18,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Scheduler.Domain\Scheduler.Domain.csproj" />
-    <ProjectReference Include="..\..\src\Scheduler.Application\Scheduler.Application.csproj" />
-    <ProjectReference Include="..\..\src\Scheduler.Solver\Scheduler.Solver.csproj" />
     <ProjectReference Include="..\..\src\Scheduler.Persistence\Scheduler.Persistence.csproj" />
   </ItemGroup>
 

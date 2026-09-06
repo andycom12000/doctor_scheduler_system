@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Domain.Tests", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Persistence", "src\Scheduler.Persistence\Scheduler.Persistence.csproj", "{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Persistence.Tests", "tests\Scheduler.Persistence.Tests\Scheduler.Persistence.Tests.csproj", "{B1F79C47-1739-47AE-8B2B-EAFD19C01860}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -64,6 +66,10 @@ Global
 		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1F79C47-1739-47AE-8B2B-EAFD19C01860}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1F79C47-1739-47AE-8B2B-EAFD19C01860}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1F79C47-1739-47AE-8B2B-EAFD19C01860}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1F79C47-1739-47AE-8B2B-EAFD19C01860}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{77FACCCF-5606-4555-A526-476CFCD413F4} = {11951F66-270D-4DE6-BA38-EA996EB99804}
@@ -74,5 +80,6 @@ Global
 		{124A52AA-9E6C-48AB-BA1F-FDBFE2767C76} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
 		{5129D30E-4C00-4D5E-919D-8DE897E1DC0E} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
 		{A20A25D3-6823-4E96-B58B-7CC6E1B4F9AD} = {11951F66-270D-4DE6-BA38-EA996EB99804}
+		{B1F79C47-1739-47AE-8B2B-EAFD19C01860} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
 	EndGlobalSection
 EndGlobal
