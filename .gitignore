@@ -32,3 +32,8 @@ data/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# SQLite 側檔（WAL 模式）。data/ 本身已排除，這裡守開發期放在別處的資料庫
+*.db
+*.db-wal
+*.db-shm

@@ -50,6 +50,7 @@ jobs:
           dotnet restore src/Scheduler.Api/Scheduler.Api.csproj
           dotnet restore tests/Scheduler.ArchitectureTests/Scheduler.ArchitectureTests.csproj
           dotnet restore tests/Scheduler.Domain.Tests/Scheduler.Domain.Tests.csproj
+          dotnet restore tests/Scheduler.Persistence.Tests/Scheduler.Persistence.Tests.csproj
 
       - name: 建置
         run: dotnet build src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --no-restore
@@ -64,6 +65,11 @@ jobs:
       # 只有這組憑空造情境的測試守得住（ADR-0002）。
       - name: 領域規則測試
         run: dotnet test tests/Scheduler.Domain.Tests/Scheduler.Domain.Tests.csproj --configuration Release
+
+      # EF Core migration 與 repository 的行為測試，跑在 SQLite in-memory 上。
+      # 也守住「改了 DbContext 忘了加 migration」——snapshot 與模型有落差時會失敗。
+      - name: 存取層測試
+        run: dotnet test tests/Scheduler.Persistence.Tests/Scheduler.Persistence.Tests.csproj --configuration Release
 
   # ---------------------------------------------------------------------------
   # 前端。ubuntu runner（1x 計費）。
