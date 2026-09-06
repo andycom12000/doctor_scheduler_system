@@ -9,7 +9,7 @@
 - `docs/ARCHITECTURE.md` — 技術決策已定案。**第 2 節是「已排除方案」，提任何技術選型前先看過**，
   Blazor / Tauri / Electron / MAUI / Timefold / meta-framework 等都已評估並否決，理由都在裡面。
 - `api-contract.yaml` — 前後端唯一耦合點。42 個操作、52 個 schema。
-- `docs/adr/` — 三個領域決策的理由。動到不可排班日、約束模型、變體產生方式之前先讀。
+- `docs/adr/` — 四個領域決策的理由。動到不可排班日、約束模型、變體產生方式、月結轉快照之前先讀。
 - `docs/constraint-defaults.md` — 7 硬 / 7 軟約束的唯一預設值。seed、mock、測試 fixture 都從它抄，不得另發明代碼或數字。
 
 ## 現況
@@ -28,18 +28,28 @@
   額度與連值只標超出上限的那幾格
 - `Application` / `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
   `Scheduler.Api` 只實作了 `/api/health`。
-  `Scheduler.Persistence` 只有 `Microsoft.Data.Sqlite` 的相依與一個載入自檢（`SqliteRuntimeProbe`）
+  `Scheduler.Persistence` 只有 `Microsoft.Data.Sqlite` 的相依與一個載入自檢（`SqliteRuntimeProbe`），
+  已決定改用 EF Core（`docs/ARCHITECTURE.md` §5）
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
 1. `Scheduler.Domain` 與 `Scheduler.Application` 不得引用 OR-Tools。
    求解器相依只存在於 `Scheduler.Solver`，由介面隔離。
    **後果：驗證與求解是兩份實作，必須讀同一份宣告式約束定義才不會漂移——見 ADR-0002。**
-2. `Scheduler.Api` 與 `Scheduler.Shell` 是兩個 transport，共用同一組 handler。
-   兩者都不得實作業務邏輯，只做 transport ↔ Application 的轉換。
-   遷移到前後端分離時，刪掉 `Scheduler.Shell` 即可。
+2. `Scheduler.Api` 是唯一一份 HTTP 實作，`Scheduler.Shell` 只是它的 host
+   （用 `Microsoft.AspNetCore.TestHost` 在 process 內跑同一個 `WebApplication`，不開 socket）。
+   路由、binding、錯誤碼對應只寫在 Api；Api 的 endpoint 不含業務邏輯，只做「解參數 → 呼叫
+   Application → 包回應」。Shell 不得引用 Application／Domain／Persistence／Solver，只引用 Api。
+   遷移到前後端分離時，刪掉 `Scheduler.Shell` 即可。見 `docs/ARCHITECTURE.md` §3.2。
 
-`tests/Scheduler.ArchitectureTests` 驗證規則 1。規則 2 目前沒有自動化驗證，靠 review。
+層內附帶規則：只有 `Scheduler.Persistence` 引用 EF Core；repository 介面在 Application、實作在
+Persistence；Application 不引用 Persistence。
+
+`tests/Scheduler.ArchitectureTests` 目前只驗證規則 1。規則 2 與層內附帶規則要補進去，
+在 Persistence／Shell 動工的同一個 PR 補。
+
+**2026-09-06 拍板、尚未實作的後端設計**全部在 `docs/ARCHITECTURE.md` §3.2、§4.8、§5、§7
+與 ADR-0004，動工前先讀。
 `tests/Scheduler.Domain.Tests` 驗證九原語與違規檢查器的行為，fixture 全用出廠值憑空造。
 
 ## 指令
@@ -121,8 +131,9 @@ gh pr create        # base 自動是 develop（預設分支已設定）
 
 ## 專案特有的坑
 
-- **`Scheduler.Shell` 裡 `Application` 會撞名。** 本組件同時引用 `Scheduler.Application`
-  命名空間與 `System.Windows.Application` 型別，基底型別必須完整限定。
+- **`Scheduler.Shell` 裡 `Application` 會撞名。** `System.Windows.Application` 與
+  `Scheduler.Application` 命名空間同名，基底型別要完整限定。規則 2 改成 Shell 只引用 Api 之後
+  這個坑應該消失，但 `Scheduler.Api` 若對外暴露 Application 型別仍會撞到。
 - **不要開 trim / AOT。** OR-Tools 的 P/Invoke wrapper 兩者皆不相容，
   `Directory.Build.props` 已明確關閉。SQLite 的 `e_sqlite3` 同樣是 native，一併受影響。
 - **OR-Tools 的 native DLL 依賴 `msvcp140` / `vcruntime140` / `vcruntime140_1`，NuGet 不附帶。**

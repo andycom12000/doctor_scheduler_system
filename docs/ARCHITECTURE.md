@@ -29,7 +29,7 @@
 | 前端 | **Vue 3 + TypeScript + Vite** |
 | 求解器 | **Google.OrTools CP-SAT**，in-process |
 | 前後端橋接 | **`WebResourceRequested` 攔截**，不開 port |
-| 資料儲存 | **SQLite**（`Microsoft.Data.Sqlite`），單一檔案置於程式旁的 `data/` |
+| 資料儲存 | **SQLite**，經 **EF Core** 存取（2026-09-06 拍板，見 §5），單一檔案置於程式旁的 `data/` |
 | 發佈形態 | **資料夾式 portable**（解壓即用） |
 
 ### 1.1 決策理由
@@ -85,7 +85,8 @@ runtime，不符合免安裝前提。代價約 180MB 與自行負責更新。
 | Timefold Solver | JVM 生態，portable 情境下體積、process、技術棧全部翻倍 |
 | 自寫 metaheuristic | 放棄最佳性保證與「證明無解」的能力 |
 | Next.js / Nuxt / SvelteKit | SSR / server actions 在此情境全用不到 |
-| PostgreSQL / LiteDB / EF Core | 前者需要安裝，違反 portable；後兩者相對 raw SQLite 沒帶來對應價值 |
+| PostgreSQL / LiteDB | 前者需要安裝，違反 portable；後者相對 SQLite 沒帶來對應價值 |
+| ~~EF Core~~ | **2026-09-06 推翻，改為採用。** 原理由「相對 raw SQLite 沒帶來對應價值」沒有算進「推廣到下一個客戶時可能要伺服器版、換資料庫引擎」。規矩見 §5 |
 | 認證、角色、多單位、`If-Match` 樂觀鎖 | **單機、單一使用者、單一 process、單一科部**，全部沒有防禦對象 |
 | 伺服器端分頁 | 全院 34 人、每月 150 筆值班，分頁是憑空發明的複雜度 |
 
@@ -103,10 +104,10 @@ HospitalScheduler/
 ├─ src/
 │  ├─ Scheduler.Domain/          # 純領域模型 + 約束檢查器，無外部相依
 │  ├─ Scheduler.Solver/          # CP-SAT 建模器（OR-Tools 相依隔離於此）
-│  ├─ Scheduler.Application/     # 用例層，transport 無關
-│  ├─ Scheduler.Persistence/     # SQLite 讀寫
-│  ├─ Scheduler.Api/             # 開發期用：Minimal API 主機
-│  └─ Scheduler.Shell/           # 正式版：WPF + WebView2 殼
+│  ├─ Scheduler.Application/     # 用例層，transport 無關；repository 介面、SchedulingContextLoader、SolverJobService 在此
+│  ├─ Scheduler.Persistence/     # EF Core + SQLite 讀寫，repository 實作
+│  ├─ Scheduler.Api/             # 唯一一份 HTTP 實作（Minimal API）：開發期直接跑，正式版由 Shell 在 process 內 host
+│  └─ Scheduler.Shell/           # 正式版：WPF + WebView2 殼，只 host Scheduler.Api
 ├─ frontend/                     # Vue 3 SPA
 ├─ tests/
 └─ build/
@@ -118,9 +119,21 @@ HospitalScheduler/
    求解器相依只存在於 `Scheduler.Solver`，由介面隔離。
    由 `tests/Scheduler.ArchitectureTests` 自動驗證。理由見 ADR-0002。
 
-2. **`Scheduler.Api` 與 `Scheduler.Shell` 是兩個 transport，共用同一組 handler**，
-   不得各自實作業務邏輯。這是「無痛遷移到前後端分離」的技術基礎——遷移時刪掉
-   `Scheduler.Shell` 即可。目前無自動化驗證，靠 review。
+2. **`Scheduler.Api` 是唯一一份 HTTP 實作，`Scheduler.Shell` 只是它的 host。**
+   路由比對、model binding、JSON 序列化、`ErrorCode` → HTTP status 的對應只寫在
+   `Scheduler.Api` 一份。正式版的 Shell 用 `Microsoft.AspNetCore.TestHost` 把同一個
+   `WebApplication` 在 process 內跑起來（不開 socket），WebView2 攔到的請求直接轉交。
+   兩者都不得含業務邏輯：Api 的每個 endpoint 只做「解參數 → 呼叫 Application → 包回應」。
+   這是「無痛遷移到前後端分離」的技術基礎——遷移時刪掉 `Scheduler.Shell` 即可，
+   而且開發期測過的 pipeline 就是正式版跑的那一個。
+   **架構測試要守：Shell 只能引用 Api（與 WebView2／WPF），不得引用 Application、Domain、
+   Persistence、Solver。** 唯一例外是求解進度：WebResourceRequested 的回應不會漸進送出，
+   Shell 要從 Api 的 DI 容器取得進度事件來源再 `PostWebMessageAsJson`，這是 transport 工作。
+   （2026-09-06 拍板。原先 §6.2 的草圖是 Application 自帶 HTTP 形狀的 dispatcher，已改。）
+
+   附帶的層內規則，同樣由架構測試守：
+   - 只有 `Scheduler.Persistence` 可以引用 EF Core。Application 看不到 `DbContext`。
+   - Repository **介面在 Application、實作在 Persistence**。Application 不引用 Persistence。
 
 ### 3.3 約束以九個原語表達
 
@@ -261,12 +274,54 @@ C# → JS 用 `core.PostWebMessageAsJson(...)`。開發期 transport 另提供
 
 求解可中止：`DELETE /api/solver-jobs/{jobId}`。
 
+### 4.8 執行模型與 Solver 邊界（2026-09-06 拍板）
+
+**迴圈在 Application，Solver 一次只解一份。** `SolverJobService`（Application）負責排隊、
+單一 slot（`SOLVER_BUSY`）、狀態機、讀乘數表、算每一份的實際權重
+（使用者設 0 乘任何數仍是 0）、把前幾份的解與「最少差 15 格」丟給 Solver、控制中止與
+`variantIndex`。`ISolver` 介面在 Application，實作在 `Scheduler.Solver`，它不知道「變體」：
+
+```
+輸入：SchedulingContext、ConstraintSettings（權重已乘好）、要避開的前幾份解、
+      最少差幾格、時間上限、進度回呼、取消權杖
+輸出：值班清單、找到幾個解、目標值、下界、求解器狀態
+```
+
+**變體的指標由 Domain 重算。** Solver 只回值班清單；`Variant.metrics`、`hardViolationCount`、
+`softScore` 全部由 Application 拿 `ViolationChecker` 與 `ScheduleScores` 算。
+求解器的目標值只用來搜尋，不對外報。這樣變體頁面與驗證頁面的數字保證一致，
+建模跟 Domain 定義漂移時會直接看出來。
+
+**漂移守門測試**：Solver 的任一輸出丟給 `ViolationChecker`，硬違規必須為零，
+唯一允許的例外是覆蓋（空缺）。情境含 NP 四條、跨月、登記爆量。每個 Solver PR 必過。
+這是 ADR-0002 的自動化守門。
+
+**進度事件只有一個來源，兩個訂閱者**：Api 的 SSE endpoint 與 Shell 的
+`PostWebMessageAsJson`，收到的 JSON 一模一樣。
+
+**持久化**：狀態轉換（queued、running、結束）時才寫資料庫，逐秒的進度只留記憶體；
+查詢 job 時活著就從記憶體讀，結束了就從資料庫讀。程式啟動時把資料庫裡仍是 running 的
+job 一律改成 failed，原因「程式重啟中斷」。
+
+**中止保留已完成的變體**：三份序列求解，第 2 份跑到一半中止時第 1 份已完整，
+cancelled 的 job 可列出、可套用那一份。
+
 ---
 
 ## 5. 資料儲存
 
-SQLite 單一檔案 `data/scheduler.db`，WAL 模式。
+SQLite 單一檔案 `data/scheduler.db`，WAL 模式，**EF Core** 存取（2026-09-06 推翻 §2 原排除，
+理由：推廣到下一個客戶時可能要伺服器版、換資料庫引擎，EF Core 換 provider 即可）。
 
+EF Core 的規矩：
+
+- 只有 `Scheduler.Persistence` 引用 EF Core，架構測試守。
+- Domain 是零相依的 record，**不直接當 entity**。Persistence 自帶一套 entity class，
+  與 Domain record 互轉的程式碼住在 Persistence。
+- Migration 進版控，程式啟動時自動套用（`Database.Migrate()`）。
+- 不開 lazy loading，每個查詢明寫要載什麼。
+
+**設定資料正規化拆表，不存 JSON blob**——資料不能綁死在本程式的序列化格式裡。
 主要資料表（概要，實際 schema 由 migration 定義）：
 
 | 表 | 內容 |
@@ -274,11 +329,20 @@ SQLite 單一檔案 `data/scheduler.db`，WAL 模式。
 | `schedule` | 一列一個月。`(year, month)` 為自然主鍵，**無代理鍵** |
 | `duty` | 一列一格值班。`(year, month, area_id, date)` 唯一 |
 | `blocked_day` | 不可排班日。**不外鍵到 `schedule`**（ADR-0001） |
-| `carry_over` | 月結轉。發布時寫入，供下個月讀取 |
+| `carry_over` | 某月**發布時結算出**的月結轉（該月的輸出）。重複發布整份覆寫 |
+| `carry_over_applied` | 某月**第一次發布時凍結**的上月月結轉（該月的輸入）。之後重新發布不重拍。見 ADR-0004 |
 | `staff` | 人員名冊 |
-| `settings_*` | 設定文件，各自整份取代 |
-| `calendar_day` | 行事曆，含覆寫旗標 |
-| `solver_job` / `variant` / `variant_duty` | 求解紀錄。**全部保留，不做清理** |
+| `area_type` / `area` / `rank_group` / `rank` / `eligibility` / `point_rule*` / `constraint*` / `monthly_override` | 設定，正規化。PUT 整份取代時 delete + insert |
+| `calendar_day` | 行事曆**只存例外日**：國定假日、補班日、使用者覆寫。週六日讀取時算出來。內建只有 2026，之後年份先由使用者逐日覆寫 |
+| `solver_job` / `variant` / `variant_duty` | 求解紀錄。**全部保留，不做清理**。進度不寫，只寫狀態轉換 |
+
+不進資料庫的：「每人每月最多登記 16 天」是常數，住在 `Scheduler.Domain.Defaults`，
+契約沒有改它的 API（`docs/constraint-defaults.md` 第 119 行）。
+
+**`SchedulingContextLoader` 在 Application 層。** 組一份 `SchedulingContext` 要撈十幾樣東西
+（當月行事曆加次月 1 號、上月月尾的值班、月結轉、逐月覆寫、人員、五份設定……），
+跨月與跨年的撈取規則只在它一個地方，其他 handler 都叫它，不自己組。
+Persistence 只提供單純的「給我某月的 duty」「給我某年的例外日」這類介面。
 
 **所有執行期狀態寫在程式旁的 `data/`**，不得碰 `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔。
 這是 portable 的硬性要求，也是驗收項目。
@@ -311,18 +375,27 @@ core.SetVirtualHostNameToFolderMapping("app.local",
     Path.Combine(AppContext.BaseDirectory, "wwwroot"),
     CoreWebView2HostResourceAccessKind.Allow);
 
+// Scheduler.Api 的 WebApplication 以 TestServer 在 process 內跑起來，不開 socket。
+// Shell 只拿到一個 HttpClient，路由、binding、錯誤碼對應全部在 Api 那一份（§3.2 規則 2）。
+var app = Scheduler.Api.ApiHost.Build(useTestServer: true);
+await app.StartAsync();
+var apiClient = app.GetTestClient();
+
 core.AddWebResourceRequestedFilter("https://app.local/api/*", CoreWebView2WebResourceContext.All);
 core.WebResourceRequested += async (s, e) =>
 {
     var deferral = e.GetDeferral();            // 支援非同步，長時間運算必須
-    var res = await _apiHandler.HandleAsync(Map(e.Request), CancellationToken.None);
+    using var res = await apiClient.SendAsync(ToHttpRequestMessage(e.Request));
     e.Response = core.Environment.CreateWebResourceResponse(
-        res.Body, res.Status, res.Reason, res.Headers);
+        await res.Content.ReadAsStreamAsync(), (int)res.StatusCode, res.ReasonPhrase, FlattenHeaders(res));
     deferral.Complete();
 };
 
 webView.Source = new Uri("https://app.local/index.html");
 ```
+
+求解進度不走這條路（WebResourceRequested 的回應不會漸進送出），Shell 從
+`app.Services` 取進度事件來源，訂閱後 `PostWebMessageAsJson`（§4.7、§4.8）。
 
 ### 6.3 SPA deep link fallback
 
@@ -352,13 +425,20 @@ core.Settings.AreDevToolsEnabled = true;   // Debug 建置開啟，Release 關�
 
 ```
 開發期:  Vite dev server ──proxy /api──> dotnet run (Scheduler.Api)
-正式版:  WPF + WebView2 攔截 ─────────> 同一組 handler
+正式版:  WPF + WebView2 攔截 ─────────> 同一個 Scheduler.Api pipeline（TestServer，process 內）
 ```
 
 前端開發者**完全不需要安裝 .NET 或 WebView2**。搭配 MSW mock，他連 backend 都不用跑。
 兩人的唯一耦合點是 `api-contract.yaml`。
 
 此流程的關鍵好處：**遷移路徑每天都在被實際使用**，不會等到要遷移時才發現有問題。
+
+**後端對契約的守法方式**（2026-09-06 拍板）：DTO 手寫，不從 yaml 生成 C#。
+守法靠兩件事：
+- CI 測試把 `Scheduler.Api` 跑起來逐個 endpoint 打，回應 JSON 用 `api-contract.yaml` 的
+  schema 驗。形狀與語義（狀態碼、錯誤碼）都抓得到。跟著 endpoint 逐個加，不一次寫 42 個。
+- `frontend/scripts/smoke-mock.ts` 的 base URL 可切換，同一份斷言打 MSW mock 與真後端各一次，
+  兩邊漂移直接看得到。
 
 `frontend/vite.config.ts` 的 `build.target` 對齊隨附的 WebView2 版本
 （釘選在 `build/webview2.json`）。**改一邊就要改另一邊。**
@@ -481,6 +561,8 @@ win-x64 publish，解析每個 native DLL 的 PE import table（`build/check-nat
 - [ ] 程式放在唯讀路徑時，啟動有明確錯誤訊息而非崩潰
 - [ ] 求解期間 UI 不凍結，**狀態與收斂資訊即時更新（非百分比進度）**，可中止
 - [ ] 求解過程中斷電，重啟後資料庫無損毀、已存的草稿完整
+- [ ] 求解中斷電重啟後，該 job 顯示 failed（程式重啟中斷），不卡在 running
+- [ ] 已發布月份的「由上月帶入」偏移，在上月被改動並重新發布後**不變**（ADR-0004）
 - [ ] SPA 子路徑重新整理不會 404
 - [ ] 匯出 Excel 會跳出系統存檔對話框，且未在 `data/` 以外留下暫存檔
 - [ ] 4K 螢幕與 1080p 外接螢幕間拖曳視窗，DPI 縮放正常
