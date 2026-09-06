@@ -115,6 +115,14 @@ public class LayeringRules
         => Assert.DoesNotContain("Scheduler.Persistence", ReferencedNames(Application));
 
     [Fact]
+    public void Application_專案檔不得掛_Persistence()
+    {
+        // 組件層檢查在「掛了 ProjectReference 但還沒寫程式」時是空的，所以 csproj 層也要守
+        var references = ProjectReferences("src/Scheduler.Application/Scheduler.Application.csproj");
+        Assert.DoesNotContain(references, r => r.Contains("Scheduler.Persistence", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Domain_編譯後不得帶入_EF_Core()
     {
         var offenders = ReferencedNames(Domain)
@@ -145,6 +153,17 @@ public class LayeringRules
         => assembly.GetReferencedAssemblies()
             .Select(a => a.Name ?? string.Empty)
             .ToArray();
+
+    private static string[] ProjectReferences(string relativePath)
+    {
+        var full = Path.Combine(RepositoryRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(full), $"找不到專案檔：{full}");
+
+        return XDocument.Load(full)
+            .Descendants("ProjectReference")
+            .Select(e => e.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+    }
 
     private static string[] PackageReferences(string relativePath)
     {

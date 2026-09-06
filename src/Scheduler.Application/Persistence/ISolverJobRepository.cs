@@ -26,6 +26,6 @@ public interface ISolverJobRepository
 
     Task<VariantRecord?> FindVariantAsync(string jobId, string variantId, CancellationToken cancellationToken = default);
 
-    /// <summary>程式啟動時把仍是 queued／running 的 job 一律改成 failed。回傳改了幾筆。</summary>
+    /// <summary>程式啟動時把仍是 queued／running 的 job 一律改成 failed。回傳改了幾筆。與其他寫入一樣只登記，要 commit 才落盤。</summary>
     Task<int> FailUnfinishedAsync(string reason, DateTimeOffset finishedAt, CancellationToken cancellationToken = default);
 }

@@ -45,7 +45,8 @@ public static class SchedulerDatabase
 
         await DefaultDataSeeder.SeedIfEmptyAsync(db, cancellationToken);
 
-        await new SolverJobRepository(db).FailUnfinishedAsync("程式重啟中斷", DateTimeOffset.Now, cancellationToken);
+        await new SolverJobRepository(db).FailUnfinishedAsync("程式重啟中斷", DateTimeOffset.UtcNow, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

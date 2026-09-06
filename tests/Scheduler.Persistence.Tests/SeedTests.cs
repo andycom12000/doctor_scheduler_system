@@ -62,6 +62,32 @@ public class SeedTests
     }
 
     [Fact]
+    public async Task 清空區域後重啟_不會把其他設定蓋回出廠值()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        var ranks = new Application.Settings.RankSettings(
+            DefaultRanks.Groups,
+            DefaultRanks.Ranks.Select(r => r.Code == DefaultRanks.R6 ? r with { QuotaCap = 4 } : r).ToArray());
+
+        using (var scope = db.Scope())
+        {
+            var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+            await settings.ReplaceRanksAsync(ranks);
+            await settings.ReplaceAreasAsync(new Application.Settings.AreaSettings(Array.Empty<Domain.Model.AreaType>(), Array.Empty<Domain.Model.Area>()));
+            await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
+        }
+
+        await SchedulerDatabase.InitializeAsync(db.Services);
+
+        using (var scope = db.Scope())
+        {
+            var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+            Assert.Equal(DefaultAreas.Areas, (await settings.GetAreasAsync()).Areas); // 區域空了才補回
+            Assert.Equal(4, (await settings.GetRanksAsync()).Ranks.Single(r => r.Code == DefaultRanks.R6).QuotaCap); // 身分沒被動
+        }
+    }
+
+    [Fact]
     public async Task 人員名冊不_seed()
     {
         await using var db = await SqliteDatabase.CreateAsync();

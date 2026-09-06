@@ -116,18 +116,23 @@ internal sealed class SolverJobRepository : ISolverJobRepository
         return hydrated[0];
     }
 
-    public Task<int> FailUnfinishedAsync(string reason, DateTimeOffset finishedAt, CancellationToken cancellationToken = default)
+    public async Task<int> FailUnfinishedAsync(string reason, DateTimeOffset finishedAt, CancellationToken cancellationToken = default)
     {
         var queued = EnumNames.Of(SolverJobStatus.Queued);
         var running = EnumNames.Of(SolverJobStatus.Running);
         var failed = EnumNames.Of(SolverJobStatus.Failed);
-        return _db.SolverJobs
+        var unfinished = await _db.SolverJobs
             .Where(j => j.Status == queued || j.Status == running)
-            .ExecuteUpdateAsync(
-                s => s.SetProperty(j => j.Status, failed)
-                      .SetProperty(j => j.FailureReason, reason)
-                      .SetProperty(j => j.FinishedAt, finishedAt),
-                cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        foreach (var job in unfinished)
+        {
+            job.Status = failed;
+            job.FailureReason = reason;
+            job.FinishedAt = finishedAt;
+        }
+
+        return unfinished.Count;
     }
 
     // ---- helpers ----

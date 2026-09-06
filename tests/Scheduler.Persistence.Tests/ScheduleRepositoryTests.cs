@@ -134,6 +134,19 @@ public class ScheduleRepositoryTests
     }
 
     [Fact]
+    public async Task 日期不在該月就拒收()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        using var scope = db.Scope();
+        var repo = scope.ServiceProvider.GetRequiredService<IScheduleRepository>();
+        await repo.UpsertAsync(ScheduleHeader.NewDraft(Sep));
+        var oct1 = new DateOnly(2026, 10, 1);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => repo.SetDutyAsync(Sep, "area-a", oct1, "s1"));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => repo.ReplaceDutiesAsync(Sep, new[] { new Duty("area-a", oct1, "s1") }));
+    }
+
+    [Fact]
     public async Task 日期區間查詢跨月份()
     {
         await using var db = await SqliteDatabase.CreateAsync();

@@ -65,6 +65,7 @@ internal sealed class ScheduleRepository : IScheduleRepository
 
     public async Task SetDutyAsync(YearMonth yearMonth, string areaId, DateOnly date, string? staffId, CancellationToken cancellationToken = default)
     {
+        EnsureInMonth(yearMonth, date);
         var entity = await _db.Duties.FindAsync(new object[] { yearMonth.Year, yearMonth.Month, areaId, date }, cancellationToken);
         if (staffId is null)
         {
@@ -93,11 +94,28 @@ internal sealed class ScheduleRepository : IScheduleRepository
         }
     }
 
+    /// <summary>
+    /// duty 的主鍵含 (year, month)，同一個 (area, date) 掛在兩個月份標頭下是兩列合法資料，
+    /// 但會讓跨月區間查詢同一格出現兩個人。這裡守住：日期必須落在該月。
+    /// </summary>
+    private static void EnsureInMonth(YearMonth yearMonth, DateOnly date)
+    {
+        if (!yearMonth.Contains(date))
+        {
+            throw new ArgumentOutOfRangeException(nameof(date), $"{date:yyyy-MM-dd} 不在 {yearMonth} 裡。");
+        }
+    }
+
     public async Task ReplaceDutiesAsync(YearMonth yearMonth, IReadOnlyList<Duty> duties, CancellationToken cancellationToken = default)
     {
         var existing = await _db.Duties
             .Where(d => d.Year == yearMonth.Year && d.Month == yearMonth.Month)
             .ToListAsync(cancellationToken);
+
+        foreach (var duty in duties)
+        {
+            EnsureInMonth(yearMonth, duty.Date);
+        }
 
         DbSetSync.Sync(
             _db.Duties,

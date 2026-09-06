@@ -256,9 +256,23 @@ internal sealed class SettingsRepository : ISettingsRepository
 
     private static IEnumerable<ConstraintScopeEntryEntity> ScopeEntriesOf(string code, ConstraintScope scope)
     {
-        IEnumerable<ConstraintScopeEntryEntity> Entries(string dimension, IEnumerable<string>? values) =>
-            (values ?? Enumerable.Empty<string>())
-                .Select(v => new ConstraintScopeEntryEntity { ConstraintCode = code, Dimension = dimension, Value = v });
+        // 範圍值「沒有列」讀回來是 null（不限）。空集合的意思是「零個適用」，存進去會被讀成不限，
+        // 語義剛好相反，所以拒收：契約寫「省略代表全體」，Application 要把 [] 正規化成 null。
+        IEnumerable<ConstraintScopeEntryEntity> Entries(string dimension, IEnumerable<string>? values)
+        {
+            if (values is null)
+            {
+                return Enumerable.Empty<ConstraintScopeEntryEntity>();
+            }
+
+            var list = values.ToList();
+            if (list.Count == 0)
+            {
+                throw new ArgumentException($"約束 {code} 的範圍維度 {dimension} 是空集合；不限請用 null，資料庫無法區分兩者。", nameof(scope));
+            }
+
+            return list.Select(v => new ConstraintScopeEntryEntity { ConstraintCode = code, Dimension = dimension, Value = v });
+        }
 
         return Entries(ScopeDimension.Rank, scope.RankCodes)
             .Concat(Entries(ScopeDimension.ExemptRank, scope.ExemptRankCodes))

@@ -94,6 +94,19 @@ public class SettingsRepositoryTests
     }
 
     [Fact]
+    public async Task 範圍空集合拒收_因為讀回來會變成不限()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        using var scope = db.Scope();
+        var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+        var bad = DefaultConstraints.Settings.With(
+            DefaultConstraints.S6NpAvoidHoliday,
+            c => c with { Scope = c.Scope with { RankCodes = new HashSet<string>() } });
+
+        await Assert.ThrowsAsync<ArgumentException>(() => settings.ReplaceConstraintsAsync(bad));
+    }
+
+    [Fact]
     public async Task 整份取代資格矩陣與點數規則()
     {
         await using var db = await SqliteDatabase.CreateAsync();
