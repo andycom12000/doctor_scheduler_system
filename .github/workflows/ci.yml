@@ -71,6 +71,10 @@ jobs:
       - name: 存取層測試
         run: dotnet test tests/Scheduler.Persistence.Tests/Scheduler.Persistence.Tests.csproj --configuration Release
 
+      # SchedulingContextLoader 的跨月／凍結分支與讀取類查詢，跑在記憶體內的假 repository 上。
+      - name: 應用層測試
+        run: dotnet test tests/Scheduler.Application.Tests/Scheduler.Application.Tests.csproj --configuration Release
+
   # ---------------------------------------------------------------------------
   # 前端。ubuntu runner（1x 計費）。
   # ---------------------------------------------------------------------------
