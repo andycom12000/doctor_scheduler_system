@@ -95,7 +95,8 @@ public sealed class SchedulingContextLoader
         }
 
         IReadOnlyList<CarryOverEntry> carryOver;
-        if (header?.Status == ScheduleStatus.Published)
+        // 「已凍結」看 PublishedAt 不看 Status（IScheduleRepository 的約定）：發布過就有凍結的那份
+        if (header?.PublishedAt is not null)
         {
             carryOver = await _schedules.GetCarryOverAppliedAsync(month, cancellationToken);
         }

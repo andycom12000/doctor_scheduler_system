@@ -64,7 +64,7 @@ public class BlockedDayQueriesTests
         var top = report.BySupply[0];
         Assert.Equal(new[] { DefaultAreas.Chief }, top.AreaTypeCodes);
         var r5Cap = DefaultRanks.Ranks.Single(r => r.Code == DefaultRanks.R5).QuotaCap!.Value;
-        Assert.Equal(r5Cap - 1, top.SupplyPoints); // 10/5 是平日，扣 1 點
+        Assert.Equal(r5Cap, top.SupplyPoints); // 登記 1 天不消耗額度，剩下的日子仍撐得到上限
         var octDemand = Oct.Days().Sum(d => DefaultPointRules.Rules.Quota.ValueOf(CalendarDay.Plain(d)));
         Assert.Equal(octDemand, top.DemandPoints);
         Assert.Equal(top.SupplyPoints - top.DemandPoints, top.Headroom);
@@ -72,8 +72,30 @@ public class BlockedDayQueriesTests
         // 最寬那層：NP 沒有額度上限，不算供給
         var all = report.BySupply[2];
         var r2Cap = DefaultRanks.Ranks.Single(r => r.Code == DefaultRanks.R2).QuotaCap!.Value;
-        Assert.Equal(r5Cap - 1 + r2Cap, all.SupplyPoints);
+        Assert.Equal(r5Cap + r2Cap, all.SupplyPoints);
         Assert.Contains(SchedulingContextLoader.PreviousMonthNotPublishedWarning, report.Warnings);
+    }
+
+    [Fact]
+    public async Task 可行性_正常登記量不該報無解_登記到只剩幾天才會壓低供給()
+    {
+        var store = new InMemoryStore().WithStaff("r5", DefaultRanks.R5);
+        var q = new BlockedDayQueries(store.Loader);
+        var r5Cap = DefaultRanks.Ranks.Single(r => r.Code == DefaultRanks.R5).QuotaCap!.Value;
+
+        foreach (var d in Oct.Days().Take(4))
+        {
+            store.WithBlockedDay("r5", d);
+        }
+
+        Assert.Equal(r5Cap, (await q.GetFeasibilityAsync(Oct)).BySupply[0].SupplyPoints);
+
+        foreach (var d in Oct.Days().Skip(4).Take(24)) // 只剩 10/29、10/30、10/31（四、五、六）
+        {
+            store.WithBlockedDay("r5", d);
+        }
+
+        Assert.Equal(1 + 1 + 2, (await q.GetFeasibilityAsync(Oct)).BySupply[0].SupplyPoints);
     }
 }
 

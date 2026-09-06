@@ -72,7 +72,8 @@ public sealed class BlockedDayQueries
     /// <list type="bullet">
     /// <item><c>byDate</c>：逐日逐區域類型，扣掉當天登記的人之後，有資格的在職人數 ≥ 需求</item>
     /// <item><c>bySupply</c>：資格是巢狀的，所以照「有資格的身分數」由窄到寬累計區域類型，
-    /// 每一層拿累計需求點數對上「有資格值其中任一種、且有額度上限的人」的剩餘額度。
+    /// 每一層拿累計需求點數對上「有資格值其中任一種、且有額度上限的人」的供給
+    /// （每人 <c>min(額度上限, 未登記日的額度點數總和)</c>）。
     /// 層次從資格矩陣推出來，不寫死 CHIEF／ICU／WARD；沒有額度上限的身分（NP）不算供給，
     /// 用「上限是 null」判斷，不看身分代碼</item>
     /// </list>
@@ -120,8 +121,11 @@ public sealed class BlockedDayQueries
                     continue;
                 }
 
-                var blockedPoints = blockedByStaff[s.Id].Sum(d => ctx.PointRules.Quota.ValueOf(ctx.Calendar[d]));
-                supply += Math.Max(0, cap.Value - blockedPoints);
+                // 登記日不消耗額度：一個人能供給的是「上限」與「沒登記的日子加起來的點數」取小。
+                // 從上限裡扣登記日的點數是單位不對的減法，正常登記量就會整片報無解。
+                var blocked = blockedByStaff[s.Id].ToHashSet();
+                var availablePoints = month.Days().Where(d => !blocked.Contains(d)).Sum(d => ctx.PointRules.Quota.ValueOf(ctx.Calendar[d]));
+                supply += Math.Min(cap.Value, availablePoints);
             }
 
             bySupply.Add(new FeasibilityTier(tier.ToArray(), demand, supply, supply - demand));

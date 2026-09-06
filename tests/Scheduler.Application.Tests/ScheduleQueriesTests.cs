@@ -223,6 +223,39 @@ public class ScheduleQueriesTests
     }
 
     [Fact]
+    public async Task 候選人_本人已超過額度上限_再指派仍算阻擋()
+    {
+        var store = new InMemoryStore().WithStaff("r6", DefaultRanks.R6).WithDraft(Sep);
+        store.Overrides[Sep] = new MonthlyOverride(Sep, new Dictionary<string, int> { [DefaultRanks.R6] = 2 });
+        store.WithDuty("area-chief", new DateOnly(2026, 9, 1), "r6")
+             .WithDuty("area-chief", new DateOnly(2026, 9, 7), "r6")
+             .WithDuty("area-chief", new DateOnly(2026, 9, 14), "r6"); // 已經 3 點，超過 2
+
+        var candidates = await QueriesOf(store).ListCandidatesAsync(Sep, "area-chief", new DateOnly(2026, 9, 21));
+
+        var r6 = Assert.Single(candidates);
+        Assert.Contains(r6.BlockingReasons, r => r.Contains("額度"));
+        Assert.Equal(2 - 3, r6.QuotaRemaining);
+    }
+
+    [Fact]
+    public async Task 空缺_需求兩人只排一人算缺一()
+    {
+        var store = new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithDraft(Sep);
+        store.Areas = new Application.Settings.AreaSettings(
+            DefaultAreas.AreaTypes,
+            new[] { new Area("area-a", "A", "A", DefaultAreas.Ward, RequiredPerDay: 2) });
+        store.WithDuty("area-a", new DateOnly(2026, 9, 1), "s1");
+
+        var report = await QueriesOf(store).ListVacanciesAsync(Sep);
+
+        var sep1 = report.ByDate.Single(v => v.Date == new DateOnly(2026, 9, 1));
+        Assert.Equal(1, sep1.Count);
+        Assert.Equal(new[] { "area-a" }, sep1.AreaIds);
+        Assert.Equal(1 + 29 * 2, report.Total);
+    }
+
+    [Fact]
     public async Task 候選人_已填的格子評估的是換人_現任者也在清單裡()
     {
         var store = new InMemoryStore()

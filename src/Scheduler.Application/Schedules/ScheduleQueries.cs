@@ -140,15 +140,19 @@ public sealed class ScheduleQueries
     {
         var loaded = await RequireAsync(month, cancellationToken);
         var ctx = loaded.Context;
-        var filled = ctx.Duties.Select(d => (d.AreaId, d.Date)).ToHashSet();
+        var filled = ctx.Duties.GroupBy(d => (d.AreaId, d.Date)).ToDictionary(g => g.Key, g => g.Count());
 
+        // 缺額看 RequiredPerDay（出廠值全是 1），與 H1 覆蓋違規的算法一致
         var byDate = new List<VacancyByDate>();
         foreach (var date in month.Days())
         {
-            var vacant = ctx.Areas.Where(a => !filled.Contains((a.Id, date))).Select(a => a.Id).ToArray();
-            if (vacant.Length > 0)
+            var shortfalls = ctx.Areas
+                .Select(a => (a.Id, Missing: a.RequiredPerDay - filled.GetValueOrDefault((a.Id, date))))
+                .Where(x => x.Missing > 0)
+                .ToArray();
+            if (shortfalls.Length > 0)
             {
-                byDate.Add(new VacancyByDate(date, vacant, vacant.Length));
+                byDate.Add(new VacancyByDate(date, shortfalls.Select(x => x.Id).ToArray(), shortfalls.Sum(x => x.Missing)));
             }
         }
 
@@ -231,6 +235,8 @@ public sealed class ScheduleQueries
         return loaded.ScheduleExists ? loaded : throw SchedulerException.ScheduleNotFound(month);
     }
 
+    // 看板與候選人的「剩餘額度」是 cap − 已排點數（契約 PointBoardRow.quotaRemaining）。
+    // MetricEvaluator.QuotaRemaining 另外扣了月結轉，那是公平性比較用的，不是這裡要顯示的數。
     private static PointBoardRow RowOf(SchedulingContext ctx, MetricEvaluator metrics, Staff staff)
     {
         var quotaPoints = metrics.QuotaPoints(staff.Id);

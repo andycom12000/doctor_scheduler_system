@@ -99,6 +99,25 @@ public class SchedulingContextLoaderTests
     }
 
     [Fact]
+    public async Task 一月的上月尾巴往回跨年()
+    {
+        var jan = new YearMonth(2027, 1);
+        var dec = new YearMonth(2026, 12);
+        var store = new InMemoryStore()
+            .WithStaff("s1", DefaultRanks.R2)
+            .WithPublished(dec, new CarryOverEntry("s1", 1))
+            .WithDuty("area-a", new DateOnly(2026, 12, 31), "s1")
+            .WithDraft(jan);
+
+        var loaded = await store.Loader.LoadAsync(jan);
+
+        Assert.Equal((new DateOnly(2026, 12, 26), new DateOnly(2026, 12, 31)), store.DutyRangeQueries.Single());
+        Assert.Single(loaded.Context.PreviousMonthDuties);
+        Assert.Equal(1, loaded.Context.CarryOverOf("s1"));
+        Assert.True(loaded.Context.Calendar.Covers(new DateOnly(2026, 12, 26)));
+    }
+
+    [Fact]
     public async Task 已停用的人員仍載入_否則他留下的值班會讓_context_組不起來()
     {
         var store = new InMemoryStore()

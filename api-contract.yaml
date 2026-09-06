@@ -1479,7 +1479,9 @@ components:
                 description: 這一層累計涵蓋的區域類型，例：`[CHIEF]`、`[CHIEF, ICU]`、`[CHIEF, ICU, WARD]`
                 items: { type: string }
               demandPoints: { type: integer }
-              supplyPoints: { type: integer, description: 扣掉不可排班日之後 }
+              supplyPoints:
+                type: integer
+                description: 每人取「額度上限」與「未登記日的額度點數總和」較小者，再加總。登記日不消耗額度
               headroom: { type: integer, description: '`supply − demand`，負數即無解' }
         warnings:
           type: array
