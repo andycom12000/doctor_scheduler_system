@@ -12,14 +12,13 @@
  * 見 docs/ARCHITECTURE.md §4.4。
  */
 
-/** 求解進度事件。實際欄位待 api-contract.yaml 定案後改為由 schema 生成。 */
-export interface Progress {
-  jobId: string
-  phase: string
-  /** 0–100，求解器無法估計時為 null */
-  percent: number | null
-  [key: string]: unknown
-}
+import type { components } from './api/schema'
+
+/**
+ * 求解進度事件，即契約的 SolverProgress（由 api-contract.yaml 生成）。
+ * 沒有百分比：求解器只能給收斂資訊（ARCHITECTURE §4.7）。
+ */
+export type Progress = components['schemas']['SolverProgress']
 
 /** 取消訂閱。呼叫端離開畫面時務必呼叫，SSE 連線不會自己收掉。 */
 export type Unsubscribe = () => void

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Scheduler.Shell.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    不引用 Scheduler.Shell：它是 net8.0-windows 的 self-contained WPF exe，Linux 上建不起來、
+    framework-dependent 的測試專案也引用不了。WebViewBridge 沒有 WebView2 型別，直接把原始檔連進來編，
+    這組測試就能跟其他後端測試一起跑在 ubuntu job。
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\Scheduler.Shell\WebViewBridge.cs" Link="WebViewBridge.cs" />
+  </ItemGroup>
+
+</Project>

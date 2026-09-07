@@ -54,6 +54,7 @@ jobs:
           dotnet restore tests/Scheduler.Application.Tests/Scheduler.Application.Tests.csproj
           dotnet restore tests/Scheduler.Api.Tests/Scheduler.Api.Tests.csproj
           dotnet restore tests/Scheduler.Solver.Tests/Scheduler.Solver.Tests.csproj
+          dotnet restore tests/Scheduler.Shell.Tests/Scheduler.Shell.Tests.csproj
 
       - name: 建置
         run: dotnet build src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --no-restore
@@ -87,6 +88,11 @@ jobs:
       # 情境含 NP 四條、跨月尾巴、登記爆量。建模與 Domain 定義漂移時在這裡失敗。
       - name: 求解器漂移守門測試
         run: dotnet test tests/Scheduler.Solver.Tests/Scheduler.Solver.Tests.csproj --configuration Release
+
+      # Shell 的 WebView2 ↔ HttpClient 純轉換（路由分類、標頭搬法）。用連結原始檔編，不引用 WPF 專案，
+      # 所以能在這裡跑；WebView2 本身只能在 Windows 上手動驗。
+      - name: 殼橋接測試
+        run: dotnet test tests/Scheduler.Shell.Tests/Scheduler.Shell.Tests.csproj --configuration Release
 
   # ---------------------------------------------------------------------------
   # 前端。ubuntu runner（1x 計費）。
@@ -122,9 +128,9 @@ jobs:
   # Windows 上建。
   #
   # 這個 job 每次都跑，不做 path filter。看起來可以只在動到
-  # src/Scheduler.Shell/** 時才跑，但那是錯的：Shell 依賴 Application 與
-  # Solver，改 Application 一樣可能把 Shell 打壞，而 path filter 會讓那種
-  # 改動整個溜過去。
+  # src/Scheduler.Shell/** 時才跑，但那是錯的：Shell 依賴 Api（及其背後
+  # 整條相依鏈），改 Api 的公開型別一樣可能把 Shell 打壞，而 path filter
+  # 會讓那種改動整個溜過去。
   # ---------------------------------------------------------------------------
   shell:
     name: WPF 殼建置

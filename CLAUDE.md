@@ -73,7 +73,13 @@
   中止用 `StopSearch`。Api 的 `Endpoints/SolverEndpoints`：六個端點含 SSE（`data: {SolverProgress}`，
   payload 多帶 `jobId` 供前端過濾）與 apply-variant；`ISolver → CpSatSolver` 在 `ApiHost` 註冊，
   `ApiHostOptions.ConfigureServices` 可換假的。`/api/health` 現在會探 SQLite native
-- `Scheduler.Shell` 只有空 WPF 視窗
+- `Scheduler.Shell` 已落地：`MainWindow` 依 ARCHITECTURE §6 用 WebView2 host 同一個 `ApiHost`（TestServer，
+  不開 socket）。整個 `https://app.local/*` 由 `WebResourceRequested` 回應——`/api/` 轉 Api、無副檔名的
+  頁面回 `index.html`、其餘讀 `wwwroot/`；**不用 `SetVirtualHostNameToFolderMapping`**（實測會搶在事件前
+  吃掉請求，§6.2）。純轉換在 `WebViewBridge`（`tests/Scheduler.Shell.Tests` 連結原始檔測）。進度事件從
+  Api 的 `ISolverProgressFeed.AllAsync` 拿、`PostWebMessageAsJson` 推。啟動先探 `data/` 可寫，失敗以對話框
+  說明後關閉。開發機沒有 `webview2/` 資料夾時退回機器上的 Evergreen runtime。匯出端點與發佈包
+  （`build/webview2.json` 仍是 TODO）尚未接
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
@@ -90,7 +96,8 @@
 Persistence；Application 不引用 Persistence。
 
 `tests/Scheduler.ArchitectureTests` 已驗證規則 1 與層內附帶規則（EF Core 只在 Persistence、
-Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shell 動工的同一個 PR 補。
+Application 不引用 Persistence）與規則 2（Shell 專案檔只掛 Api、`DisableTransitiveProjectReferences` 開著；
+Shell 是 net8.0-windows，只守得到 csproj 層，編譯期由那個旗標守）。
 
 **2026-09-06 拍板、尚未實作的後端設計**全部在 `docs/ARCHITECTURE.md` §3.2、§4.8、§5、§7
 與 ADR-0004，動工前先讀。
@@ -191,9 +198,12 @@ gh pr create        # base 自動是 develop（預設分支已設定）
 
 ## 專案特有的坑
 
-- **`Scheduler.Shell` 裡 `Application` 會撞名。** `System.Windows.Application` 與
-  `Scheduler.Application` 命名空間同名，基底型別要完整限定。規則 2 改成 Shell 只引用 Api 之後
-  這個坑應該消失，但 `Scheduler.Api` 若對外暴露 Application 型別仍會撞到。
+- **`Scheduler.Shell` 看不到 Application／Domain／Persistence／Solver 的型別**——傳遞引用關掉了，
+  這是規則 2 的編譯期保證，不要為了圖方便打開。Api 對 Shell 暴露的東西簽章只能用 BCL 型別
+  （`ISolverProgressFeed` 就是這樣設計的），否則 Shell 會 CS0012。順帶讓 `System.Windows.Application`
+  與 `Scheduler.Application` 的撞名消失，但 `App` 的基底型別仍完整限定。
+- **WebView2 的 `SetVirtualHostNameToFolderMapping` 會吃掉 `WebResourceRequested`。** 同一主機的請求
+  一旦有對應，事件就不觸發（runtime 152 實測）。靜態檔由 Shell 自己在事件裡回，見 ARCHITECTURE §6.2。
 - **不要開 trim / AOT。** OR-Tools 的 P/Invoke wrapper 兩者皆不相容，
   `Directory.Build.props` 已明確關閉。SQLite 的 `e_sqlite3` 同樣是 native，一併受影響。
 - **OR-Tools 的 native DLL 依賴 `msvcp140` / `vcruntime140` / `vcruntime140_1`，NuGet 不附帶。**

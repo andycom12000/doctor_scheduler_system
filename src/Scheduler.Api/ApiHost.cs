@@ -116,5 +116,7 @@ public static class ApiHost
         services.TryAddSingleton<ISolver, CpSatSolver>();
         services.AddSingleton<ISolverScopeFactory, ServiceProviderSolverScopeFactory>();
         services.AddSingleton<SolverJobService>();
+        // Shell 與 SSE 端點共用的進度事件來源，簽章只有 BCL 型別（§6.2）
+        services.AddSingleton<ISolverProgressFeed, SolverProgressFeed>();
     }
 }

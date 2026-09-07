@@ -16,15 +16,30 @@
     <SelfContained>true</SelfContained>
     <!-- 目標環境含 4K 筆電 + 1080p 外接螢幕，Per-Monitor V2 為必要 -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      硬性規則 2（docs/ARCHITECTURE.md §3.2）：Shell 只是 Api 的 host，只能看到 Scheduler.Api。
+      關掉傳遞引用，Application／Domain／Persistence／Solver 的型別在這裡連編譯都過不了；
+      執行期仍會透過 Api 的相依關係把那些 DLL 複製進輸出目錄。
+      順帶消掉 System.Windows.Application 與 Scheduler.Application 的命名空間撞名。
+    -->
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    <!--
+      Scheduler.Api 是可執行專案（開發期 dotnet run 用），self-contained 的 Shell 引用 framework-dependent 的
+      exe 會被 NETSDK1150 擋下。這裡只拿它當類別庫用，關掉這個檢查即可。
+      注意：Scheduler.Api.exe／.runtimeconfig.json／.deps.json 仍會被複製進輸出與 publish 產物；那顆 exe 在
+      self-contained 版面裡跑不起來（找不到框架，只會跳「You must install .NET」），無害但多餘，
+      由 build/publish.ps1 在打包時清掉（發佈包 PR 處理）。
+    -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Scheduler.Application\Scheduler.Application.csproj" />
-    <ProjectReference Include="..\Scheduler.Solver\Scheduler.Solver.csproj" />
-    <ProjectReference Include="..\Scheduler.Persistence\Scheduler.Persistence.csproj" />
+    <ProjectReference Include="..\Scheduler.Api\Scheduler.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- WPF 專案不會自動帶 ASP.NET Core 共用框架；WebApplication 與 GetTestClient() 要它才編得過（§6.2） -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
 

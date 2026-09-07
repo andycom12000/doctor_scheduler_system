@@ -1,8 +1,6 @@
-using System.Text.Json;
-using Microsoft.AspNetCore.Http.Json;
-using Microsoft.Extensions.Options;
 using Scheduler.Api.Contracts;
 using Scheduler.Api.Http;
+using Scheduler.Api.Solving;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Solving;
 
@@ -11,7 +9,7 @@ namespace Scheduler.Api.Endpoints;
 /// <summary>
 /// 求解工作與變體的端點。迴圈與狀態機在 Application 的 <see cref="SolverJobService"/>，這裡只做
 /// 解參數 → 呼叫 → 包回應；SSE 端點是開發期 transport（§4.7），正式版由 Shell 從同一個
-/// <see cref="SolverJobService.SubscribeAsync"/> 拿事件再 PostWebMessageAsJson，收到的 JSON 一模一樣。
+/// <see cref="ISolverProgressFeed"/> 拿事件再 PostWebMessageAsJson，收到的 JSON 一模一樣。
 /// </summary>
 internal static class SolverEndpoints
 {
@@ -35,7 +33,7 @@ internal static class SolverEndpoints
         jobs.MapGet("/{jobId}/variants", async (string jobId, SolverJobService s, CancellationToken ct) =>
             (await s.ListVariantsAsync(jobId, ct)).ToContract());
 
-        jobs.MapGet("/{jobId}/stream", async (string jobId, HttpContext http, SolverJobService s, IOptions<JsonOptions> json, CancellationToken ct) =>
+        jobs.MapGet("/{jobId}/stream", async (string jobId, HttpContext http, SolverJobService s, ISolverProgressFeed feed, CancellationToken ct) =>
         {
             // 先確認工作存在：404 要在回應開始之前擲出，錯誤 middleware 才包得到
             await s.GetAsync(jobId, ct);
@@ -45,9 +43,8 @@ internal static class SolverEndpoints
             http.Response.Headers.CacheControl = "no-cache";
             await http.Response.StartAsync(ct);
 
-            await foreach (var snapshot in s.SubscribeAsync(jobId, ct))
+            await foreach (var payload in feed.ForJobAsync(jobId, ct))
             {
-                var payload = JsonSerializer.Serialize(snapshot.ToContract(), json.Value.SerializerOptions);
                 await http.Response.WriteAsync($"data: {payload}\n\n", ct);
                 await http.Response.Body.FlushAsync(ct);
             }
