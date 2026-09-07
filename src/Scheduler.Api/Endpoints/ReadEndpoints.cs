@@ -17,7 +17,9 @@ internal static class ReadEndpoints
 {
     public static void MapReadEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/health", () => new HealthStatusDto("ok"));
+        // 存活檢查順便探一次 SQLite native 程式庫：portable 發佈最容易斷的那條路（ARCHITECTURE §9）
+        app.MapGet("/api/health", async (IServiceProvider services, CancellationToken ct) =>
+            new HealthStatusDto("ok", await Persistence.SchedulerDatabase.ProbeAsync(services, ct)));
 
         var schedules = app.MapGroup("/api/schedules");
 

@@ -27,13 +27,15 @@ public sealed record PublishResult(ScheduleStatus Status, DateTimeOffset Publish
 public sealed class ScheduleCommands
 {
     private readonly IScheduleRepository _schedules;
+    private readonly ISolverJobRepository _jobs;
     private readonly SchedulingContextLoader _loader;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _clock;
 
-    public ScheduleCommands(IScheduleRepository schedules, SchedulingContextLoader loader, IUnitOfWork unitOfWork, TimeProvider clock)
+    public ScheduleCommands(IScheduleRepository schedules, ISolverJobRepository jobs, SchedulingContextLoader loader, IUnitOfWork unitOfWork, TimeProvider clock)
     {
         _schedules = schedules;
+        _jobs = jobs;
         _loader = loader;
         _unitOfWork = unitOfWork;
         _clock = clock;
@@ -159,6 +161,55 @@ public sealed class ScheduleCommands
 
         await _unitOfWork.CommitAsync(cancellationToken);
         return new PublishResult(published.Status, now, published.Revision, carryOver);
+    }
+
+    /// <summary>
+    /// 套用變體為草稿：整月的格子全部換成變體的值班清單；該月尚無值班表時建一份。
+    /// 已發布的不可整份套用（幾乎一定是誤操作）409；job 或變體不存在 404；變體不是這個月的 422。
+    /// </summary>
+    public async Task<ScheduleView> ApplyVariantAsync(YearMonth month, string jobId, string variantId, CancellationToken cancellationToken = default)
+    {
+        var job = await _jobs.FindAsync(jobId, cancellationToken)
+            ?? throw SchedulerException.NotFound($"找不到求解工作 {jobId}");
+        var variant = await _jobs.FindVariantAsync(jobId, variantId, cancellationToken)
+            ?? throw SchedulerException.NotFound($"求解工作 {jobId} 沒有變體 {variantId}");
+        if (job.YearMonth != month)
+        {
+            throw new SchedulerException(ErrorCode.InvalidRequest, $"變體 {variantId} 是 {job.YearMonth} 的，不能套用到 {month}");
+        }
+
+        var loaded = await _loader.LoadAsync(month, cancellationToken);
+        if (loaded.Header?.Status == ScheduleStatus.Published)
+        {
+            throw new SchedulerException(ErrorCode.ScheduleAlreadyPublished, $"{month} 的值班表已發布，不可整份套用變體；要改請逐格改");
+        }
+
+        // 變體是求解當下的快照，人員或區域之後可能被刪（變體裡的值班不算「有值班紀錄」，刪得掉）。
+        // 帶著找不到的 id 落盤會讓該月之後每個讀取都 500、連清空格子都做不到，所以套用時重新驗一次
+        var staffIds = loaded.Context.Staff.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        var areaIds = loaded.Context.Areas.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+        var stale = variant.Duties.FirstOrDefault(d => !staffIds.Contains(d.StaffId) || !areaIds.Contains(d.AreaId));
+        if (stale is not null)
+        {
+            throw new SchedulerException(ErrorCode.InvalidRequest,
+                $"變體 {variantId} 含已不存在的人員或區域（{stale.StaffId} / {stale.AreaId}），請重新求解");
+        }
+
+        var header = loaded.Header ?? ScheduleHeader.NewDraft(month);
+        header = header with { Revision = header.Revision + 1 };
+        await _schedules.UpsertAsync(header, cancellationToken);
+        await _schedules.ReplaceDutiesAsync(month, variant.Duties, cancellationToken);
+        await _unitOfWork.CommitAsync(cancellationToken);
+
+        var ctx = loaded.Context;
+        return new ScheduleView(
+            month, header.Status, header.Revision, header.PublishedAt, month.DayCount,
+            ctx.Staff.Count(s => s.Status == StaffStatus.Active),
+            ctx.Areas,
+            variant.Duties
+                .OrderBy(d => d.Date).ThenBy(d => d.AreaId, StringComparer.Ordinal)
+                .Select(d => new DutyView(d.AreaId, d.Date, d.StaffId, CellKey.Area(d)))
+                .ToArray());
     }
 
     // ---- helpers ----

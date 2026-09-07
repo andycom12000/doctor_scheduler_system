@@ -427,6 +427,7 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
     job.status = 'running'
     job.elapsedSec = (Date.now() - startMs) / 1000
     job.progress = {
+      jobId,
       status: 'running',
       variantIndex: 1,
       variantCount,
@@ -447,6 +448,7 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
       job.status = 'running'
       job.elapsedSec = (Date.now() - startMs) / 1000
       job.progress = {
+        jobId,
         status: 'running',
         variantIndex: i,
         variantCount,
@@ -470,6 +472,7 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
       job.status = 'succeeded'
       job.elapsedSec = (Date.now() - startMs) / 1000
       job.progress = {
+        jobId,
         status: 'succeeded',
         variantIndex: variantCount,
         variantCount,
@@ -514,6 +517,7 @@ const solverHandlers = [
         soft: store.constraints.soft.filter((s) => s.weight > 0).length,
       },
       progress: {
+        jobId,
         status: 'queued',
         variantIndex: 0,
         variantCount,

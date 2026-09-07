@@ -7,7 +7,7 @@ namespace Scheduler.Api.Contracts;
 // 契約標 [X, null] 且 required 的欄位要輸出 null；標 optional 的欄位用 WhenWritingNull 省略，
 // 與 frontend/src/mocks 的輸出對齊，契約守法測試會逐一驗。
 
-public sealed record HealthStatusDto(string Status);
+public sealed record HealthStatusDto(string Status, string SqliteVersion);
 
 public sealed record ErrorResponseDto(ErrorBodyDto Error);
 
@@ -221,3 +221,52 @@ public sealed record StaffWriteDto(string? EmployeeNo, string? Name, string? Ran
 
 public sealed record StaffStatusRequestDto(string? Status);
 
+
+// -- 求解 -----------------------------------------------------------------
+
+public sealed record CreateSolverJobRequestDto(string? YearMonth, int? VariantCount, int? TimeLimitSecPerVariant);
+
+public sealed record SolverJobDto(
+    string JobId,
+    string YearMonth,
+    string Status,
+    int VariantCount,
+    double ElapsedSec,
+    SolverScaleDto? Scale,
+    ConstraintCountDto? ConstraintCount,
+    SolverProgressDto Progress,
+    IReadOnlyList<string> Warnings,
+    string? FailureReason);
+
+public sealed record SolverScaleDto(int Staff, int Areas, int Days, int Variables);
+
+public sealed record ConstraintCountDto(int Hard, int Soft);
+
+/// <summary>契約 <c>SolverProgress</c>。多帶 <c>jobId</c>：SSE 與 Shell 的 PostWebMessageAsJson 共用一條通道，前端靠它過濾。</summary>
+public sealed record SolverProgressDto(
+    string JobId,
+    string Status,
+    int VariantIndex,
+    int VariantCount,
+    double ElapsedSec,
+    double TimeLimitSec,
+    int SolutionCount,
+    double? BestObjective,
+    double? BestBound,
+    double? Gap);
+
+public sealed record VariantListDto(IReadOnlyList<VariantDto> Variants);
+
+public sealed record VariantDto(
+    string Id,
+    string Label,
+    string Description,
+    IReadOnlyDictionary<string, double> WeightProfile,
+    VariantMetricsDto Metrics,
+    int HardViolationCount,
+    double SoftScore,
+    IReadOnlyList<DutyDto> Duties);
+
+public sealed record VariantMetricsDto(int Vacancies, double QuotaFairness, double AreaConsistency, double RankPreference, double? FairnessPoint);
+
+public sealed record ApplyVariantRequestDto(string? JobId, string? VariantId);

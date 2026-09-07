@@ -1,5 +1,6 @@
 using Scheduler.Application.Errors;
 using Scheduler.Application.Schedules;
+using Scheduler.Application.Solving;
 using Scheduler.Domain.Constraints;
 using Scheduler.Domain.Model;
 
@@ -136,6 +137,16 @@ internal static class ContractNames
     };
 
     /// <summary>契約沒有任何 5xx；SolverFailed 沒有契約上的狀態碼，只能是 500。</summary>
+    public static string Of(SolverJobStatus v) => v switch
+    {
+        SolverJobStatus.Queued => "queued",
+        SolverJobStatus.Running => "running",
+        SolverJobStatus.Succeeded => "succeeded",
+        SolverJobStatus.Failed => "failed",
+        SolverJobStatus.Cancelled => "cancelled",
+        _ => throw Unknown(v),
+    };
+
     public static int StatusOf(ErrorCode v) => v switch
     {
         ErrorCode.NotFound => StatusCodes.Status404NotFound,

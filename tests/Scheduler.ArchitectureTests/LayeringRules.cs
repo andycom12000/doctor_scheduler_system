@@ -75,6 +75,15 @@ public class LayeringRules
     public void Application_不得引用_Solver()
         => Assert.DoesNotContain("Scheduler.Solver", ReferencedNames(Application));
 
+    /// <summary>Solver 只實作 Application 的 ISolver：讀 Domain 的定義、回值班清單，不碰資料庫也不碰 HTTP。</summary>
+    [Fact]
+    public void Solver_不得引用_Persistence_或_Api()
+    {
+        var names = ReferencedNames(typeof(Solver.AssemblyMarker).Assembly);
+        Assert.DoesNotContain("Scheduler.Persistence", names);
+        Assert.DoesNotContain("Scheduler.Api", names);
+    }
+
     // ---- EF Core 只在 Persistence ----
 
     [Fact]

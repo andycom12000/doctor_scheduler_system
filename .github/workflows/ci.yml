@@ -53,6 +53,7 @@ jobs:
           dotnet restore tests/Scheduler.Persistence.Tests/Scheduler.Persistence.Tests.csproj
           dotnet restore tests/Scheduler.Application.Tests/Scheduler.Application.Tests.csproj
           dotnet restore tests/Scheduler.Api.Tests/Scheduler.Api.Tests.csproj
+          dotnet restore tests/Scheduler.Solver.Tests/Scheduler.Solver.Tests.csproj
 
       - name: 建置
         run: dotnet build src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --no-restore
@@ -81,6 +82,11 @@ jobs:
       # 回應 JSON 用 api-contract.yaml 的 schema 驗。契約改了、DTO 沒跟上，在這裡失敗。
       - name: 契約守法測試
         run: dotnet test tests/Scheduler.Api.Tests/Scheduler.Api.Tests.csproj --configuration Release
+
+      # 漂移守門（ARCHITECTURE §4.8）：真的跑 CP-SAT，任一輸出丟給 ViolationChecker，硬違規只准是覆蓋（空缺）。
+      # 情境含 NP 四條、跨月尾巴、登記爆量。建模與 Domain 定義漂移時在這裡失敗。
+      - name: 求解器漂移守門測試
+        run: dotnet test tests/Scheduler.Solver.Tests/Scheduler.Solver.Tests.csproj --configuration Release
 
   # ---------------------------------------------------------------------------
   # 前端。ubuntu runner（1x 計費）。

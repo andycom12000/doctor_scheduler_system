@@ -596,7 +596,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SolverJob' }
         '409':
-          description: 已有求解工作在執行中
+          description: 已有求解工作在執行中（`SOLVER_BUSY`，`details.jobId` 是正在跑的那一個）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: 本體無效：缺 `yearMonth`、`variantCount` 不在 1–3、`timeLimitSecPerVariant` 不在 1–600
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -620,13 +625,17 @@ paths:
       tags: [solver]
       operationId: cancelSolverJob
       summary: 中止求解
-      description: 已完成的工作呼叫此端點是冪等的，回 200 且狀態不變。
+      description: |
+        已完成的工作呼叫此端點是冪等的，回 200 且狀態不變。
+        中止保留已完成的變體：三份序列求解、第 2 份跑到一半中止時第 1 份已完整，cancelled 的工作仍可列出、可套用那一份。
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SolverJob' }
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/solver-jobs/{jobId}/stream:
     parameters:
@@ -644,10 +653,14 @@ paths:
         給不出可信的完成度。回報的是耗時、已找到解數與最佳化收斂間隙。
       responses:
         '200':
-          description: 事件流
+          description: |
+            事件流。每筆事件是 `data: {SolverProgress}` 一行加空行；活著的工作先送目前快照再逐筆推，
+            終態那一筆送完就關閉；已結束的工作只送一筆終態。
           content:
             text/event-stream:
               schema: { $ref: '#/components/schemas/SolverProgress' }
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/solver-jobs/{jobId}/variants:
     parameters:
@@ -671,6 +684,8 @@ paths:
                   variants:
                     type: array
                     items: { $ref: '#/components/schemas/Variant' }
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/schedules/{ym}/apply-variant:
     parameters:
@@ -703,6 +718,11 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: 該月值班表已發布
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: 變體不是路徑上那個月的、或本體缺欄位（`INVALID_REQUEST`）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1127,6 +1147,10 @@ components:
       required: [status]
       properties:
         status: { type: string, examples: ['ok'] }
+        sqliteVersion:
+          type: string
+          description: 順便探一次 SQLite native 程式庫：portable 發佈最容易斷的那條路（ARCHITECTURE §9）
+          examples: ['3.46.1']
 
     ErrorResponse:
       type: object
@@ -1579,8 +1603,11 @@ components:
       type: object
       description: |
         推送的 payload。**沒有完成百分比**——CP-SAT 給不出可信的完成度。
-      required: [status, variantIndex, variantCount, elapsedSec]
+      required: [jobId, status, variantIndex, variantCount, elapsedSec]
       properties:
+        jobId:
+          type: string
+          description: SSE 與 Shell 的 PostWebMessageAsJson 共用一條通道，前端靠它過濾（realtime.ts）
         status: { $ref: '#/components/schemas/SolverJobStatus' }
         variantIndex: { type: integer, description: 目前在求第幾份變體，1-based }
         variantCount: { type: integer }
