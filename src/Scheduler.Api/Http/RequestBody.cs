@@ -20,10 +20,15 @@ internal static class RequestBody
     /// <summary>可省略的本體（契約 <c>required: false</c>）。沒送、空本體或 JSON <c>null</c> 都回 null。</summary>
     public static async Task<T?> ReadOptionalAsync<T>(HttpContext http) where T : class
     {
-        // 完全沒送本體：沒有 Content-Type、長度也是 0 或未知
-        if (http.Request.ContentLength is null or 0 && !http.Request.HasJsonContentType())
+        // 沒送本體：長度 0，或長度未知且沒有 JSON 的 Content-Type（fetch 帶了 header 卻沒帶 body 也算沒送）
+        if (http.Request.ContentLength == 0 || (http.Request.ContentLength is null && !http.Request.HasJsonContentType()))
         {
             return null;
+        }
+
+        if (!http.Request.HasJsonContentType())
+        {
+            throw new SchedulerException(ErrorCode.InvalidRequest, "請求本體必須是 application/json");
         }
 
         try
@@ -33,10 +38,6 @@ internal static class RequestBody
         catch (JsonException e)
         {
             throw new SchedulerException(ErrorCode.InvalidRequest, $"請求本體不是合法的 JSON：{e.Message}");
-        }
-        catch (InvalidOperationException e) when (e.Message.Contains("Content-Type", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new SchedulerException(ErrorCode.InvalidRequest, "請求本體必須是 application/json");
         }
     }
 

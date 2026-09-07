@@ -34,8 +34,9 @@ public sealed class ScheduleScores
     public IReadOnlyDictionary<string, int> FairnessByGroup(ConstraintScope scope, Metric metric)
     {
         var result = new Dictionary<string, int>();
+        // 停用者不進比較：他沒班、剩餘額度是滿的，會把組內差距撐到最大。與點數看板、月結轉結算（CarryOverSettlement）同一個篩法。
         var groups = _ctx.Staff
-            .Where(s => scope.AppliesToRank(s.RankCode))
+            .Where(s => s.Status == StaffStatus.Active && scope.AppliesToRank(s.RankCode))
             .GroupBy(s => _ctx.RankOf(s.RankCode).GroupCode);
 
         foreach (var group in groups)
@@ -50,7 +51,7 @@ public sealed class ScheduleScores
     /// <summary>Consistency：每人「值班數 − 最常值的那一區的值班數」，加總。即離開主區的次數。</summary>
     public int Consistency(ConstraintDefinition c) =>
         _ctx.Staff
-            .Where(s => c.Scope.AppliesToRank(s.RankCode))
+            .Where(s => s.Status == StaffStatus.Active && c.Scope.AppliesToRank(s.RankCode))
             .Sum(s => ConsistencyOf(s.Id));
 
     public int ConsistencyOf(string staffId)
@@ -63,35 +64,6 @@ public sealed class ScheduleScores
 
         var mostFrequent = duties.GroupBy(d => d.AreaId).Max(g => g.Count());
         return duties.Length - mostFrequent;
-    }
-
-    /// <summary>
-    /// 月結轉：<c>組內最大剩餘額度 − 本人剩餘額度</c>，剩餘最多的人為 0。
-    /// 發布時結算，供下個月當起始偏移；不累積跨越兩個月。
-    /// </summary>
-    public IReadOnlyList<CarryOverEntry> SettleCarryOver(ConstraintScope scope)
-    {
-        var entries = new List<CarryOverEntry>();
-        var groups = _ctx.Staff
-            .Where(s => scope.AppliesToRank(s.RankCode))
-            .GroupBy(s => _ctx.RankOf(s.RankCode).GroupCode);
-
-        foreach (var group in groups)
-        {
-            var remaining = group
-                .Select(s => (s.Id, Remaining: _metrics.QuotaRemaining(s.Id)))
-                .Where(x => x.Remaining.HasValue)
-                .ToArray();
-            if (remaining.Length == 0)
-            {
-                continue;
-            }
-
-            var max = remaining.Max(x => x.Remaining!.Value);
-            entries.AddRange(remaining.Select(x => new CarryOverEntry(x.Id, max - x.Remaining!.Value)));
-        }
-
-        return entries;
     }
 
     private int? ValueFor(Metric metric, string staffId) => metric switch

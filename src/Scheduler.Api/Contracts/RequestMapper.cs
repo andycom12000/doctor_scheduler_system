@@ -43,13 +43,7 @@ internal static class RequestMapper
     /// <summary>四個欄位都可省略；<c>holidayName</c> 要分「沒送」與「送 null」，所以從 JSON 物件讀。</summary>
     public static CalendarDayPatch ToCalendarPatch(this JsonObject body)
     {
-        var known = new[] { "isHoliday", "isPublicHoliday", "isMakeUpWorkday", "holidayName" };
-        var unknown = body.Select(kv => kv.Key).FirstOrDefault(k => !known.Contains(k, StringComparer.Ordinal));
-        if (unknown is not null)
-        {
-            throw Invalid($"CalendarDayOverride 沒有 {unknown} 這個欄位");
-        }
-
+        // 契約沒有 additionalProperties: false；前端把 GET 回來的 CalendarDay 整個 PATCH 回來是合理用法，多的欄位忽略
         var provided = body.ContainsKey("holidayName");
         return new CalendarDayPatch(
             Bool(body, "isHoliday"),
@@ -90,7 +84,7 @@ internal static class RequestMapper
                 Required(a.Code, "areas[].code"),
                 Required(a.Name, "areas[].name"),
                 Required(a.AreaTypeCode, "areas[].areaTypeCode"),
-                a.RequiredPerDay)).ToArray());
+                Required(a.RequiredPerDay, "areas[].requiredPerDay"))).ToArray());
 
     public static RankSettings ToDomain(this RankSettingsDto dto) =>
         new(
@@ -126,11 +120,17 @@ internal static class RequestMapper
         {
             var pointType = ContractNames.ToPointType(key) ?? throw Invalid($"fairness.tables 的鍵必須是 A 或 B，收到 {key}");
             tables[pointType] = RequiredList(entries, $"fairness.tables.{key}")
-                .Select(e => new FairnessTableEntry(ToTableKind(e.Today, "today"), ToTableKind(e.Tomorrow, "tomorrow"), e.Points))
+                .Select(e => new FairnessTableEntry(ToTableKind(e.Today, "today"), ToTableKind(e.Tomorrow, "tomorrow"), Required(e.Points, $"fairness.tables.{key}[].points")))
                 .ToArray();
         }
 
-        return new PointRules(new QuotaPointRule(quota.Weekday, quota.Holiday), new FairnessPointRule(tables, new ConsecutiveSaturdayBonus(bonus.Points, bonus.WindowDays)));
+        return new PointRules(
+            new QuotaPointRule(Required(quota.Weekday, "quota.weekday"), Required(quota.Holiday, "quota.holiday")),
+            new FairnessPointRule(
+                tables,
+                new ConsecutiveSaturdayBonus(
+                    Required(bonus.Points, "fairness.consecutiveSaturdayBonus.points"),
+                    Required(bonus.WindowDays, "fairness.consecutiveSaturdayBonus.windowDays"))));
     }
 
     /// <summary>查表的列只會是 weekday 或 holiday（契約 enum），publicHoliday 不是查表的維度。</summary>
@@ -141,8 +141,9 @@ internal static class RequestMapper
 
     public static ConstraintSettings ToDomain(this ConstraintSettingsDto dto) =>
         new(
-            RequiredList(dto.Hard, "hard").Select(c => ToDefinition(c.Code, c.Name, c.Primitive, Severity.Hard, c.Enabled, 0, c.Scope, c.Metric, c.Params)).ToArray(),
-            RequiredList(dto.Soft, "soft").Select(c => ToDefinition(c.Code, c.Name, c.Primitive, Severity.Soft, c.Weight > 0, c.Weight, c.Scope, c.Metric, c.Params)).ToArray());
+            RequiredList(dto.Hard, "hard").Select(c => ToDefinition(c.Code, c.Name, c.Primitive, Severity.Hard, Required(c.Enabled, $"{c.Code}.enabled"), 0, c.Scope, c.Metric, c.Params)).ToArray(),
+            // 軟約束的 Enabled 是「權重 > 0」的衍生值，那是領域規則，由 SettingsCommands 定；這裡先給 true 佔位
+            RequiredList(dto.Soft, "soft").Select(c => ToDefinition(c.Code, c.Name, c.Primitive, Severity.Soft, true, Required(c.Weight, $"{c.Code}.weight"), c.Scope, c.Metric, c.Params)).ToArray());
 
     private static ConstraintDefinition ToDefinition(
         string? code, string? name, string? primitive, Severity severity, bool enabled, int weight,
@@ -177,6 +178,9 @@ internal static class RequestMapper
 
     private static string Required(string? value, string name) =>
         string.IsNullOrWhiteSpace(value) ? throw Missing(name) : value;
+
+    private static T Required<T>(T? value, string name) where T : struct =>
+        value ?? throw Missing(name);
 
     private static IReadOnlyList<T> RequiredList<T>(IReadOnlyList<T>? list, string name)
     {

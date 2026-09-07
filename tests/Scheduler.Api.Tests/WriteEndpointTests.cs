@@ -119,13 +119,31 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
 
         var schedule = await _api.GetAsync("/api/schedules/2027-05", "getSchedule");
         Assert.Equal("published", schedule["status"]!.GetValue<string>());
-        Assert.NotNull(schedule["publishedAt"]);
+        // 契約守法只開 format: date 的檢查，date-time 的形狀在這裡守：UTC、可解析
+        var publishedAt = DateTimeOffset.Parse(schedule["publishedAt"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(TimeSpan.Zero, publishedAt.Offset);
+        Assert.Equal(publishedAt, DateTimeOffset.Parse(body["publishedAt"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]
     public async Task publish_該月沒有值班表_404()
     {
         await PostAsync("/api/schedules/2030-02/publish", null, "publishSchedule", HttpStatusCode.NotFound);
+        // fetch 帶了 Content-Type 卻沒帶 body：本體可省略，仍該走到 404 而不是 422
+        await PostAsync("/api/schedules/2030-02/publish", "", "publishSchedule", HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task 本體不是_application_json_422()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/schedules/2030-03/duties")
+        {
+            Content = new StringContent("areaId=area-a", System.Text.Encoding.UTF8, "text/plain"),
+        };
+        using var response = await _api.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.Equal("INVALID_REQUEST", body["error"]!["code"]!.GetValue<string>());
     }
 
     // -- 不可排班日 ---------------------------------------------------------
@@ -239,16 +257,89 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
         var emptyScope = current.DeepClone();
         var h4 = emptyScope["hard"]!.AsArray().First(c => c!["code"]!.GetValue<string>() == "H4_MIN_GAP")!;
         h4["scope"] = new JsonObject { ["exemptRankCodes"] = new JsonArray() };
-        var saved = await PutAsync("/api/settings/constraints", emptyScope.ToJsonString(), "putConstraints");
-        var savedH4 = saved["hard"]!.AsArray().First(c => c!["code"]!.GetValue<string>() == "H4_MIN_GAP")!;
-        Assert.False(savedH4.AsObject().ContainsKey("scope"), "空陣列應正規化成不限，整個 scope 省略");
-
-        // 還原，別讓其他測試看到被改過的 NP 規則
-        await PutAsync("/api/settings/constraints", current.ToJsonString(), "putConstraints");
+        try
+        {
+            var saved = await PutAsync("/api/settings/constraints", emptyScope.ToJsonString(), "putConstraints");
+            var savedH4 = saved["hard"]!.AsArray().First(c => c!["code"]!.GetValue<string>() == "H4_MIN_GAP")!;
+            Assert.False(savedH4.AsObject().ContainsKey("scope"), "空陣列應正規化成不限，整個 scope 省略");
+        }
+        finally
+        {
+            // 還原，別讓同一顆資料庫上的其他測試看到被改過的 NP 規則
+            await PutAsync("/api/settings/constraints", current.ToJsonString(), "putConstraints");
+        }
 
         var badPrimitive = current.DeepClone();
         badPrimitive["hard"]![0]!["primitive"] = "Magic";
         await PutAsync("/api/settings/constraints", badPrimitive.ToJsonString(), "putConstraints", HttpStatusCode.UnprocessableEntity);
+    }
+
+    /// <summary>壞輸入不能被靜默接受：缺必要欄位、超出上界、Budget 缺 cap，都要 422 且設定不變。</summary>
+    [Theory]
+    [InlineData("hard", "H1_AREA_COVERAGE", "enabled", null)]              // 缺 enabled → 不能靜默停用硬約束
+    [InlineData("soft", "S1_QUOTA_FAIRNESS", "weight", null)]              // 缺 weight → 不能靜默變 0
+    [InlineData("soft", "S1_QUOTA_FAIRNESS", "weight", 101)]
+    [InlineData("hard", "H4_MIN_GAP", "params", "{}")]                     // MinGap 缺 days
+    [InlineData("hard", "H4_MIN_GAP", "params", "{\"days\": 4000000}")]    // 天數溢位
+    [InlineData("hard", "H6_NP_MONTHLY_DAYS", "params", "{}")]             // Budget(duty_day) 缺 cap → 規則靜默失效
+    public async Task putConstraints_壞輸入_422_設定不變(string list, string code, string field, object? value)
+    {
+        var current = await _api.GetAsync("/api/settings/constraints", "getConstraints");
+        var broken = current.DeepClone();
+        var target = broken[list]!.AsArray().First(c => c!["code"]!.GetValue<string>() == code)!.AsObject();
+        target.Remove(field);
+        if (value is int n)
+        {
+            target[field] = n;
+        }
+        else if (value is string json)
+        {
+            target[field] = JsonNode.Parse(json);
+        }
+
+        await PutAsync("/api/settings/constraints", broken.ToJsonString(), "putConstraints", HttpStatusCode.UnprocessableEntity);
+        var after = await _api.GetAsync("/api/settings/constraints", "getConstraints");
+        Assert.Equal(current.ToJsonString(), after.ToJsonString());
+    }
+
+    [Theory]
+    [InlineData("quota", "holiday", null)]                                 // 缺 holiday → 不能靜默變 0
+    [InlineData("quota", "holiday", -1)]
+    [InlineData("fairness", "consecutiveSaturdayBonus", "{\"points\": 1, \"windowDays\": 4000000}")] // 視窗溢位
+    [InlineData("fairness", "consecutiveSaturdayBonus", "{\"points\": 1}")] // 缺 windowDays
+    public async Task putPointRules_壞輸入_422_設定不變(string section, string field, object? value)
+    {
+        var current = await _api.GetAsync("/api/settings/point-rules", "getPointRules");
+        var broken = current.DeepClone();
+        var target = broken[section]!.AsObject();
+        target.Remove(field);
+        if (value is int n)
+        {
+            target[field] = n;
+        }
+        else if (value is string json)
+        {
+            target[field] = JsonNode.Parse(json);
+        }
+
+        await PutAsync("/api/settings/point-rules", broken.ToJsonString(), "putPointRules", HttpStatusCode.UnprocessableEntity);
+        var after = await _api.GetAsync("/api/settings/point-rules", "getPointRules");
+        Assert.Equal(current.ToJsonString(), after.ToJsonString());
+        // 讀取路徑沒被弄壞
+        await _api.GetAsync("/api/schedules/2026-09", "getSchedule");
+    }
+
+    [Fact]
+    public async Task putEligibilityMatrix_指到不存在的身分或類型_422()
+    {
+        var current = await _api.GetAsync("/api/settings/eligibility-matrix", "getEligibilityMatrix");
+        var unknownRank = current.DeepClone();
+        unknownRank["matrix"]!["R9"] = new JsonObject { ["WARD"] = true };
+        await PutAsync("/api/settings/eligibility-matrix", unknownRank.ToJsonString(), "putEligibilityMatrix", HttpStatusCode.UnprocessableEntity);
+
+        var unknownType = current.DeepClone();
+        unknownType["matrix"]!["R2"]!["NOPE"] = true;
+        await PutAsync("/api/settings/eligibility-matrix", unknownType.ToJsonString(), "putEligibilityMatrix", HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
@@ -295,8 +386,12 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
         Assert.Equal("inactive", inactive["status"]!.GetValue<string>());
         await PatchAsync($"/api/staff/{id}/status", """{"status":"gone"}""", "setStaffStatus", HttpStatusCode.UnprocessableEntity);
 
+        // 刪除要級聯清掉他的不可排班日（走真的 repository）
+        await PutAsync($"/api/blocked-days/2027-11/{id}/2027-11-03", null, "setBlockedDay");
         await _api.SendAsync(HttpMethod.Delete, $"/api/staff/{id}", null, "deleteStaff", HttpStatusCode.NoContent);
         await _api.SendAsync(HttpMethod.Delete, $"/api/staff/{id}", null, "deleteStaff", HttpStatusCode.NotFound);
+        var registration = await _api.GetAsync("/api/blocked-days/2027-11", "getBlockedDays");
+        Assert.DoesNotContain(registration["entries"]!.AsArray(), e => e!["staffId"]!.GetValue<string>() == id);
     }
 
     [Fact]

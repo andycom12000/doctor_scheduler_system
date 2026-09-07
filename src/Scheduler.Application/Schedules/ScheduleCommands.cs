@@ -60,13 +60,14 @@ public sealed class ScheduleCommands
             after.Add(new Duty(cell.AreaId, cell.Date, staffId));
         }
 
+        // 回應內容在 commit 之前算好：落盤之後就不該再有任何會失敗的步驟
+        var violations = Recheck(loaded, after);
         var header = loaded.Header ?? ScheduleHeader.NewDraft(month);
         header = header with { Revision = header.Revision + 1 };
         await _schedules.UpsertAsync(header, cancellationToken);
         await _schedules.SetDutyAsync(month, cell.AreaId, cell.Date, staffId, cancellationToken);
         await _unitOfWork.CommitAsync(cancellationToken);
 
-        var violations = Recheck(loaded, after);
         return new MutationResult(header.Revision, new[] { CellOf(cell, staffId) }, violations);
     }
 
@@ -112,13 +113,13 @@ public sealed class ScheduleCommands
             after.Add(new Duty(b.AreaId, b.Date, staffA));
         }
 
+        var violations = Recheck(loaded, after);
         var header = loaded.Header! with { Revision = loaded.Header!.Revision + 1 };
         await _schedules.UpsertAsync(header, cancellationToken);
         await _schedules.SetDutyAsync(month, a.AreaId, a.Date, staffB, cancellationToken);
         await _schedules.SetDutyAsync(month, b.AreaId, b.Date, staffA, cancellationToken);
         await _unitOfWork.CommitAsync(cancellationToken);
 
-        var violations = Recheck(loaded, after);
         return new MutationResult(header.Revision, new[] { CellOf(a, staffB), CellOf(b, staffA) }, violations);
     }
 

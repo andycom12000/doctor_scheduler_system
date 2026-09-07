@@ -55,9 +55,9 @@ public sealed class SettingsCommands
                 throw Invalid($"區域 {area.Code} 指到不存在的區域類型 {area.AreaTypeCode}");
             }
 
-            if (area.RequiredPerDay < 1)
+            if (area.RequiredPerDay is < 1 or > MaxPerDay)
             {
-                throw Invalid($"區域 {area.Code} 的每日需求人數必須至少 1");
+                throw Invalid($"區域 {area.Code} 的每日需求人數必須在 1–{MaxPerDay}");
             }
         }
 
@@ -99,9 +99,9 @@ public sealed class SettingsCommands
                 throw Invalid($"身分 {rank.Code} 指到不存在的身分組 {rank.GroupCode}");
             }
 
-            if (rank.QuotaCap is < 0)
+            if (rank.QuotaCap is < 0 or > MaxPoints)
             {
-                throw Invalid($"身分 {rank.Code} 的額度上限不得為負");
+                throw Invalid($"身分 {rank.Code} 的額度上限必須在 0–{MaxPoints}");
             }
         }
 
@@ -126,8 +126,25 @@ public sealed class SettingsCommands
         return await _settings.GetRanksAsync(cancellationToken);
     }
 
+    /// <summary>列與欄都要指到存在的身分與區域類型；垃圾列不會讓讀取 500，但會讓之後「刪身分」被看不懂的 RANK_IN_USE 擋住。</summary>
     public async Task<EligibilityMatrix> ReplaceEligibilityAsync(EligibilityMatrix matrix, CancellationToken cancellationToken = default)
     {
+        var rankCodes = (await _settings.GetRanksAsync(cancellationToken)).Ranks.Select(r => r.Code).ToHashSet(StringComparer.Ordinal);
+        var typeCodes = (await _settings.GetAreasAsync(cancellationToken)).AreaTypes.Select(t => t.Code).ToHashSet(StringComparer.Ordinal);
+        foreach (var (rankCode, row) in matrix.Matrix)
+        {
+            if (!rankCodes.Contains(rankCode))
+            {
+                throw Invalid($"資格矩陣指到不存在的身分 {rankCode}");
+            }
+
+            var unknownType = row.Keys.FirstOrDefault(t => !typeCodes.Contains(t));
+            if (unknownType is not null)
+            {
+                throw Invalid($"資格矩陣 {rankCode} 那一列指到不存在的區域類型 {unknownType}");
+            }
+        }
+
         await _settings.ReplaceEligibilityAsync(matrix, cancellationToken);
         await _unitOfWork.CommitAsync(cancellationToken);
         return await _settings.GetEligibilityAsync(cancellationToken);
@@ -136,14 +153,20 @@ public sealed class SettingsCommands
     /// <summary>查表要能回答每一種「當日／隔日」組合（<see cref="FairnessPointRule.Lookup"/> 查不到會擲例外），每個點數類型都要有表。</summary>
     public async Task<PointRules> ReplacePointRulesAsync(PointRules rules, CancellationToken cancellationToken = default)
     {
-        if (rules.Quota.Weekday < 0 || rules.Quota.Holiday < 0)
+        if (rules.Quota.Weekday is < 0 or > MaxPoints || rules.Quota.Holiday is < 0 or > MaxPoints)
         {
-            throw Invalid("額度點數不得為負");
+            throw Invalid($"額度點數必須在 0–{MaxPoints}");
         }
 
-        if (rules.Fairness.ConsecutiveSaturdayBonus.WindowDays < 1)
+        // 視窗天數決定 loader 要把行事曆往次月多撈幾天；沒有上界的話一次 PUT 就能讓每個請求都在建幾十萬天的行事曆
+        if (rules.Fairness.ConsecutiveSaturdayBonus.WindowDays is < 1 or > MaxDays)
         {
-            throw Invalid("連值週六加分的視窗天數必須至少 1");
+            throw Invalid($"連值週六加分的視窗天數必須在 1–{MaxDays}");
+        }
+
+        if (rules.Fairness.ConsecutiveSaturdayBonus.Points is < 0 or > MaxPoints)
+        {
+            throw Invalid($"連值週六加分必須在 0–{MaxPoints}");
         }
 
         var kinds = new[] { DayKind.Weekday, DayKind.Holiday };
@@ -158,10 +181,15 @@ public sealed class SettingsCommands
             {
                 foreach (var tomorrow in kinds)
                 {
-                    var matches = table.Count(e => e.Today == today && e.Tomorrow == tomorrow);
-                    if (matches != 1)
+                    var matches = table.Where(e => e.Today == today && e.Tomorrow == tomorrow).ToArray();
+                    if (matches.Length != 1)
                     {
-                        throw Invalid($"公平性點數 Type {pointType} 的查表 {today}/{tomorrow} 必須恰好一列，目前 {matches} 列");
+                        throw Invalid($"公平性點數 Type {pointType} 的查表 {today}/{tomorrow} 必須恰好一列，目前 {matches.Length} 列");
+                    }
+
+                    if (matches[0].Points is < 0 or > MaxPoints)
+                    {
+                        throw Invalid($"公平性點數 Type {pointType} 的查表 {today}/{tomorrow} 的點數必須在 0–{MaxPoints}");
                     }
                 }
             }
@@ -196,9 +224,9 @@ public sealed class SettingsCommands
                 throw Invalid($"找不到身分 {rankCode}");
             }
 
-            if (cap < 0)
+            if (cap is < 0 or > MaxPoints)
             {
-                throw Invalid($"身分 {rankCode} 的額度上限不得為負");
+                throw Invalid($"身分 {rankCode} 的額度上限必須在 0–{MaxPoints}");
             }
         }
 
@@ -226,8 +254,14 @@ public sealed class SettingsCommands
         {
             case Primitive.Budget or Primitive.Fairness when c.Metric is null:
                 throw Invalid($"約束 {c.Code}：{c.Primitive} 原語必須指定 metric");
-            case Primitive.MinGap or Primitive.MaxConsecutive when c.Params.Days is null or < 1:
-                throw Invalid($"約束 {c.Code}：{c.Primitive} 原語必須指定 params.days 且至少 1");
+            // quota_point 的上限可以從身分讀；其他度量沒別的地方可讀，缺 cap 會讓檢查器整條跳過、規則靜默失效
+            case Primitive.Budget when c.Metric != Metric.QuotaPoint && c.Params.Cap is null:
+                throw Invalid($"約束 {c.Code}：Budget 原語的度量不是 quota_point 時必須指定 params.cap");
+            case Primitive.Budget when c.Params.Cap is < 0 or > MaxPoints:
+                throw Invalid($"約束 {c.Code}：params.cap 必須在 0–{MaxPoints}");
+            // 天數決定 loader 要往上月撈幾天，沒有上界會讓 DateOnly 溢位
+            case Primitive.MinGap or Primitive.MaxConsecutive when c.Params.Days is null or < 1 or > MaxDays:
+                throw Invalid($"約束 {c.Code}：{c.Primitive} 原語必須指定 params.days，且在 1–{MaxDays}");
             case Primitive.Preference when c.Params.Direction is null:
                 throw Invalid($"約束 {c.Code}：Preference 原語必須指定 params.direction");
         }
@@ -239,6 +273,14 @@ public sealed class SettingsCommands
             NullIfEmpty(c.Scope.DayKinds));
         return c with { Scope = scope, Enabled = severity == Severity.Hard ? c.Enabled : c.Weight > 0 };
     }
+
+    /// <summary>天數類參數的上界：一個月加上最長的跨月尾巴都用不到，再大就只是打錯字。</summary>
+    internal const int MaxDays = 62;
+
+    /// <summary>點數類數值的上界：一個月 31 天全假日也才 62 點。</summary>
+    internal const int MaxPoints = 1000;
+
+    internal const int MaxPerDay = 20;
 
     private static IReadOnlySet<T>? NullIfEmpty<T>(IReadOnlySet<T>? set) => set is { Count: > 0 } ? set : null;
 
