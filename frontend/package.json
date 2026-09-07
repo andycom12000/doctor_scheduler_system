@@ -16,7 +16,8 @@
     "pretypecheck": "npm run api:types",
     "typecheck": "vue-tsc --build",
     "api:types": "openapi-typescript ../api-contract.yaml -o src/api/schema.d.ts",
-    "mock:smoke": "tsx scripts/smoke-mock.ts"
+    "mock:smoke": "tsx scripts/smoke-mock.ts",
+    "api:smoke": "tsx scripts/smoke-mock.ts --target http://localhost:5080"
   },
   "dependencies": {
     "vue": "^3.5.42"

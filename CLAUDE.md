@@ -44,8 +44,14 @@
   設定類 GET 是 repository 直接回傳，沒有查詢類別。寫入走 `IUnitOfWork.CommitAsync`：
   repository 只登記變更、不落盤。**寫入 handler 尚未開始**；PUT 約束時要把範圍的空陣列
   正規化成 null（Persistence 拒收空集合）
-- `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
-  `Scheduler.Api` 只接了 Persistence 的啟動流程與 `/api/health`
+- `Scheduler.Api` 的**讀取路徑**已落地：`ApiHost.BuildAsync(ApiHostOptions)` 是唯一的 pipeline 組裝
+  （含資料庫啟動流程與 Application 的 DI 註冊；`UseTestServer` 給 Shell 與測試用，`Connection` 給
+  in-memory 測試用），`Program.cs` 只剩兩行。`Contracts/`（手寫 DTO、列舉的契約字串、Domain → DTO
+  對應）、`Endpoints/ReadEndpoints`（19 個讀取端點與 validate）、`Http/`（`SchedulerException` →
+  `ErrorResponse` 的 middleware，ErrorCode → 狀態碼只寫在這；路徑與查詢參數一律以字串接、自己解析，
+  格式錯誤統一 422 `INVALID_REQUEST`）。契約標 `[X, null]` 的必要欄位要輸出 null，可省略的欄位用
+  `WhenWritingNull` 逐一標，不設全域 ignore。寫入、匯出、求解端點尚未接
+- `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
@@ -68,12 +74,17 @@ Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shel
 與 ADR-0004，動工前先讀。
 `tests/Scheduler.Domain.Tests` 驗證九原語與違規檢查器的行為，fixture 全用出廠值憑空造。
 `tests/Scheduler.Application.Tests` 用記憶體內的假 repository（`InMemoryStore`）驗證 loader 分支與讀取查詢。
+`tests/Scheduler.Api.Tests` 是契約守法測試：`ApiFixture` 用 TestServer + SQLite in-memory 把 Api 跑起來，
+`ContractSchema` 把 `api-contract.yaml` 轉成 JSON Schema（`components/schemas` 搬進 `$defs`、
+`$ref` 改寫、`format: date` 檢查開著），每個端點的回應都驗形狀與狀態碼。新端點要跟著加一個測試。
+`frontend/scripts/smoke-mock.ts` 加了 `--target`：`npm run mock:smoke` 打 MSW、`npm run api:smoke`
+打 :5080 的真後端，同一份斷言兩邊各跑一次找漂移；依賴 mock 種子或尚未落地端點的段落標 mock-only。
 
 ## 指令
 
 ```bash
 dotnet build                              # 建置全部
-dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層測試
+dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層 + 契約守法測試
 dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
 
 cd frontend
@@ -81,6 +92,8 @@ npm run dev          # :5173，/api proxy 到 :5080
 npm run dev:mock     # :5173，/api 由 MSW 攔截，不需後端
 npm run build        # 型別檢查 + 建置到 ../src/Scheduler.Shell/wwwroot
 npm run api:types    # 由 api-contract.yaml 生成 src/api/schema.d.ts
+npm run mock:smoke   # 同一份煙霧斷言打 MSW mock
+npm run api:smoke    # 同一份煙霧斷言打 :5080 真後端（先 dotnet run）
 ```
 
 發佈：`pwsh build/fetch-webview2.ps1`（一次性）→ `pwsh build/publish.ps1`

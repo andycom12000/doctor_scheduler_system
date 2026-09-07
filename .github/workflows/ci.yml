@@ -51,6 +51,8 @@ jobs:
           dotnet restore tests/Scheduler.ArchitectureTests/Scheduler.ArchitectureTests.csproj
           dotnet restore tests/Scheduler.Domain.Tests/Scheduler.Domain.Tests.csproj
           dotnet restore tests/Scheduler.Persistence.Tests/Scheduler.Persistence.Tests.csproj
+          dotnet restore tests/Scheduler.Application.Tests/Scheduler.Application.Tests.csproj
+          dotnet restore tests/Scheduler.Api.Tests/Scheduler.Api.Tests.csproj
 
       - name: 建置
         run: dotnet build src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --no-restore
@@ -74,6 +76,11 @@ jobs:
       # SchedulingContextLoader 的跨月／凍結分支與讀取類查詢，跑在記憶體內的假 repository 上。
       - name: 應用層測試
         run: dotnet test tests/Scheduler.Application.Tests/Scheduler.Application.Tests.csproj --configuration Release
+
+      # 契約守法（ARCHITECTURE §7）：把 Scheduler.Api 用 TestServer 跑起來逐個 endpoint 打，
+      # 回應 JSON 用 api-contract.yaml 的 schema 驗。契約改了、DTO 沒跟上，在這裡失敗。
+      - name: 契約守法測試
+        run: dotnet test tests/Scheduler.Api.Tests/Scheduler.Api.Tests.csproj --configuration Release
 
   # ---------------------------------------------------------------------------
   # 前端。ubuntu runner（1x 計費）。
