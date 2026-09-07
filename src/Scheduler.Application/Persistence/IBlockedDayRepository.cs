@@ -17,4 +17,7 @@ public interface IBlockedDayRepository
 
     /// <summary>取消登記。不存在時不動作。</summary>
     Task RemoveAsync(BlockedDay blockedDay, CancellationToken cancellationToken = default);
+
+    /// <summary>刪除人員時級聯清掉他所有月份的登記（契約 <c>deleteStaff</c>：登記是求解輸入，不是歷史事實）。回傳清掉幾筆。</summary>
+    Task<int> RemoveAllForStaffAsync(string staffId, CancellationToken cancellationToken = default);
 }

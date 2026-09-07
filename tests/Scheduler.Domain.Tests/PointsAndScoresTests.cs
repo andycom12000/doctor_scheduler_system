@@ -128,8 +128,7 @@ public class PointsAndScoresTests
             .WithDuties("r1", "area-a", 5, 12)
             .Build();
 
-        var carry = new ScheduleScores(ctx).SettleCarryOver(DefaultConstraints.Settings[DefaultConstraints.S1QuotaFairness].Scope)
-            .ToDictionary(c => c.StaffId, c => c.Points);
+        var carry = CarryOverSettlement.Settle(ctx).ToDictionary(c => c.StaffId, c => c.Points);
 
         Assert.Equal(0, carry["pgy1"]);
         Assert.Equal(5, carry["r1"]);

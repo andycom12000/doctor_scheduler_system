@@ -90,21 +90,38 @@ public sealed class ApiFixture : IAsyncLifetime
     }
 
     /// <summary>打一個端點、驗狀態碼、用契約 schema 驗回應本體，回傳解析後的 JSON。</summary>
-    public async Task<JsonNode> CallAsync(HttpMethod method, string path, string operationId, HttpStatusCode expected)
+    public Task<JsonNode> CallAsync(HttpMethod method, string path, string operationId, HttpStatusCode expected) =>
+        SendAsync(method, path, body: null, operationId, expected)!;
+
+    /// <summary>帶 JSON 本體的版本。<paramref name="body"/> 是原始 JSON 字串，故意壞掉的本體也送得出去。</summary>
+    public async Task<JsonNode> SendAsync(HttpMethod method, string path, string? body, string operationId, HttpStatusCode expected)
     {
-        using var response = await Client.SendAsync(new HttpRequestMessage(method, path));
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.True(expected == response.StatusCode, $"{method} {path} 應回 {(int)expected}，實際 {(int)response.StatusCode}：{body}");
+        using var request = new HttpRequestMessage(method, path);
+        if (body is not null)
+        {
+            request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+        }
+
+        using var response = await Client.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.True(expected == response.StatusCode, $"{method} {path} 應回 {(int)expected}，實際 {(int)response.StatusCode}：{text}");
+        if (expected == HttpStatusCode.NoContent)
+        {
+            Assert.Equal(string.Empty, text);
+            Assert.True(ContractSchema.Current.HasResponse(operationId, 204), $"契約的 {operationId} 沒有定義 204");
+            return new JsonObject();
+        }
+
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
 
-        var json = JsonNode.Parse(body);
+        var json = JsonNode.Parse(text);
         // 契約有定義該狀態碼就用它的 schema；沒列的（目前是 422）用 ErrorResponse 元件驗。
         var errors = ContractSchema.Current.HasResponse(operationId, (int)expected)
             ? ContractSchema.Current.Validate(operationId, (int)expected, json)
             : (int)expected >= 400
                 ? ContractSchema.Current.ValidateComponent("ErrorResponse", json)
                 : throw new InvalidOperationException($"契約的 {operationId} 沒有定義 {(int)expected} 回應");
-        Assert.True(errors.Count == 0, $"{method} {path} 的回應不符契約 {operationId}/{(int)expected}：\n" + string.Join("\n", errors) + "\n本體：" + body);
+        Assert.True(errors.Count == 0, $"{method} {path} 的回應不符契約 {operationId}/{(int)expected}：\n" + string.Join("\n", errors) + "\n本體：" + text);
         return json!;
     }
 

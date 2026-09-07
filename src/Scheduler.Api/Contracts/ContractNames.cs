@@ -100,6 +100,41 @@ internal static class ContractNames
         _ => throw Unknown(v),
     };
 
+    // ---- 寫入本體的反向解析：不認得的值回 null，由 RequestMapper 回 422 ----
+
+    public static PointType? ToPointType(string s) => s switch
+    {
+        "A" => PointType.A,
+        "B" => PointType.B,
+        _ => null,
+    };
+
+    public static DayKind? ToDayKind(string s) => s switch
+    {
+        "weekday" => DayKind.Weekday,
+        "holiday" => DayKind.Holiday,
+        "publicHoliday" => DayKind.PublicHoliday,
+        _ => null,
+    };
+
+    public static Primitive? ToPrimitive(string s) =>
+        Enum.TryParse<Primitive>(s, ignoreCase: false, out var v) && Enum.IsDefined(v) ? v : null;
+
+    public static Metric? ToMetric(string s) => s switch
+    {
+        "quota_point" => Metric.QuotaPoint,
+        "fairness_point" => Metric.FairnessPoint,
+        "duty_day" => Metric.DutyDay,
+        _ => null,
+    };
+
+    public static PreferenceDirection? ToPreferenceDirection(string s) => s switch
+    {
+        "prefer" => PreferenceDirection.Prefer,
+        "avoid" => PreferenceDirection.Avoid,
+        _ => null,
+    };
+
     /// <summary>契約沒有任何 5xx；SolverFailed 沒有契約上的狀態碼，只能是 500。</summary>
     public static int StatusOf(ErrorCode v) => v switch
     {

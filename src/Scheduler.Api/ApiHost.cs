@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Scheduler.Api.Endpoints;
 using Scheduler.Api.Http;
 using Scheduler.Application.BlockedDays;
@@ -8,6 +9,7 @@ using Scheduler.Application.Calendars;
 using Scheduler.Application.People;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Scheduling;
+using Scheduler.Application.Settings;
 using Scheduler.Persistence;
 
 namespace Scheduler.Api;
@@ -80,6 +82,7 @@ public static class ApiHost
 
         app.UseSchedulerErrors();
         app.MapReadEndpoints();
+        app.MapWriteEndpoints();
 
         return app;
     }
@@ -92,5 +95,12 @@ public static class ApiHost
         services.AddScoped<BlockedDayQueries>();
         services.AddScoped<StaffQueries>();
         services.AddScoped<CalendarQueries>();
+        services.AddScoped<ScheduleCommands>();
+        services.AddScoped<BlockedDayCommands>();
+        services.AddScoped<SettingsCommands>();
+        services.AddScoped<CalendarCommands>();
+        services.AddScoped<StaffCommands>();
+        // 發布時間戳由這裡拿，測試可換成固定時鐘。
+        services.TryAddSingleton(TimeProvider.System);
     }
 }

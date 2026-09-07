@@ -108,7 +108,7 @@ async function main() {
 
     }
 
-    await mockOnly('2b. PATCH /calendars/2026/2026-11-05', '寫入端點尚未落地', async () => {
+    await mockOnly('2b. PATCH /calendars/2026/2026-11-05', '會在真後端留下一筆行事曆覆寫', async () => {
       // 刻意挑 seed 月（2026-08／2026-09）以外的日期——這支腳本後面還會斷言
       // 額度點數與公平性點數，若覆寫落在 seed 月內會汙染那些數字。
       const overridden = await fetch(`${BASE}/calendars/2026/2026-11-05`, {
@@ -136,6 +136,34 @@ async function main() {
       }
     }
 
+    console.log('3b. 人員新增 → 編輯 → 停用 → 刪除（往返一圈，不留痕）')
+    {
+      const employeeNo = `SMOKE-${Date.now()}`
+      const json = (body: unknown) => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const created = await fetch(`${BASE}/staff`, { method: 'POST', ...json({ employeeNo, name: '煙霧測試', rankCode: 'R2' }) })
+      assert(created.status === 201, 'POST /staff → 201')
+      const staff = (await created.json()) as { id: string; status: string; eligibleAreaTypes: string[] }
+      assert(staff.status === 'active', '新增後為在職')
+      assert(staff.eligibleAreaTypes.includes('ICU'), 'R2 的可值類型由資格矩陣推出含 ICU')
+
+      const dup = await fetch(`${BASE}/staff`, { method: 'POST', ...json({ employeeNo, name: '撞員編', rankCode: 'R3' }) })
+      assert(dup.status === 409, '員編重複 → 409')
+      assert(((await dup.json()) as { error: { code: string } }).error.code === 'EMPLOYEE_NO_TAKEN', '錯誤碼 EMPLOYEE_NO_TAKEN')
+
+      const updated = await fetch(`${BASE}/staff/${staff.id}`, { method: 'PATCH', ...json({ employeeNo, name: '改名', rankCode: 'R4' }) })
+      assert(updated.status === 200, 'PATCH /staff/:id → 200')
+      const updatedBody = (await updated.json()) as { name: string; eligibleAreaTypes: string[] }
+      assert(updatedBody.name === '改名' && updatedBody.eligibleAreaTypes.includes('CHIEF'), '換身分後可值類型重算')
+
+      const inactive = await fetch(`${BASE}/staff/${staff.id}/status`, { method: 'PATCH', ...json({ status: 'inactive' }) })
+      assert(inactive.status === 200 && ((await inactive.json()) as { status: string }).status === 'inactive', '停用 → inactive')
+
+      const deleted = await fetch(`${BASE}/staff/${staff.id}`, { method: 'DELETE' })
+      assert(deleted.status === 204, 'DELETE /staff/:id → 204')
+      const gone = await fetch(`${BASE}/staff/${staff.id}`, { method: 'DELETE' })
+      assert(gone.status === 404, '再刪一次 → 404')
+    }
+
     console.log('4. GET /schedules')
     {
       const list = await fetch(`${BASE}/schedules`)
@@ -161,7 +189,7 @@ async function main() {
       revision = body.revision
     })
 
-    await mockOnly('6. PATCH /schedules/2026-09/duties', '寫入端點尚未落地', async () => {
+    await mockOnly('6. PATCH /schedules/2026-09/duties', '依賴 mock 種子的 2026-09 值班表', async () => {
       // 先從當天的值班表挑一位「9/10 沒班」的在職人員，避免撞到同人同日不變式
       const scheduleRes = await fetch(`${BASE}/schedules/2026-09`)
       const schedule = await scheduleRes.json()
@@ -260,15 +288,38 @@ async function main() {
       assert(body.bySupply.length === 3, 'bySupply 有三層巢狀累計')
     }
 
-    await mockOnly('9b. blocked-days PUT/DELETE', '寫入端點尚未落地', async () => {
-      const put = await fetch(`${BASE}/blocked-days/${ym10}/staff-002/2026-10-05`, { method: 'PUT' })
-      assert(put.status === 200, 'PUT blocked-day → 200')
-      const putBody = await put.json()
-      assert(putBody.staffTotals.count === 1, '登記後 count === 1')
+    console.log('9b. blocked-days PUT/DELETE（登記再清除，真後端不留痕）')
+    {
+      // 挑一位在職人員與一個他尚未登記的日子；真後端沒有人員時這段沒東西可打
+      const active = ((await (await fetch(`${BASE}/staff?status=active`)).json()) as { items: Array<{ id: string }> }).items
+      const staffId = active[0]?.id
+      if (!staffId) {
+        console.log('  （沒有在職人員，略過）')
+      } else {
+        const registration = (await (await fetch(`${BASE}/blocked-days/${ym10}`)).json()) as {
+          entries: Array<{ staffId: string; date: string }>
+          byStaff: Array<{ staffId: string; count: number }>
+        }
+        const taken = new Set(registration.entries.filter((e) => e.staffId === staffId).map((e) => e.date))
+        const date = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'].find((d) => !taken.has(d))
+        assert(date, '找得到該人尚未登記的日子')
+        const before = registration.byStaff.find((r) => r.staffId === staffId)?.count ?? 0
 
-      const del = await fetch(`${BASE}/blocked-days/${ym10}/staff-002/2026-10-05`, { method: 'DELETE' })
-      assert(del.status === 200, 'DELETE blocked-day → 200')
-    })
+        const put = await fetch(`${BASE}/blocked-days/${ym10}/${staffId}/${date}`, { method: 'PUT' })
+        assert(put.status === 200, 'PUT blocked-day → 200')
+        const putBody = await put.json()
+        assert(putBody.staffTotals.count === before + 1, '登記後 staffTotals.count 加 1')
+        assert(typeof putBody.dateTotals.count === 'number', 'dateTotals.count 是數字')
+
+        const del = await fetch(`${BASE}/blocked-days/${ym10}/${staffId}/${date}`, { method: 'DELETE' })
+        assert(del.status === 200, 'DELETE blocked-day → 200')
+        const delBody = await del.json()
+        assert(delBody.staffTotals.count === before, '清除後回到原本的 count')
+
+        const again = await fetch(`${BASE}/blocked-days/${ym10}/${staffId}/${date}`, { method: 'DELETE' })
+        assert(again.status === 200, '未登記的格子再清一次仍 200（冪等）')
+      }
+    }
 
     let jobId = ''
     let variantId = ''
@@ -311,7 +362,7 @@ async function main() {
       assert(new Set(ids).size === 3, '三份變體 id 各不相同')
     })
 
-    await mockOnly('12. POST /schedules/2026-10/apply-variant', '寫入端點尚未落地', async () => {
+    await mockOnly('12. POST /schedules/2026-10/apply-variant', '求解端點尚未落地', async () => {
       const res = await fetch(`${BASE}/schedules/${ym10}/apply-variant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,7 +374,7 @@ async function main() {
       assert(body.duties.length > 100, '套用後有完整值班清單')
     })
 
-    await mockOnly('13. POST /schedules/2026-10/publish', '寫入端點尚未落地', async () => {
+    await mockOnly('13. POST /schedules/2026-10/publish', '依賴第 12 段套用的變體', async () => {
       const res = await fetch(`${BASE}/schedules/${ym10}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

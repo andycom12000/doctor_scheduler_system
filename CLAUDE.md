@@ -41,16 +41,27 @@
   `BlockedDays/BlockedDayQueries`（登記表、可行性預警；層次由資格矩陣推出，不寫死區域類型）、
   `People/StaffQueries`、`Calendars/CalendarQueries`、`Errors/SchedulerException`（契約錯誤碼）。
   候選人的阻擋理由不重寫規則：把他放進那格跑一次 `ViolationChecker`，多出來的硬違規就是理由。
-  設定類 GET 是 repository 直接回傳，沒有查詢類別。寫入走 `IUnitOfWork.CommitAsync`：
-  repository 只登記變更、不落盤。**寫入 handler 尚未開始**；PUT 約束時要把範圍的空陣列
-  正規化成 null（Persistence 拒收空集合）
+  設定類 GET 是 repository 直接回傳，沒有查詢類別。
+- `Scheduler.Application` 的**寫入路徑**已落地，查詢類旁邊各一個命令類：
+  `Schedules/ScheduleCommands`（setDuty 自動建草稿、swap、publish）、`BlockedDays/BlockedDayCommands`、
+  `Settings/SettingsCommands`（五份文件整份取代 + 逐月覆寫）、`Calendars/CalendarCommands`、
+  `People/StaffCommands`。寫入走 `IUnitOfWork.CommitAsync`：repository 只登記變更、不落盤，
+  一個用例一次 commit。setDuty 只擋結構不變式（同人同日另一區 → `STAFF_ALREADY_ON_DUTY`），
+  硬約束違規照收、回全量違規；publish 用 Domain 的 `CarryOverSettlement` 結算月結轉，
+  第一次發布才寫 `carry_over_applied`（ADR-0004）。設定 PUT 在 `SettingsCommands` 守住讀取路徑
+  對設定形狀的假設（主鍵重複、指到不存在的類型／組、原語缺參數、公平性查表缺列、範圍空陣列
+  正規化成 null），否則一次 PUT 會讓之後每個 GET 都 500。發布時間戳從 DI 的 `TimeProvider` 拿
 - `Scheduler.Api` 的**讀取路徑**已落地：`ApiHost.BuildAsync(ApiHostOptions)` 是唯一的 pipeline 組裝
   （含資料庫啟動流程與 Application 的 DI 註冊；`UseTestServer` 給 Shell 與測試用，`Connection` 給
   in-memory 測試用），`Program.cs` 只剩兩行。`Contracts/`（手寫 DTO、列舉的契約字串、Domain → DTO
   對應）、`Endpoints/ReadEndpoints`（19 個讀取端點與 validate）、`Http/`（`SchedulerException` →
   `ErrorResponse` 的 middleware，ErrorCode → 狀態碼只寫在這；路徑與查詢參數一律以字串接、自己解析，
   格式錯誤統一 422 `INVALID_REQUEST`）。契約標 `[X, null]` 的必要欄位要輸出 null，可省略的欄位用
-  `WhenWritingNull` 逐一標，不設全域 ignore。寫入、匯出、求解端點尚未接
+  `WhenWritingNull` 逐一標，不設全域 ignore。
+  **寫入端點**也已接上：`Endpoints/WriteEndpoints`（22 個）、`Contracts/RequestMapper`（DTO → Domain，
+  缺欄位與不認得的列舉字串是 422）、`Http/RequestBody`（本體自己讀，壞 JSON／空本體統一 422；
+  行事曆覆寫從 `JsonObject` 讀，才分得出 `holidayName` 沒送與送 null）。請求 DTO 的欄位全是
+  nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。匯出與求解端點尚未接
 - `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
@@ -73,12 +84,16 @@ Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shel
 **2026-09-06 拍板、尚未實作的後端設計**全部在 `docs/ARCHITECTURE.md` §3.2、§4.8、§5、§7
 與 ADR-0004，動工前先讀。
 `tests/Scheduler.Domain.Tests` 驗證九原語與違規檢查器的行為，fixture 全用出廠值憑空造。
-`tests/Scheduler.Application.Tests` 用記憶體內的假 repository（`InMemoryStore`）驗證 loader 分支與讀取查詢。
+`tests/Scheduler.Application.Tests` 用記憶體內的假 repository（`InMemoryStore`，也是假的 `IUnitOfWork`）
+驗證 loader 分支、讀取查詢與寫入命令。
 `tests/Scheduler.Api.Tests` 是契約守法測試：`ApiFixture` 用 TestServer + SQLite in-memory 把 Api 跑起來，
 `ContractSchema` 把 `api-contract.yaml` 轉成 JSON Schema（`components/schemas` 搬進 `$defs`、
-`$ref` 改寫、`format: date` 檢查開著），每個端點的回應都驗形狀與狀態碼。新端點要跟著加一個測試。
+`$ref` 改寫、`format: date` 檢查開著），每個端點的回應都驗形狀與狀態碼。新端點要跟著加一個測試。寫入端點的測試在 `WriteEndpointTests`，
+自己一個 class 就有自己的一顆資料庫，每個測試用自己的月份或自己建的人員，不互相踩。
 `frontend/scripts/smoke-mock.ts` 加了 `--target`：`npm run mock:smoke` 打 MSW、`npm run api:smoke`
-打 :5080 的真後端，同一份斷言兩邊各跑一次找漂移；依賴 mock 種子或尚未落地端點的段落標 mock-only。
+打 :5080 的真後端，同一份斷言兩邊各跑一次找漂移；依賴 mock 種子、尚未落地端點、或會在真後端
+留下資料的段落標 mock-only。對真後端的寫入只做「往返一圈不留痕」的段落（人員新增到刪除、
+不可排班日登記再清除）。
 
 ## 指令
 

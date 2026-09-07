@@ -198,6 +198,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: 請求本身無效（兩格是同一格、區域不存在、日期不在本月）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/schedules/{ym}/validate:
     parameters:
@@ -484,15 +489,24 @@ paths:
       tags: [blocked-days]
       operationId: setBlockedDay
       summary: 登記一格
-      description: 筆刷式點格寫入。超過每人每月上限時回 `409`。
+      description: |
+        筆刷式點格寫入。超過每人每月上限時回 `409`。
+        人員不存在回 `404`（人員在路徑上）；日期不在 `ym` 那個月回 `422`。
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BlockedDayMutationResult' }
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           description: 超過每人每月上限
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: 請求本身無效（`INVALID_REQUEST`）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -500,13 +514,20 @@ paths:
       tags: [blocked-days]
       operationId: clearBlockedDay
       summary: 清除一格
-      description: 清除筆刷。對未登記的格子呼叫是冪等的，回 200。
+      description: 清除筆刷。對未登記的格子呼叫是冪等的，回 200。人員不存在回 `404`，日期不在該月回 `422`。
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BlockedDayMutationResult' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: 請求本身無效（`INVALID_REQUEST`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/blocked-days/{ym}/feasibility:
     parameters:
@@ -917,7 +938,12 @@ paths:
       tags: [settings]
       operationId: overrideCalendarDay
       summary: 覆寫單日的假日屬性
-      description: 用於補班日修正與臨時放假。內建行事曆每年更新，覆寫處理例外。
+      description: |
+        用於補班日修正與臨時放假。內建行事曆每年更新，覆寫處理例外。
+        沒送的欄位維持原值；`holidayName` 送 `null` 才會清掉。補班日視為平日：
+        `isMakeUpWorkday: true` 而 `isHoliday` 沒送時，`isHoliday` 跟著變 false。
+        兩者同時為 true、或 `isPublicHoliday` 為 true 而 `isHoliday` 為 false，回 `422`；
+        路徑上的 `year` 與 `date` 的年份不一致也是 `422`。
       requestBody:
         required: true
         content:
@@ -929,6 +955,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CalendarDay' }
+        '422':
+          description: 請求本身無效（`INVALID_REQUEST`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   # ===========================================================================
   # 人員
@@ -1052,6 +1083,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Staff' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: 請求本身無效（`INVALID_REQUEST`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
 # =============================================================================
 components:

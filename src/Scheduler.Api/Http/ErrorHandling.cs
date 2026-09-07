@@ -45,6 +45,10 @@ internal static class Parse
 
     public static DateOnly? OptionalDate(string? date) => date is null ? null : Date(date);
 
+    /// <summary><c>/calendars/{year}/{date}</c>：路徑上的年份與日期要一致。</summary>
+    public static DateOnly DateInYear(int year, DateOnly date) =>
+        date.Year == year ? date : throw new SchedulerException(ErrorCode.InvalidRequest, $"{date:yyyy-MM-dd} 不在 {year} 年");
+
     public static int Year(string year) =>
         int.TryParse(year, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value is >= 1 and <= 9999
             ? value

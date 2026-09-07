@@ -114,7 +114,8 @@ public sealed record AreaSettingsDto(IReadOnlyList<AreaTypeDto> AreaTypes, IRead
 
 public sealed record AreaTypeDto(string Code, string Name);
 
-public sealed record AreaDto(string Id, string Code, string Name, string AreaTypeCode, int RequiredPerDay);
+// 設定類 DTO 同時當 GET 的回應與 PUT 的請求。值型別欄位一律 nullable：缺欄位要 422，不能讓反序列化默默塞 0／false。
+public sealed record AreaDto(string Id, string Code, string Name, string AreaTypeCode, int? RequiredPerDay);
 
 public sealed record RankSettingsDto(IReadOnlyList<RankDto> Ranks, IReadOnlyList<RankGroupDto> Groups);
 
@@ -126,15 +127,15 @@ public sealed record EligibilityMatrixDto(IReadOnlyDictionary<string, IReadOnlyD
 
 public sealed record PointRulesDto(QuotaPointRuleDto Quota, FairnessPointRuleDto Fairness);
 
-public sealed record QuotaPointRuleDto(int Weekday, int Holiday);
+public sealed record QuotaPointRuleDto(int? Weekday, int? Holiday);
 
 public sealed record FairnessPointRuleDto(
     IReadOnlyDictionary<string, IReadOnlyList<FairnessTableEntryDto>> Tables,
     ConsecutiveSaturdayBonusDto ConsecutiveSaturdayBonus);
 
-public sealed record FairnessTableEntryDto(string Today, string Tomorrow, int Points);
+public sealed record FairnessTableEntryDto(string Today, string Tomorrow, int? Points);
 
-public sealed record ConsecutiveSaturdayBonusDto(int Points, int WindowDays);
+public sealed record ConsecutiveSaturdayBonusDto(int? Points, int? WindowDays);
 
 public sealed record ConstraintSettingsDto(IReadOnlyList<HardConstraintDto> Hard, IReadOnlyList<SoftConstraintDto> Soft);
 
@@ -142,7 +143,7 @@ public sealed record HardConstraintDto(
     string Code,
     string Name,
     string Primitive,
-    bool Enabled,
+    bool? Enabled,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConstraintScopeDto? Scope,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Metric,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConstraintParamsDto? Params);
@@ -151,7 +152,7 @@ public sealed record SoftConstraintDto(
     string Code,
     string Name,
     string Primitive,
-    int Weight,
+    int? Weight,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConstraintScopeDto? Scope,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Metric,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ConstraintParamsDto? Params);
@@ -190,3 +191,33 @@ public sealed record StaffListDto(IReadOnlyList<StaffDto> Items, StaffCountsDto 
 public sealed record StaffCountsDto(int Active, int Inactive);
 
 public sealed record StaffDto(string Id, string EmployeeNo, string Name, string RankCode, string Status, IReadOnlyList<string> EligibleAreaTypes);
+
+// -- 寫入請求 -------------------------------------------------------------
+// 請求本體一律由 Http/RequestBody 讀進來，型別是 nullable 的原因見那裡：缺欄位要回 422 而不是 400。
+
+public sealed record SetDutyRequestDto(string? AreaId, string? Date, string? StaffId);
+
+public sealed record CellRefDto(string? AreaId, string? Date);
+
+public sealed record SwapDutiesRequestDto(CellRefDto? A, CellRefDto? B);
+
+public sealed record PublishRequestDto(bool? AcknowledgeViolations);
+
+public sealed record MutationResultDto(int Revision, IReadOnlyList<MutatedCellDto> Duties, IReadOnlyList<ViolationDto> Violations);
+
+public sealed record MutatedCellDto(string AreaId, DateOnly Date, string? StaffId, string CellKey);
+
+public sealed record PublishResultDto(string Status, DateTimeOffset PublishedAt, int Revision, IReadOnlyList<CarryOverEntryDto> CarryOver);
+
+public sealed record CarryOverEntryDto(string StaffId, int Points);
+
+public sealed record BlockedDayMutationResultDto(BlockedDayStaffTotalsDto StaffTotals, BlockedDayDateTotalsDto DateTotals);
+
+public sealed record BlockedDayStaffTotalsDto(int Count, int Remaining);
+
+public sealed record BlockedDayDateTotalsDto(int Count);
+
+public sealed record StaffWriteDto(string? EmployeeNo, string? Name, string? RankCode);
+
+public sealed record StaffStatusRequestDto(string? Status);
+
