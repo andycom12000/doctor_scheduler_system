@@ -176,6 +176,14 @@ internal static class RequestMapper
 
     // ---- helpers ----
 
+    // -- 求解 -----------------------------------------------------------------
+
+    public static (YearMonth Month, int? VariantCount, int? TimeLimitSecPerVariant) ToCommand(this CreateSolverJobRequestDto dto) =>
+        (Parse.YearMonth(Required(dto.YearMonth, "yearMonth")), dto.VariantCount, dto.TimeLimitSecPerVariant);
+
+    public static (string JobId, string VariantId) ToCommand(this ApplyVariantRequestDto dto) =>
+        (Required(dto.JobId, "jobId"), Required(dto.VariantId, "variantId"));
+
     private static string Required(string? value, string name) =>
         string.IsNullOrWhiteSpace(value) ? throw Missing(name) : value;
 

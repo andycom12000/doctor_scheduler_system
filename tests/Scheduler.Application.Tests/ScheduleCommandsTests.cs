@@ -12,7 +12,7 @@ public class ScheduleCommandsTests
     private static readonly DateTimeOffset Now = new(2026, 9, 28, 10, 0, 0, TimeSpan.FromHours(8));
 
     private static ScheduleCommands CommandsOf(InMemoryStore store) =>
-        new(store, store.Loader, store, new FixedClock(Now));
+        new(store, store, store.Loader, store, new FixedClock(Now));
 
     private static DateOnly D(int day) => new(2026, 10, day);
 
@@ -229,6 +229,69 @@ public class ScheduleCommandsTests
         var ex = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).PublishAsync(Oct, false));
 
         Assert.Equal(ErrorCode.NotFound, ex.Code);
+    }
+
+    // ---- 套用變體 ----
+
+    private static InMemoryStore WithVariant(InMemoryStore store, YearMonth month, string jobId = "job-1", string variantId = "v-a")
+    {
+        store.Jobs[jobId] = new Solving.SolverJobRecord(jobId, month, Solving.SolverJobStatus.Succeeded, 1, 15, Now, Now, Now, 1, null, Array.Empty<string>(), null, null);
+        store.Variants.Add(new Solving.VariantRecord(jobId, variantId, "重視公平", new Dictionary<string, double>(),
+            new Solving.VariantMetrics(0, 0, 0, 0, null), 0, 0,
+            new[] { new Duty("area-icu", new DateOnly(month.Year, month.Month, 3), "s1"), new Duty("area-a", new DateOnly(month.Year, month.Month, 7), "s1") }));
+        return store;
+    }
+
+    [Fact]
+    public async Task applyVariant_整月格子全部換成變體的_沒有值班表時建草稿()
+    {
+        var store = WithVariant(new InMemoryStore().WithStaff("s1", DefaultRanks.R2), Oct);
+
+        var view = await CommandsOf(store).ApplyVariantAsync(Oct, "job-1", "v-a");
+
+        Assert.Equal(ScheduleStatus.Draft, view.Status);
+        Assert.Equal(1, view.Revision);
+        Assert.Equal(2, view.Duties.Count);
+        Assert.Equal(2, store.Duties.Count);
+        Assert.Equal(1, store.Commits);
+    }
+
+    [Fact]
+    public async Task applyVariant_既有草稿的格子被整份覆蓋_revision_遞增()
+    {
+        var store = WithVariant(new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithDraft(Oct).WithDuty("area-b", D(20), "s1"), Oct);
+        store.Headers[Oct] = store.Headers[Oct] with { Revision = 4 };
+
+        var view = await CommandsOf(store).ApplyVariantAsync(Oct, "job-1", "v-a");
+
+        Assert.Equal(5, view.Revision);
+        Assert.DoesNotContain(store.Duties, d => d.AreaId == "area-b");
+        Assert.Equal(2, store.Duties.Count);
+    }
+
+    [Fact]
+    public async Task applyVariant_已發布_409()
+    {
+        var store = WithVariant(new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithPublished(Oct), Oct);
+
+        var ex = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ApplyVariantAsync(Oct, "job-1", "v-a"));
+
+        Assert.Equal(ErrorCode.ScheduleAlreadyPublished, ex.Code);
+        Assert.Empty(store.Duties);
+    }
+
+    [Fact]
+    public async Task applyVariant_job_或變體不存在_404_月份不符_422()
+    {
+        var store = WithVariant(new InMemoryStore().WithStaff("s1", DefaultRanks.R2), Sep);
+
+        var missingJob = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ApplyVariantAsync(Sep, "job-x", "v-a"));
+        Assert.Equal(ErrorCode.NotFound, missingJob.Code);
+        var missingVariant = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ApplyVariantAsync(Sep, "job-1", "v-z"));
+        Assert.Equal(ErrorCode.NotFound, missingVariant.Code);
+        var wrongMonth = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ApplyVariantAsync(Oct, "job-1", "v-a"));
+        Assert.Equal(ErrorCode.InvalidRequest, wrongMonth.Code);
+        Assert.Equal(0, store.Commits);
     }
 }
 

@@ -21,6 +21,8 @@ public sealed class ReadEndpointTests : IClassFixture<ApiFixture>
     {
         var body = await _api.GetAsync("/api/health", "getHealth");
         Assert.Equal("ok", body["status"]!.GetValue<string>());
+        // 順便探了 SQLite native 程式庫：portable 發佈最容易斷的那條路
+        Assert.Matches(@"^\d+\.\d+", body["sqliteVersion"]!.GetValue<string>());
     }
 
     // -- 值班表 -------------------------------------------------------------

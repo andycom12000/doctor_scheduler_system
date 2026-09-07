@@ -4,6 +4,7 @@ using Scheduler.Application.Errors;
 using Scheduler.Application.People;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Settings;
+using Scheduler.Application.Solving;
 using Scheduler.Domain.Constraints;
 using Scheduler.Domain.Model;
 using Scheduler.Domain.Validation;
@@ -181,4 +182,39 @@ internal static class ContractMapper
 
     public static StaffDto ToContract(this StaffView s) =>
         new(s.Id, s.EmployeeNo, s.Name, s.RankCode, ContractNames.Of(s.Status), s.EligibleAreaTypes);
+
+    // -- 求解 -----------------------------------------------------------------
+
+    public static SolverJobDto ToContract(this SolverJobView v)
+    {
+        var r = v.Record;
+        return new SolverJobDto(
+            r.JobId,
+            r.YearMonth.ToString(),
+            ContractNames.Of(r.Status),
+            r.VariantCount,
+            r.ElapsedSec ?? 0,
+            r.Scale is null ? null : new SolverScaleDto(r.Scale.Staff, r.Scale.Areas, r.Scale.Days, r.Scale.Variables),
+            r.ConstraintCount is null ? null : new ConstraintCountDto(r.ConstraintCount.Hard, r.ConstraintCount.Soft),
+            v.Progress.ToContract(),
+            r.Warnings,
+            r.FailureReason);
+    }
+
+    public static SolverProgressDto ToContract(this SolverProgressSnapshot p) =>
+        new(p.JobId, ContractNames.Of(p.Status), p.VariantIndex, p.VariantCount, p.ElapsedSec, p.TimeLimitSec, p.SolutionCount, p.BestObjective, p.BestBound, p.Gap);
+
+    public static VariantListDto ToContract(this IReadOnlyList<VariantRecord> variants) =>
+        new(variants.Select(ToContract).ToArray());
+
+    public static VariantDto ToContract(this VariantRecord v) =>
+        new(
+            v.Id,
+            v.Label,
+            VariantProfiles.All.FirstOrDefault(p => p.Id == v.Id)?.Description ?? "",
+            v.WeightProfile,
+            new VariantMetricsDto(v.Metrics.Vacancies, v.Metrics.QuotaFairness, v.Metrics.AreaConsistency, v.Metrics.RankPreference, v.Metrics.FairnessPoint),
+            v.HardViolationCount,
+            v.SoftScore,
+            v.Duties.Select(d => new DutyDto(d.AreaId, d.Date, d.StaffId, Domain.Scheduling.CellKey.Area(d))).ToArray());
 }

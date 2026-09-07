@@ -46,7 +46,7 @@ export function subscribe(
   }
 
   // --- 開發期 / 雲端版：SSE ---
-  const source = new EventSource(`/api/jobs/${jobId}/stream`)
+  const source = new EventSource(`/api/solver-jobs/${jobId}/stream`)
   source.onmessage = (event) => {
     const payload = normalize(JSON.parse(event.data))
     if (payload) onEvent(payload)

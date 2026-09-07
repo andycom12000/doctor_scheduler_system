@@ -4,13 +4,16 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Scheduler.Api.Endpoints;
 using Scheduler.Api.Http;
+using Scheduler.Api.Solving;
 using Scheduler.Application.BlockedDays;
 using Scheduler.Application.Calendars;
 using Scheduler.Application.People;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Scheduling;
 using Scheduler.Application.Settings;
+using Scheduler.Application.Solving;
 using Scheduler.Persistence;
+using Scheduler.Solver;
 
 namespace Scheduler.Api;
 
@@ -26,11 +29,15 @@ namespace Scheduler.Api;
 /// 覆寫 Persistence 的註冊（測試用 in-memory 資料庫：自己 <c>AddSchedulerPersistence(connection)</c>）。
 /// 有給時 <paramref name="DatabasePath"/> 不看。用委派而不是直接收連線型別，Api 的公開介面才不會漏出 Persistence 的型別。
 /// </param>
+/// <param name="ConfigureServices">
+/// 在 Application 與 Solver 註冊之後再跑的覆寫，測試用來把 <see cref="ISolver"/> 換成假的。
+/// </param>
 /// <param name="Args">命令列參數，開發期 <c>dotnet run</c> 用。</param>
 public sealed record ApiHostOptions(
     bool UseTestServer = false,
     string? DatabasePath = null,
     Action<IServiceCollection>? ConfigurePersistence = null,
+    Action<IServiceCollection>? ConfigureServices = null,
     string[]? Args = null);
 
 /// <summary>
@@ -66,6 +73,7 @@ public static class ApiHost
         }
 
         AddApplication(builder.Services);
+        options.ConfigureServices?.Invoke(builder.Services);
 
         builder.Services.ConfigureHttpJsonOptions(o =>
         {
@@ -83,6 +91,7 @@ public static class ApiHost
         app.UseSchedulerErrors();
         app.MapReadEndpoints();
         app.MapWriteEndpoints();
+        app.MapSolverEndpoints();
 
         return app;
     }
@@ -102,5 +111,10 @@ public static class ApiHost
         services.AddScoped<StaffCommands>();
         // 發布時間戳由這裡拿，測試可換成固定時鐘。
         services.TryAddSingleton(TimeProvider.System);
+
+        // 求解：迴圈與狀態機是 singleton（單一 slot），CP-SAT 實作只在 Solver 專案；背景落盤透過 scope factory 拿 scoped 服務。
+        services.TryAddSingleton<ISolver, CpSatSolver>();
+        services.AddSingleton<ISolverScopeFactory, ServiceProviderSolverScopeFactory>();
+        services.AddSingleton<SolverJobService>();
     }
 }

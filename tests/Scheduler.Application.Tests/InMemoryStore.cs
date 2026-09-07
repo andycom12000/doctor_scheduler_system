@@ -2,6 +2,7 @@ using Scheduler.Application.Persistence;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Scheduling;
 using Scheduler.Application.Settings;
+using Scheduler.Application.Solving;
 using Scheduler.Domain.Constraints;
 using Scheduler.Domain.Defaults;
 using Scheduler.Domain.Model;
@@ -13,7 +14,7 @@ namespace Scheduler.Application.Tests;
 /// 不在乎 SQL。設定全部從出廠值起，測試只改自己要的那一項。
 /// 順便記下 <see cref="DutyRangeQueries"/>，好驗證上月尾巴撈了幾天。
 /// </summary>
-public sealed class InMemoryStore : IScheduleRepository, IBlockedDayRepository, IStaffRepository, ISettingsRepository, ICalendarRepository, IUnitOfWork
+public sealed class InMemoryStore : IScheduleRepository, IBlockedDayRepository, IStaffRepository, ISettingsRepository, ICalendarRepository, ISolverJobRepository, IUnitOfWork, ISolverScopeFactory, ISolverScope
 {
     /// <summary>寫入測試用：handler 呼叫了幾次 <see cref="CommitAsync"/>。記憶體版沒有交易，寫入即生效。</summary>
     public int Commits { get; private set; }
@@ -27,6 +28,8 @@ public sealed class InMemoryStore : IScheduleRepository, IBlockedDayRepository, 
     public Dictionary<DateOnly, CalendarException> CalendarExceptions { get; } = new();
     public Dictionary<YearMonth, MonthlyOverride> Overrides { get; } = new();
     public List<(DateOnly From, DateOnly To)> DutyRangeQueries { get; } = new();
+    public Dictionary<string, SolverJobRecord> Jobs { get; } = new(StringComparer.Ordinal);
+    public List<VariantRecord> Variants { get; } = new();
 
     public AreaSettings Areas { get; set; } = new(DefaultAreas.AreaTypes, DefaultAreas.Areas);
     public RankSettings Ranks { get; set; } = new(DefaultRanks.Groups, DefaultRanks.Ranks);
@@ -273,6 +276,68 @@ public sealed class InMemoryStore : IScheduleRepository, IBlockedDayRepository, 
     {
         CalendarExceptions.Remove(date);
         return Task.CompletedTask;
+    }
+
+    // ---- ISolverJobRepository ----
+
+    public Task<SolverJobRecord?> FindAsync(string jobId, CancellationToken ct = default) =>
+        Task.FromResult(Jobs.GetValueOrDefault(jobId));
+
+    Task<IReadOnlyList<SolverJobRecord>> ISolverJobRepository.ListAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<SolverJobRecord>>(Jobs.Values.OrderByDescending(j => j.CreatedAt).ToArray());
+
+    public Task AddAsync(SolverJobRecord job, CancellationToken ct = default)
+    {
+        Jobs.Add(job.JobId, job);
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAsync(SolverJobRecord job, CancellationToken ct = default)
+    {
+        if (!Jobs.ContainsKey(job.JobId))
+        {
+            throw new KeyNotFoundException(job.JobId);
+        }
+
+        Jobs[job.JobId] = job;
+        return Task.CompletedTask;
+    }
+
+    public Task AddVariantAsync(VariantRecord variant, CancellationToken ct = default)
+    {
+        Variants.Add(variant);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<VariantRecord>> GetVariantsAsync(string jobId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<VariantRecord>>(Variants.Where(v => v.JobId == jobId).ToArray());
+
+    public Task<VariantRecord?> FindVariantAsync(string jobId, string variantId, CancellationToken ct = default) =>
+        Task.FromResult(Variants.FirstOrDefault(v => v.JobId == jobId && v.Id == variantId));
+
+    public Task<int> FailUnfinishedAsync(string reason, DateTimeOffset finishedAt, CancellationToken ct = default)
+    {
+        var unfinished = Jobs.Values.Where(j => j.Status is SolverJobStatus.Queued or SolverJobStatus.Running).ToArray();
+        foreach (var job in unfinished)
+        {
+            Jobs[job.JobId] = job with { Status = SolverJobStatus.Failed, FailureReason = reason, FinishedAt = finishedAt };
+        }
+
+        return Task.FromResult(unfinished.Length);
+    }
+
+    // ---- ISolverScopeFactory / ISolverScope：記憶體版沒有 scope 之分，每次都回自己 ----
+
+    public ISolverScope Create() => this;
+
+    SchedulingContextLoader ISolverScope.Loader => Loader;
+
+    ISolverJobRepository ISolverScope.Jobs => this;
+
+    IUnitOfWork ISolverScope.UnitOfWork => this;
+
+    public void Dispose()
+    {
     }
 
     // ---- IUnitOfWork ----

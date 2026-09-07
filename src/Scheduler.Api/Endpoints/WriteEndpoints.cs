@@ -11,7 +11,7 @@ namespace Scheduler.Api.Endpoints;
 /// <summary>
 /// 寫入路徑的端點。與讀取端點同一條規矩：解參數與本體 → 呼叫 Application → 包回應，
 /// 結構不變式、被引用檢查、月結轉結算都在 Application。
-/// 尚未接的端點見 api-contract.yaml：匯出、求解工作、套用變體。
+/// 求解工作與套用變體在 SolverEndpoints；尚未接的只剩匯出。
 /// </summary>
 internal static class WriteEndpoints
 {

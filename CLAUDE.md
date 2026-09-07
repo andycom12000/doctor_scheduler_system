@@ -61,8 +61,19 @@
   **寫入端點**也已接上：`Endpoints/WriteEndpoints`（22 個）、`Contracts/RequestMapper`（DTO → Domain，
   缺欄位與不認得的列舉字串是 422）、`Http/RequestBody`（本體自己讀，壞 JSON／空本體統一 422；
   行事曆覆寫從 `JsonObject` 讀，才分得出 `holidayName` 沒送與送 null）。請求 DTO 的欄位全是
-  nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。匯出與求解端點尚未接
-- `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗
+  nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。匯出端點尚未接
+- **求解**已落地（ARCHITECTURE §4.8）。`Scheduler.Application/Solving/`：`ISolver`（一次解一份；權重另放
+  `EffectiveWeights`，因為 `ConstraintDefinition.Weight` 上限 100 裝不下乘過 1.5 的數）、`VariantProfiles`
+  （三個具名立場的乘數表、多樣性 15 格）、`SolverJobService`（singleton，單一 slot、狀態機、序列三份、
+  每完成一份就落盤、中止保留已完成的變體、進度用 `System.Threading.Channels` 廣播給訂閱者；背景落盤透過
+  `ISolverScopeFactory` 開 scope，Application 零套件相依所以不直接拿 DI）。變體指標全部由 Domain 重算，
+  Solver 的目標值只給進度看。`Scheduler.Solver/ScheduleModel` 是 CP-SAT 建模器：每個原語一個方法，讀同一份
+  `ConstraintSettings` 與 `ConstraintScope`；覆蓋建成 1e9 罰分的軟項（§4.5）；同人同日一格、同格最多
+  requiredPerDay 人是結構不變式不是約束；連值週六加分是唯一 reified 項。`CpSatSolver` 丟 `Task.Run`、
+  中止用 `StopSearch`。Api 的 `Endpoints/SolverEndpoints`：六個端點含 SSE（`data: {SolverProgress}`，
+  payload 多帶 `jobId` 供前端過濾）與 apply-variant；`ISolver → CpSatSolver` 在 `ApiHost` 註冊，
+  `ApiHostOptions.ConfigureServices` 可換假的。`/api/health` 現在會探 SQLite native
+- `Scheduler.Shell` 只有空 WPF 視窗
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 
@@ -84,8 +95,12 @@ Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shel
 **2026-09-06 拍板、尚未實作的後端設計**全部在 `docs/ARCHITECTURE.md` §3.2、§4.8、§5、§7
 與 ADR-0004，動工前先讀。
 `tests/Scheduler.Domain.Tests` 驗證九原語與違規檢查器的行為，fixture 全用出廠值憑空造。
-`tests/Scheduler.Application.Tests` 用記憶體內的假 repository（`InMemoryStore`，也是假的 `IUnitOfWork`）
-驗證 loader 分支、讀取查詢與寫入命令。
+`tests/Scheduler.Application.Tests` 用記憶體內的假 repository（`InMemoryStore`，也是假的 `IUnitOfWork`
+與 `ISolverScopeFactory`）驗證 loader 分支、讀取查詢、寫入命令與求解狀態機（`SolverJobServiceTests` 用假的
+`ISolver`：乘數、多樣性輸入、busy、中止保留變體、指標由 Domain 算）。
+`tests/Scheduler.Solver.Tests` 是漂移守門（§4.8）：真的跑 CP-SAT，任一輸出丟給 `ViolationChecker`，硬違規只准是
+覆蓋。情境含參考名單 33 人、NP 四條、跨月尾巴、登記爆量、關 H2、多樣性、中止、S7 的 reification。fixture 借
+Domain.Tests 的 `ContextBuilder`。每個 Solver PR 必過，CI 有跑。
 `tests/Scheduler.Api.Tests` 是契約守法測試：`ApiFixture` 用 TestServer + SQLite in-memory 把 Api 跑起來，
 `ContractSchema` 把 `api-contract.yaml` 轉成 JSON Schema（`components/schemas` 搬進 `$defs`、
 `$ref` 改寫、`format: date` 檢查開著），每個端點的回應都驗形狀與狀態碼。新端點要跟著加一個測試。寫入端點的測試在 `WriteEndpointTests`，
@@ -99,7 +114,7 @@ Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shel
 
 ```bash
 dotnet build                              # 建置全部
-dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層 + 契約守法測試
+dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層 + 契約守法 + 求解器漂移守門
 dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
 
 cd frontend
@@ -223,4 +238,4 @@ Single-context —— root 一份 `CONTEXT.md` + `docs/adr/`。前後端是同�
 另一個容易腐爛的地方：**NP 的四條專屬規則幾乎測不到**——NP 只有 1 人且是後備人力，
 真實資料下極少觸發。`tests/Scheduler.Domain.Tests/NpRulesTests.cs` 用憑空造的情境
 守著這四條（含跨月 tail 與豁免名單），動到 NP 規則或 `ConstraintScope` 時先跑它。
-求解器端（`Scheduler.Solver`）對應的測試尚未存在。
+求解器端的對應在 `tests/Scheduler.Solver.Tests/NpRulesSolverTests.cs`（把 NP 逼成唯一人選）。

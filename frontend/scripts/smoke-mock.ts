@@ -323,7 +323,7 @@ async function main() {
 
     let jobId = ''
     let variantId = ''
-    await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '求解端點尚未落地', async () => {
+    await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '會在真後端留下求解紀錄（依設計全部保留），且真後端沒有人員種子', async () => {
       const res = await fetch(`${BASE}/solver-jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -352,7 +352,7 @@ async function main() {
       assert(status === 'succeeded', `求解工作在期限內完成（最終狀態：${status}）`)
     })
 
-    await mockOnly('11. GET /solver-jobs/:jobId/variants', '求解端點尚未落地', async () => {
+    await mockOnly('11. GET /solver-jobs/:jobId/variants', '依賴第 10 段的工作', async () => {
       const res = await fetch(`${BASE}/solver-jobs/${jobId}/variants`)
       assert(res.status === 200, 'GET variants → 200')
       const body = await res.json()
@@ -362,7 +362,7 @@ async function main() {
       assert(new Set(ids).size === 3, '三份變體 id 各不相同')
     })
 
-    await mockOnly('12. POST /schedules/2026-10/apply-variant', '求解端點尚未落地', async () => {
+    await mockOnly('12. POST /schedules/2026-10/apply-variant', '依賴第 11 段的變體', async () => {
       const res = await fetch(`${BASE}/schedules/${ym10}/apply-variant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
