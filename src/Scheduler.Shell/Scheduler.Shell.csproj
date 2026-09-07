@@ -25,7 +25,10 @@
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
     <!--
       Scheduler.Api 是可執行專案（開發期 dotnet run 用），self-contained 的 Shell 引用 framework-dependent 的
-      exe 會被 NETSDK1150 擋下。這裡只拿它當類別庫用，Api 自己的 apphost 不會進發佈包，關掉這個檢查即可。
+      exe 會被 NETSDK1150 擋下。這裡只拿它當類別庫用，關掉這個檢查即可。
+      注意：Scheduler.Api.exe／.runtimeconfig.json／.deps.json 仍會被複製進輸出與 publish 產物；那顆 exe 在
+      self-contained 版面裡跑不起來（找不到框架，只會跳「You must install .NET」），無害但多餘，
+      由 build/publish.ps1 在打包時清掉（發佈包 PR 處理）。
     -->
     <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
   </PropertyGroup>

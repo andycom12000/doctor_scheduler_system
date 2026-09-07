@@ -24,7 +24,7 @@ export default defineConfig({
 
   build: {
     target: WEBVIEW2_CHROMIUM_TARGET,
-    // 正式版由 WPF 殼以虛擬主機對應提供靜態檔，故直接輸出到殼的 wwwroot。
+    // 正式版由 WPF 殼在 WebResourceRequested 裡讀 wwwroot 回靜態檔（ARCHITECTURE §6.2），故直接輸出到殼的 wwwroot。
     outDir: '../src/Scheduler.Shell/wwwroot',
     emptyOutDir: true,
     sourcemap: true,

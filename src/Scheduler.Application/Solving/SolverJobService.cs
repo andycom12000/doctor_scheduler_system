@@ -228,7 +228,8 @@ public sealed class SolverJobService
     }
 
     /// <summary>
-    /// 訂閱所有工作的進度，不指定 jobId、不重播、不會自己結束（只由 <paramref name="cancellationToken"/> 收掉）。
+    /// 訂閱所有工作的進度，不指定 jobId、不會自己結束（只由 <paramref name="cancellationToken"/> 收掉）。
+    /// 訂閱當下已在跑的工作各重播一筆目前快照，之後逐筆推送。
     /// 給只有一條通道的 Shell 用：開機訂一次，每筆事件都帶 jobId，前端自己過濾（§4.7）。
     /// 每個活著的工作發出的每一筆快照（含終態）都會經過這裡，與 <see cref="SubscribeAsync"/> 收到的內容一致。
     /// </summary>

@@ -7,8 +7,8 @@
         Loaded="OnLoaded" Closed="OnClosed">
 
     <!--
-        正式版殼：單一 WebView2 控制項填滿視窗。環境初始化、虛擬主機對應、
-        WebResourceRequested 攔截與 SPA deep link fallback 的規格見 docs/ARCHITECTURE.md §6，
+        正式版殼：單一 WebView2 控制項填滿視窗。環境初始化、WebResourceRequested 攔截
+        （/api 轉 Api、靜態檔讀 wwwroot）與 SPA deep link fallback 的規格見 docs/ARCHITECTURE.md §6，
         全部在 MainWindow.xaml.cs 的 OnLoaded。
     -->
     <Grid>

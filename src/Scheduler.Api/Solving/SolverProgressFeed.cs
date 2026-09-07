@@ -15,7 +15,10 @@ namespace Scheduler.Api.Solving;
 /// </summary>
 public interface ISolverProgressFeed
 {
-    /// <summary>所有工作的進度事件，每筆都帶 <c>jobId</c>，不會自己結束。給只有一條 PostWebMessageAsJson 通道的 Shell。</summary>
+    /// <summary>
+    /// 所有工作的進度事件，每筆都帶 <c>jobId</c>，不會自己結束；訂閱當下已在跑的工作先各給一筆目前快照。
+    /// 給只有一條 PostWebMessageAsJson 通道的 Shell。
+    /// </summary>
     IAsyncEnumerable<string> AllAsync(CancellationToken cancellationToken);
 
     /// <summary>單一工作的進度事件，工作結束時序列結束；工作不存在擲 404。給 SSE 端點。</summary>
