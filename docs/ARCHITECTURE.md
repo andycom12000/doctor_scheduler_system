@@ -381,8 +381,8 @@ core.SetVirtualHostNameToFolderMapping("app.local",
 
 // Scheduler.Api 的 WebApplication 以 TestServer 在 process 內跑起來，不開 socket。
 // Shell 只拿到一個 HttpClient，路由、binding、錯誤碼對應全部在 Api 那一份（§3.2 規則 2）。
-var app = Scheduler.Api.ApiHost.Build(useTestServer: true);
-await app.StartAsync();
+var app = await Scheduler.Api.ApiHost.BuildAsync(new ApiHostOptions(UseTestServer: true));
+await app.StartAsync();                      // 資料庫啟動流程已在 BuildAsync 內跑完，Shell 看不到 Persistence
 var apiClient = app.GetTestClient();
 
 core.AddWebResourceRequestedFilter("https://app.local/api/*", CoreWebView2WebResourceContext.All);
@@ -397,6 +397,11 @@ core.WebResourceRequested += async (s, e) =>
 
 webView.Source = new Uri("https://app.local/index.html");
 ```
+
+Shell 的專案檔用的是 `Microsoft.NET.Sdk`（WPF），不會自動帶進 ASP.NET Core 的共用框架；
+`WebApplication` 與 `GetTestClient()` 要能編譯，Shell 要加
+`<FrameworkReference Include="Microsoft.AspNetCore.App" />`（`GetTestClient()` 在
+`Microsoft.AspNetCore.TestHost` 套件，Api 已引用，會傳遞過去）。
 
 求解進度不走這條路（WebResourceRequested 的回應不會漸進送出），Shell 從
 `app.Services` 取進度事件來源，訂閱後 `PostWebMessageAsJson`（§4.7、§4.8）。

@@ -293,6 +293,8 @@ const viewHandlers = [
   http.get('/api/schedules/:ym/days/:date', ({ params }) => {
     const ym = params.ym as string
     const date = params.date as string
+    // 與後端一致：該月尚無值班表也是 404，不憑空當成空白表
+    if (!store.schedules.has(ym)) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
     if (!date.startsWith(ym)) return errorResponse(404, 'NOT_FOUND', `${date} 不屬於 ${ym}`)
     return HttpResponse.json(computeDayDetail(store, ym, date))
   }),
