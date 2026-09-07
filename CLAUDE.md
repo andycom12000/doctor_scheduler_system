@@ -33,9 +33,17 @@
   是啟動流程，`SchedulerDatabase.DefaultPath` 是程式旁的 `data/scheduler.db`。
   改了 `SchedulerDbContext` 要跑 `dotnet ef migrations add <Name> --project src/Scheduler.Persistence`，
   否則 `tests/Scheduler.Persistence.Tests` 的 snapshot 比對會失敗
-- `Scheduler.Application` 目前只有 repository 介面（`Persistence/`）與生命週期型別
-  （`Schedules/ScheduleHeader`、`Solving/SolverJobRecord`、`Settings/`）。寫入走 `IUnitOfWork.CommitAsync`：
-  repository 只登記變更、不落盤。`SchedulingContextLoader` 與 handler 尚未開始
+- `Scheduler.Application` 的**讀取路徑**已落地：`Persistence/`（repository 介面）、
+  `Scheduling/SchedulingContextLoader`（組某月 context 的唯一地方：上月尾巴撈
+  `max(minGap, maxConsecutive)` 天、行事曆跨到次月與連值週六視窗、月結轉依 ADR-0004 分支、
+  人員撈全部含停用；回 `LoadedContext` 連同標頭、約束設定、身分組、提醒）、
+  `Schedules/ScheduleQueries`（值班表、validate、違規、點數看板、單日、空缺、候選人）、
+  `BlockedDays/BlockedDayQueries`（登記表、可行性預警；層次由資格矩陣推出，不寫死區域類型）、
+  `People/StaffQueries`、`Calendars/CalendarQueries`、`Errors/SchedulerException`（契約錯誤碼）。
+  候選人的阻擋理由不重寫規則：把他放進那格跑一次 `ViolationChecker`，多出來的硬違規就是理由。
+  設定類 GET 是 repository 直接回傳，沒有查詢類別。寫入走 `IUnitOfWork.CommitAsync`：
+  repository 只登記變更、不落盤。**寫入 handler 尚未開始**；PUT 約束時要把範圍的空陣列
+  正規化成 null（Persistence 拒收空集合）
 - `Solver` 仍只有 `AssemblyMarker`，`Scheduler.Shell` 只有空 WPF 視窗，
   `Scheduler.Api` 只接了 Persistence 的啟動流程與 `/api/health`
 
@@ -59,12 +67,13 @@ Application 不引用 Persistence）。規則 2（Shell 只引用 Api）在 Shel
 **2026-09-06 拍板、尚未實作的後端設計**全部在 `docs/ARCHITECTURE.md` §3.2、§4.8、§5、§7
 與 ADR-0004，動工前先讀。
 `tests/Scheduler.Domain.Tests` 驗證九原語與違規檢查器的行為，fixture 全用出廠值憑空造。
+`tests/Scheduler.Application.Tests` 用記憶體內的假 repository（`InMemoryStore`）驗證 loader 分支與讀取查詢。
 
 ## 指令
 
 ```bash
 dotnet build                              # 建置全部
-dotnet test                               # 架構規則 + 領域規則 + 存取層測試
+dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層測試
 dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
 
 cd frontend

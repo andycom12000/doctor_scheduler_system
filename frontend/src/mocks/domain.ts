@@ -836,9 +836,12 @@ export function computeFeasibility(store: MockStore, ym: string): FeasibilityRep
     let supplyPoints = 0
     for (const s of eligible) {
       const cap = quotaCapFor(store, s.rankCode, ym) ?? 0
+      // 登記日不消耗額度：每人供給 = min(上限, 沒登記的日子的額度點數總和)。
       const blockedDates = blockedByStaff.get(s.id) ?? new Set<string>()
-      const blockedPoints = [...blockedDates].reduce((sum, d) => sum + quotaPointValueOf(store, d), 0)
-      supplyPoints += Math.max(0, cap - blockedPoints)
+      const availablePoints = dates
+        .filter((d) => !blockedDates.has(d))
+        .reduce((sum, d) => sum + quotaPointValueOf(store, d), 0)
+      supplyPoints += Math.min(cap, availablePoints)
     }
     return { areaTypeCodes, demandPoints, supplyPoints, headroom: supplyPoints - demandPoints }
   })
