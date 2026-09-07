@@ -82,8 +82,11 @@ public sealed class DriftGateTests
     [Fact]
     public async Task 關掉資格約束_才會把不合資格的人排進去()
     {
+        // 覆蓋只算 ICU 與總值：關掉 H2 之後，R1 唯一能減少空缺的方法就是去值他本來沒資格的區
         var ctx = new ContextBuilder().WithStaff("R1-1", DefaultRanks.R1).Build();
-        var relaxed = DefaultConstraints.Settings.With("H2_ELIGIBILITY", c => c with { Enabled = false });
+        var relaxed = DefaultConstraints.Settings
+            .With("H2_ELIGIBILITY", c => c with { Enabled = false })
+            .With("H1_AREA_COVERAGE", c => c with { Scope = ConstraintScope.All.InAreaTypes(DefaultAreas.Icu, DefaultAreas.Chief) });
 
         var result = await SolverFixture.SolveAsync(ctx, relaxed);
 
