@@ -105,12 +105,16 @@ public sealed class SolverJobService
                 StartedAt: null, FinishedAt: null, ElapsedSec: null, FailureReason: null,
                 loaded.Warnings, scale, constraintCount);
 
-            await WithRepositoryAsync(repo => repo.AddAsync(record, cancellationToken), cancellationToken);
+            // 撈完 context 之後就不再看 request 的取消權杖：commit 到一半被取消會留下永遠 queued 的殭屍紀錄
+            await WithRepositoryAsync(repo => repo.AddAsync(record, CancellationToken.None), CancellationToken.None);
 
             live = new LiveJob(record, loaded, _clock.GetUtcNow());
+            // 登記進 _live 與指派 RunTask 在同一個鎖裡：CancelAsync 才不會撞到「已登記但 RunTask 還是 null」的空窗；
+            // RunAsync 本身要等 Started 放行，finally 的 _live.Remove 才不可能跑在登記之前
             lock (_gate)
             {
                 _live[record.JobId] = live;
+                live.RunTask = Task.Run(() => RunAsync(live), CancellationToken.None);
             }
         }
         catch
@@ -123,8 +127,8 @@ public sealed class SolverJobService
             throw;
         }
 
-        live.RunTask = Task.Run(() => RunAsync(live), CancellationToken.None);
-        return live.View();
+        live.Started.SetResult();
+        return live.View(_clock.GetUtcNow());
     }
 
     public async Task<SolverJobView> GetAsync(string jobId, CancellationToken cancellationToken = default)
@@ -133,7 +137,7 @@ public sealed class SolverJobService
         {
             if (_live.TryGetValue(jobId, out var live))
             {
-                return live.View();
+                return live.View(_clock.GetUtcNow());
             }
         }
 
@@ -224,6 +228,7 @@ public sealed class SolverJobService
 
     private async Task RunAsync(LiveJob live)
     {
+        await live.Started.Task;
         var token = live.Cancellation.Token;
         var ticker = TickAsync(live);
         try
@@ -270,28 +275,53 @@ public sealed class SolverJobService
             Finish(live, SolverJobStatus.Failed, ex.Message);
         }
 
+        await PersistTerminalAsync(live);
+
+        // 釋放 slot 放最前面：後面任何一步出錯都不能讓 POST /solver-jobs 從此永遠 409
+        lock (_gate)
+        {
+            _live.Remove(live.Record.JobId);
+            _slotTaken = false;
+        }
+
         try
-        {
-            await PersistAsync(live);
-        }
-        catch
-        {
-            // 落盤失敗沒有更好的地方報告；記憶體裡的終態仍會推給訂閱者
-        }
-        finally
         {
             live.Cancellation.Cancel();
             await ticker;
             live.Publish(this);
+        }
+        finally
+        {
             lock (_gate)
             {
                 foreach (var subscriber in live.Subscribers)
                 {
                     subscriber.Writer.TryComplete();
                 }
+            }
 
-                _live.Remove(live.Record.JobId);
-                _slotTaken = false;
+            live.Cancellation.Dispose();
+        }
+    }
+
+    /// <summary>終態一定要落盤，否則 _live 移除後資料庫裡停在 running，前端會無限輪詢到程式重啟。失敗就再試兩次。</summary>
+    private async Task PersistTerminalAsync(LiveJob live)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await PersistAsync(live);
+                return;
+            }
+            catch when (attempt < 3)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), _clock);
+            }
+            catch
+            {
+                // 三次都寫不進去：沒有更好的地方報告，記憶體裡的終態仍會推給訂閱者
+                return;
             }
         }
     }
@@ -308,10 +338,12 @@ public sealed class SolverJobService
         if (result.Status == SolveStatus.Infeasible && avoid.Count > 0)
         {
             // 多樣性是「為了看得出差異」加的，不值得讓整個工作失敗：拿掉再解一次，提醒排班者
+            var index = live.Snapshot.VariantIndex;
             live.Update(r => r with
             {
-                Warnings = r.Warnings.Append(string.Format(DiversityDroppedWarningFormat, live.Snapshot.VariantIndex, VariantProfiles.MinDifferentCells)).ToArray(),
+                Warnings = r.Warnings.Append(string.Format(DiversityDroppedWarningFormat, index, VariantProfiles.MinDifferentCells)).ToArray(),
             });
+            live.BeginVariant(index, _clock.GetUtcNow());
             result = await _solver.SolveAsync(request with { AvoidSolutions = Array.Empty<IReadOnlyList<Duty>>() }, p => live.OnProgress(this, p, _clock.GetUtcNow()), token);
         }
 
@@ -367,13 +399,17 @@ public sealed class SolverJobService
             .ToHashSet(StringComparer.Ordinal);
         var rankPreference = validation.Violations.Count(v => preferCodes.Contains(v.Code));
 
-        var fairnessPointActive = constraints.Soft.Any(x => x.IsActive && x.Primitive == Primitive.Fairness && x.Metric == Metric.FairnessPoint);
+        // 指標用「那一條約束自己的範圍」算，與目標函數看同一群人（S2 豁免 NP，指標就不該把 NP 算進去）；
+        // 設定裡沒有那一條時退回不限範圍
+        var quotaFairnessScope = ScopeOf(constraints, Primitive.Fairness, Metric.QuotaPoint);
+        var consistencyScope = ScopeOf(constraints, Primitive.Consistency, null);
+        var fairnessPoint = constraints.Soft.FirstOrDefault(x => x.IsActive && x.Primitive == Primitive.Fairness && x.Metric == Metric.FairnessPoint);
         var metrics = new VariantMetrics(
             vacancies,
-            scores.FairnessByGroup(ConstraintScope.All, Metric.QuotaPoint).Values.Sum(),
-            ctx.Staff.Where(s => s.Status == StaffStatus.Active).Sum(s => scores.ConsistencyOf(s.Id)),
+            scores.FairnessByGroup(quotaFairnessScope, Metric.QuotaPoint).Values.Sum(),
+            ctx.Staff.Where(s => s.Status == StaffStatus.Active && consistencyScope.AppliesToRank(s.RankCode)).Sum(s => scores.ConsistencyOf(s.Id)),
             rankPreference,
-            fairnessPointActive ? scores.FairnessByGroup(ConstraintScope.All, Metric.FairnessPoint).Values.Sum() : null);
+            fairnessPoint is null ? null : scores.FairnessByGroup(fairnessPoint.Scope, Metric.FairnessPoint).Values.Sum());
 
         // 軟分數用使用者的原始權重（不乘立場乘數），三份變體才能放在同一把尺上比
         var softScore = 0.0;
@@ -392,6 +428,9 @@ public sealed class SolverJobService
             live.Record.JobId, profile.Id, profile.Label, profile.Multipliers,
             metrics, validation.HardCount, softScore, duties);
     }
+
+    private static ConstraintScope ScopeOf(ConstraintSettings constraints, Primitive primitive, Metric? metric) =>
+        constraints.Soft.FirstOrDefault(x => x.Primitive == primitive && (metric is null || x.Metric == metric))?.Scope ?? ConstraintScope.All;
 
     // ---- 落盤 ----
 
@@ -445,15 +484,22 @@ public sealed class SolverJobService
 
         public CancellationTokenSource Cancellation { get; } = new();
 
+        /// <summary>RunAsync 等這個放行，登記進 _live 之前背景工作不會動。</summary>
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Task? RunTask { get; set; }
 
         public List<Channel<SolverProgressSnapshot>> Subscribers { get; } = new();
 
-        public SolverJobView View()
+        /// <summary>執行中的總耗時現算，結束後用結算時寫進紀錄的那個數。</summary>
+        public SolverJobView View(DateTimeOffset now)
         {
             lock (_sync)
             {
-                return new SolverJobView(Record, Snapshot);
+                var record = Record.ElapsedSec is null && Record.Status == SolverJobStatus.Running
+                    ? Record with { ElapsedSec = Math.Round((now - (Record.StartedAt ?? Record.CreatedAt)).TotalSeconds, 1) }
+                    : Record;
+                return new SolverJobView(record, Snapshot);
             }
         }
 
@@ -511,7 +557,12 @@ public sealed class SolverJobService
         {
             lock (owner._gate)
             {
-                var snapshot = View().Progress;
+                SolverProgressSnapshot snapshot;
+                lock (_sync)
+                {
+                    snapshot = Snapshot;
+                }
+
                 foreach (var subscriber in Subscribers)
                 {
                     subscriber.Writer.TryWrite(snapshot);

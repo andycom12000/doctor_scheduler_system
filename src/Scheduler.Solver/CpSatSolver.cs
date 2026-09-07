@@ -29,11 +29,18 @@ public sealed class CpSatSolver : ISolver
             StringParameters = string.Create(CultureInfo.InvariantCulture,
                 $"max_time_in_seconds:{request.TimeLimit.TotalSeconds:0.###}, num_workers:{Workers}"),
         };
-        var callback = new ProgressCallback(onProgress);
+        var callback = new ProgressCallback(onProgress, cancellationToken);
 
         CpSolverStatus status;
         using (cancellationToken.Register(() => solver.StopSearch()))
         {
+            // StopSearch 在 Solve 尚未進入搜尋前可能是 no-op：註冊之後再看一次，把這段空窗縮到最小；
+            // 剩下的由 callback 在每個解補檢查（找到第一個解之後一定停得下來）
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return new SolveResult(SolveStatus.Cancelled, Array.Empty<Domain.Model.Duty>(), 0, null, null, model.VariableCount);
+            }
+
             status = solver.Solve(model.Model, callback);
         }
 
@@ -55,10 +62,12 @@ public sealed class CpSatSolver : ISolver
     private sealed class ProgressCallback : CpSolverSolutionCallback
     {
         private readonly Action<SolveProgress>? _onProgress;
+        private readonly CancellationToken _cancellationToken;
 
-        public ProgressCallback(Action<SolveProgress>? onProgress)
+        public ProgressCallback(Action<SolveProgress>? onProgress, CancellationToken cancellationToken)
         {
             _onProgress = onProgress;
+            _cancellationToken = cancellationToken;
         }
 
         public int SolutionCount { get; private set; }
@@ -66,6 +75,11 @@ public sealed class CpSatSolver : ISolver
         public override void OnSolutionCallback()
         {
             SolutionCount++;
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                StopSearch();
+            }
+
             try
             {
                 _onProgress?.Invoke(new SolveProgress(WallTime(), SolutionCount, ObjectiveValue(), BestObjectiveBound()));

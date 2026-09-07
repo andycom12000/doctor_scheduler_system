@@ -115,9 +115,10 @@ public class SolverJobServiceTests
             SolveStatus.Feasible, new[] { new Duty("area-icu", D(1), "s1"), new Duty("area-icu", D(2), "s1") }, 1, 999.0, 1.0, 10)));
 
         var created = await service.CreateAsync(Oct, 1, 1);
-        await WaitForTerminalAsync(service, created.Record.JobId);
+        var done = await WaitForTerminalAsync(service, created.Record.JobId);
 
         var variant = Assert.Single(store.Variants);
+        Assert.True(done.Record.ElapsedSec >= 0);
         Assert.Equal(5 * 31 - 2, variant.Metrics.Vacancies);
         Assert.True(variant.HardViolationCount >= 5 * 31 - 2 + 1, "覆蓋違規加一條 H4");
         Assert.Equal(0, variant.Metrics.RankPreference); // R2 值 ICU 正合 S3
@@ -181,6 +182,20 @@ public class SolverJobServiceTests
         Assert.Equal(SolverJobStatus.Cancelled, again.Record.Status);
         var variants = await service.ListVariantsAsync(created.Record.JobId);
         Assert.Single(variants);
+    }
+
+    [Fact]
+    public async Task 指標依約束自己的範圍算_S2_豁免的_NP_不進同區延續()
+    {
+        // NP 在 A、B 兩區混值：S2 豁免 NP，areaConsistency 不該把他算進去（目標函數也沒有他的項）
+        var (service, store, _) = Setup((r, _) => Task.FromResult(new SolveResult(
+            SolveStatus.Feasible, new[] { new Duty("area-a", D(1), "np"), new Duty("area-b", D(5), "np") }, 1, 0, 0, 10)));
+        store.WithStaff("np", DefaultRanks.NP);
+
+        var created = await service.CreateAsync(Oct, 1, 1);
+        await WaitForTerminalAsync(service, created.Record.JobId);
+
+        Assert.Equal(0, Assert.Single(store.Variants).Metrics.AreaConsistency);
     }
 
     [Fact]

@@ -55,6 +55,7 @@ public sealed class NpRulesSolverTests
 
         var result = await SolverFixture.SolveAsync(ctx, limit: TimeSpan.FromSeconds(4));
 
+        SolverFixture.AssertOnlyCoverageViolations(ctx, result.Duties);
         Assert.Equal(20, result.Duties.Count);
         Assert.All(result.Duties, d => Assert.False(ctx.DayOf(d).IsHoliday, $"{d.Date} 是假日"));
     }

@@ -293,6 +293,20 @@ public class ScheduleCommandsTests
         Assert.Equal(ErrorCode.InvalidRequest, wrongMonth.Code);
         Assert.Equal(0, store.Commits);
     }
+
+    [Fact]
+    public async Task applyVariant_變體裡的人員已被刪_422_不落盤()
+    {
+        // 變體是求解當下的快照；人員之後被刪（變體裡的值班不算「有值班紀錄」），套用時要重新驗，否則該月之後每個讀取都 500
+        var store = WithVariant(new InMemoryStore(), Oct);
+
+        var ex = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ApplyVariantAsync(Oct, "job-1", "v-a"));
+
+        Assert.Equal(ErrorCode.InvalidRequest, ex.Code);
+        Assert.Contains("s1", ex.Message);
+        Assert.Empty(store.Duties);
+        Assert.Equal(0, store.Commits);
+    }
 }
 
 /// <summary>發布時間戳要能斷言，所以時鐘固定。</summary>

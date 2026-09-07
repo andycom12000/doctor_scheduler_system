@@ -184,6 +184,17 @@ public sealed class ScheduleCommands
             throw new SchedulerException(ErrorCode.ScheduleAlreadyPublished, $"{month} 的值班表已發布，不可整份套用變體；要改請逐格改");
         }
 
+        // 變體是求解當下的快照，人員或區域之後可能被刪（變體裡的值班不算「有值班紀錄」，刪得掉）。
+        // 帶著找不到的 id 落盤會讓該月之後每個讀取都 500、連清空格子都做不到，所以套用時重新驗一次
+        var staffIds = loaded.Context.Staff.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        var areaIds = loaded.Context.Areas.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+        var stale = variant.Duties.FirstOrDefault(d => !staffIds.Contains(d.StaffId) || !areaIds.Contains(d.AreaId));
+        if (stale is not null)
+        {
+            throw new SchedulerException(ErrorCode.InvalidRequest,
+                $"變體 {variantId} 含已不存在的人員或區域（{stale.StaffId} / {stale.AreaId}），請重新求解");
+        }
+
         var header = loaded.Header ?? ScheduleHeader.NewDraft(month);
         header = header with { Revision = header.Revision + 1 };
         await _schedules.UpsertAsync(header, cancellationToken);

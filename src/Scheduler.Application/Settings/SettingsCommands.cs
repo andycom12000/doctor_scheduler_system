@@ -280,7 +280,12 @@ public sealed class SettingsCommands
     /// <summary>點數類數值的上界：一個月 31 天全假日也才 62 點。</summary>
     internal const int MaxPoints = 1000;
 
-    internal const int MaxPerDay = 20;
+    /// <summary>
+    /// 每日需求人數目前只支援 1：CONTEXT.md「每日每區恰好一人，無主責／支援之分」是規格，duty 表的主鍵
+    /// <c>(year, month, area_id, date)</c> 一格也只存得下一人，<c>SchedulingContext.EnsureConsistent</c> 對同格多筆會擲出。
+    /// 放行 2 會讓求解器乖乖排兩人、然後在重算指標時炸掉。要支援多人先改主鍵與不變式。
+    /// </summary>
+    internal const int MaxPerDay = 1;
 
     private static IReadOnlySet<T>? NullIfEmpty<T>(IReadOnlySet<T>? set) => set is { Count: > 0 } ? set : null;
 

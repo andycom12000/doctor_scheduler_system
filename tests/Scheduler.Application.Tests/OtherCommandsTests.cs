@@ -202,6 +202,19 @@ public class SettingsCommandsTests
     private static SettingsCommands CommandsOf(InMemoryStore store) => new(store, store, store, store);
 
     [Fact]
+    public async Task putAreas_每日需求人數目前只支援_1_給_2_是_422()
+    {
+        // duty 表主鍵一格一人、EnsureConsistent 對同格多筆擲出；放行 2 會讓求解器排兩人然後在重算指標時炸掉
+        var store = new InMemoryStore();
+        var settings = new AreaSettings(store.Areas.AreaTypes, store.Areas.Areas.Select(a => a.Id == "area-a" ? a with { RequiredPerDay = 2 } : a).ToArray());
+
+        var ex = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ReplaceAreasAsync(settings));
+
+        Assert.Equal(ErrorCode.InvalidRequest, ex.Code);
+        Assert.Equal(1, store.Areas.Areas.Single(a => a.Id == "area-a").RequiredPerDay);
+    }
+
+    [Fact]
     public async Task 刪掉仍被值班表引用的區域_AREA_IN_USE()
     {
         var store = new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithDraft(new YearMonth(2026, 10))
