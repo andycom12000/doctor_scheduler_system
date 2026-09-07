@@ -207,9 +207,11 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
 
         Assert.Equal("succeeded", mine[^1]["status"]!.GetValue<string>());
 
-        // SSE 寫進 data: 的字串就是 feed 給的字串（同一個序列化方法）。SSE 連上時會先重播一筆當下快照，
-        // 那一筆不一定廣播過，所以只比終態那一筆
-        var sseLines = sse.Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(l => l["data: ".Length..].Trim()).ToList();
-        Assert.Contains(sseLines[^1], fromFeed);
+        // SSE 寫進 data: 的字串是同一個 feed 序列化的（構造上保證）。SSE 若在工作結束後才連上，拿到的是從
+        // 資料庫重建的終態快照，逐字未必等於廣播過的那筆，所以只比終態的身分欄位
+        var sseLast = JsonNode.Parse(sse.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)[^1]["data: ".Length..].Trim())!;
+        Assert.Equal(mine[^1]["jobId"]!.GetValue<string>(), sseLast["jobId"]!.GetValue<string>());
+        Assert.Equal(mine[^1]["status"]!.GetValue<string>(), sseLast["status"]!.GetValue<string>());
+        Assert.Equal(mine[^1]["variantIndex"]!.GetValue<int>(), sseLast["variantIndex"]!.GetValue<int>());
     }
 }
