@@ -44,6 +44,12 @@ public sealed class ContextBuilder
         return this;
     }
 
+    public ContextBuilder WithInactiveStaff(string id, string rankCode)
+    {
+        _staff.Add(new Staff(id, EmployeeNo: id, id, rankCode, StaffStatus.Inactive));
+        return this;
+    }
+
     public ContextBuilder WithDuty(string staffId, int day, string areaId = "area-a")
     {
         _duties.Add(new Duty(areaId, Day(day), staffId));

@@ -43,6 +43,15 @@ internal static class ContractMapper
     public static ViolationDto ToContract(this Violation v) =>
         new(v.Id, v.Code, ContractNames.Of(v.Severity), v.CellKeys, v.Message);
 
+    public static MutationResultDto ToContract(this MutationResult r) =>
+        new(
+            r.Revision,
+            r.Cells.Select(c => new MutatedCellDto(c.AreaId, c.Date, c.StaffId, c.CellKey)).ToArray(),
+            r.Violations.Select(ToContract).ToArray());
+
+    public static PublishResultDto ToContract(this PublishResult r) =>
+        new(ContractNames.Of(r.Status), r.PublishedAt, r.Revision, r.CarryOver.Select(e => new CarryOverEntryDto(e.StaffId, e.Points)).ToArray());
+
     // -- 檢視 ---------------------------------------------------------------
 
     public static PointBoardDto ToContract(this PointBoard b) =>
@@ -84,6 +93,9 @@ internal static class ContractMapper
             r.Entries.Select(e => new BlockedDayEntryDto(e.StaffId, e.Date)).ToArray(),
             r.ByStaff.Select(s => new BlockedDayByStaffDto(s.StaffId, s.Count, s.Remaining)).ToArray(),
             r.ByDate.Select(d => new BlockedDayByDateDto(d.Date, d.Count)).ToArray());
+
+    public static BlockedDayMutationResultDto ToContract(this BlockedDayMutation m) =>
+        new(new BlockedDayStaffTotalsDto(m.StaffCount, m.StaffRemaining), new BlockedDayDateTotalsDto(m.DateCount));
 
     public static FeasibilityReportDto ToContract(this FeasibilityReport r) =>
         new(
@@ -149,7 +161,10 @@ internal static class ContractMapper
     // -- 行事曆 -------------------------------------------------------------
 
     public static CalendarDto ToContract(this CalendarYear c) =>
-        new(c.Year, c.Days.Select(d => new CalendarDayDto(
+        new(c.Year, c.Days.Select(ToContract).ToArray());
+
+    public static CalendarDayDto ToContract(this CalendarDayView d) =>
+        new(
             d.Day.Date,
             (int)d.Day.Date.DayOfWeek,
             d.Day.IsHoliday,
@@ -157,12 +172,13 @@ internal static class ContractMapper
             d.Day.IsMakeUpWorkday,
             d.Day.HolidayName,
             d.QuotaPointValue,
-            d.Overridden)).ToArray());
+            d.Overridden);
 
     // -- 人員 ---------------------------------------------------------------
 
     public static StaffListDto ToContract(this StaffList l) =>
-        new(
-            l.Items.Select(s => new StaffDto(s.Id, s.EmployeeNo, s.Name, s.RankCode, ContractNames.Of(s.Status), s.EligibleAreaTypes)).ToArray(),
-            new StaffCountsDto(l.Counts.Active, l.Counts.Inactive));
+        new(l.Items.Select(ToContract).ToArray(), new StaffCountsDto(l.Counts.Active, l.Counts.Inactive));
+
+    public static StaffDto ToContract(this StaffView s) =>
+        new(s.Id, s.EmployeeNo, s.Name, s.RankCode, ContractNames.Of(s.Status), s.EligibleAreaTypes);
 }

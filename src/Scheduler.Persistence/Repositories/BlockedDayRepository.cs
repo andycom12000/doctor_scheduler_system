@@ -50,4 +50,11 @@ internal sealed class BlockedDayRepository : IBlockedDayRepository
             _db.BlockedDays.Remove(existing);
         }
     }
+
+    public async Task<int> RemoveAllForStaffAsync(string staffId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _db.BlockedDays.Where(b => b.StaffId == staffId).ToListAsync(cancellationToken);
+        _db.BlockedDays.RemoveRange(rows);
+        return rows.Count;
+    }
 }

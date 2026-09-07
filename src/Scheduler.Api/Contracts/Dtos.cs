@@ -190,3 +190,33 @@ public sealed record StaffListDto(IReadOnlyList<StaffDto> Items, StaffCountsDto 
 public sealed record StaffCountsDto(int Active, int Inactive);
 
 public sealed record StaffDto(string Id, string EmployeeNo, string Name, string RankCode, string Status, IReadOnlyList<string> EligibleAreaTypes);
+
+// -- 寫入請求 -------------------------------------------------------------
+// 請求本體一律由 Http/RequestBody 讀進來，型別是 nullable 的原因見那裡：缺欄位要回 422 而不是 400。
+
+public sealed record SetDutyRequestDto(string? AreaId, string? Date, string? StaffId);
+
+public sealed record CellRefDto(string? AreaId, string? Date);
+
+public sealed record SwapDutiesRequestDto(CellRefDto? A, CellRefDto? B);
+
+public sealed record PublishRequestDto(bool? AcknowledgeViolations);
+
+public sealed record MutationResultDto(int Revision, IReadOnlyList<MutatedCellDto> Duties, IReadOnlyList<ViolationDto> Violations);
+
+public sealed record MutatedCellDto(string AreaId, DateOnly Date, string? StaffId, string CellKey);
+
+public sealed record PublishResultDto(string Status, DateTimeOffset PublishedAt, int Revision, IReadOnlyList<CarryOverEntryDto> CarryOver);
+
+public sealed record CarryOverEntryDto(string StaffId, int Points);
+
+public sealed record BlockedDayMutationResultDto(BlockedDayStaffTotalsDto StaffTotals, BlockedDayDateTotalsDto DateTotals);
+
+public sealed record BlockedDayStaffTotalsDto(int Count, int Remaining);
+
+public sealed record BlockedDayDateTotalsDto(int Count);
+
+public sealed record StaffWriteDto(string? EmployeeNo, string? Name, string? RankCode);
+
+public sealed record StaffStatusRequestDto(string? Status);
+
