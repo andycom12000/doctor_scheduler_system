@@ -165,8 +165,9 @@ public class LayeringRules
     [Fact]
     public void Shell_專案檔只能掛_Api()
     {
+        // csproj 裡的路徑是反斜線，Linux 的 Path.GetFileName 不認得，自己切
         var references = ProjectReferences("src/Scheduler.Shell/Scheduler.Shell.csproj")
-            .Select(Path.GetFileNameWithoutExtension)
+            .Select(r => r.Replace('\\', '/').Split('/').Last().Replace(".csproj", string.Empty))
             .ToArray();
 
         Assert.Equal(new[] { "Scheduler.Api" }, references);
