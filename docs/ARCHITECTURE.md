@@ -372,12 +372,14 @@ await webView.EnsureCoreWebView2Async(env);
 
 ### 6.2 靜態資產與 API 攔截
 
+整個 `https://app.local/*` 都由 Shell 在 `WebResourceRequested` 裡回應，**不用**
+`SetVirtualHostNameToFolderMapping`：實測（runtime 152.0.4191，SDK 1.0.4191.47）虛擬主機對應會搶在
+`WebResourceRequested` 之前吃掉同一主機的所有請求，事件連 `/api/` 都收不到，`fetch('/api/…')`
+直接 `ERR_FILE_NOT_FOUND`；不論對應與過濾器誰先註冊都一樣。靜態檔只有 Vite 產物那幾種副檔名，
+Shell 自己讀 `wwwroot/` 回應（內容類型查表，路徑用 `Path.GetFullPath` 守在 `wwwroot/` 裡）。
+
 ```csharp
 var core = webView.CoreWebView2;
-
-core.SetVirtualHostNameToFolderMapping("app.local",
-    Path.Combine(AppContext.BaseDirectory, "wwwroot"),
-    CoreWebView2HostResourceAccessKind.Allow);
 
 // Scheduler.Api 的 WebApplication 以 TestServer 在 process 內跑起來，不開 socket。
 // Shell 只拿到一個 HttpClient，路由、binding、錯誤碼對應全部在 Api 那一份（§3.2 規則 2）。
@@ -385,31 +387,43 @@ var app = await Scheduler.Api.ApiHost.BuildAsync(new ApiHostOptions(UseTestServe
 await app.StartAsync();                      // 資料庫啟動流程已在 BuildAsync 內跑完，Shell 看不到 Persistence
 var apiClient = app.GetTestClient();
 
-core.AddWebResourceRequestedFilter("https://app.local/api/*", CoreWebView2WebResourceContext.All);
+core.AddWebResourceRequestedFilter("https://app.local/*", CoreWebView2WebResourceContext.All,
+    CoreWebView2WebResourceRequestSourceKinds.All);
 core.WebResourceRequested += async (s, e) =>
 {
     var deferral = e.GetDeferral();            // 支援非同步，長時間運算必須
-    using var res = await apiClient.SendAsync(ToHttpRequestMessage(e.Request));
-    e.Response = core.Environment.CreateWebResourceResponse(
-        await res.Content.ReadAsStreamAsync(), (int)res.StatusCode, res.ReasonPhrase, FlattenHeaders(res));
-    deferral.Complete();
+    switch (WebViewBridge.Classify(uri, isDocument))
+    {
+        case RouteKind.Api:                    // /api/ → TestServer；請求本體先整份緩衝（COM 串流不可重讀）、
+            ...                                // 內容類標頭掛 Content、回應丟掉 Transfer-Encoding
+        case RouteKind.IndexFallback:          // §6.3
+        default:                               // wwwroot 的檔案，找不到 404
+    }
+    deferral.Complete();                       // 任何例外都變 500 回應，不往上拋
 };
 
 webView.Source = new Uri("https://app.local/index.html");
 ```
 
+轉換的純邏輯在 `Scheduler.Shell/WebViewBridge.cs`，沒有 WebView2 型別，
+`tests/Scheduler.Shell.Tests` 用連結原始檔的方式測它（Shell 本身是 net8.0-windows，測試專案引用不到）。
+
 Shell 的專案檔用的是 `Microsoft.NET.Sdk`（WPF），不會自動帶進 ASP.NET Core 的共用框架；
 `WebApplication` 與 `GetTestClient()` 要能編譯，Shell 要加
-`<FrameworkReference Include="Microsoft.AspNetCore.App" />`（`GetTestClient()` 在
-`Microsoft.AspNetCore.TestHost` 套件，Api 已引用，會傳遞過去）。
+`<FrameworkReference Include="Microsoft.AspNetCore.App" />`。Shell 只掛 `Scheduler.Api` 一個
+ProjectReference 並開 `DisableTransitiveProjectReferences`，規則 2 在編譯期就成立；Api 是可執行專案，
+self-contained 的 Shell 引用它要關掉 `ValidateExecutableReferencesMatchSelfContained`（NETSDK1150）。
 
-求解進度不走這條路（WebResourceRequested 的回應不會漸進送出），Shell 從
-`app.Services` 取進度事件來源，訂閱後 `PostWebMessageAsJson`（§4.7、§4.8）。
+求解進度不走這條路（WebResourceRequested 的回應不會漸進送出）：Api 提供
+`Scheduler.Api.Solving.ISolverProgressFeed`（介面只有 BCL 型別，Shell 才引用得到），
+`AllAsync` 是不分工作的全域訂閱、每筆是契約 `SolverProgress` 的 JSON 字串；Shell 開機從 `app.Services`
+取一次、逐筆 `PostWebMessageAsJson`，前端 `realtime.ts` 靠 `jobId` 過濾。SSE 端點用同一個介面的
+`ForJobAsync`，兩個 transport 的 JSON 從構造上就是同一份（§4.7、§4.8）。
 
 ### 6.3 SPA deep link fallback
 
-`SetVirtualHostNameToFolderMapping` 是檔案對應而非 web server，重新整理在子路徑會 404。
-需額外攔截 Document 請求：非 `/api/` 且無副檔名者一律回 `index.html`。
+重新整理在子路徑（`/schedules/2026-09`）不能 404：Document 請求中非 `/api/` 且無副檔名者一律回
+`index.html`，非 Document 的資產請求不做這件事。
 
 ### 6.4 匯出檔案
 

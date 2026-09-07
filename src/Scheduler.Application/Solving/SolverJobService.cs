@@ -45,6 +45,9 @@ public sealed class SolverJobService
     private readonly TimeProvider _clock;
     private readonly object _gate = new();
     private readonly Dictionary<string, LiveJob> _live = new(StringComparer.Ordinal);
+
+    /// <summary>不分工作的訂閱者（Shell 開機訂一次，前端靠 jobId 過濾）。同樣在 <see cref="_gate"/> 下增減。</summary>
+    private readonly List<Channel<SolverProgressSnapshot>> _broadcast = new();
     private bool _slotTaken;
 
     public SolverJobService(ISolverScopeFactory scopes, ISolver solver, TimeProvider clock)
@@ -220,6 +223,40 @@ public sealed class SolverJobService
             lock (_gate)
             {
                 live!.Subscribers.Remove(channel);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 訂閱所有工作的進度，不指定 jobId、不重播、不會自己結束（只由 <paramref name="cancellationToken"/> 收掉）。
+    /// 給只有一條通道的 Shell 用：開機訂一次，每筆事件都帶 jobId，前端自己過濾（§4.7）。
+    /// 每個活著的工作發出的每一筆快照（含終態）都會經過這裡，與 <see cref="SubscribeAsync"/> 收到的內容一致。
+    /// </summary>
+    public async IAsyncEnumerable<SolverProgressSnapshot> SubscribeAllAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var channel = Channel.CreateUnbounded<SolverProgressSnapshot>(new UnboundedChannelOptions { SingleReader = true });
+        lock (_gate)
+        {
+            _broadcast.Add(channel);
+            // 訂閱時已在跑的工作先給一筆目前快照，訂閱者不必等下一秒的 tick
+            foreach (var live in _live.Values)
+            {
+                channel.Writer.TryWrite(live.Snapshot);
+            }
+        }
+
+        try
+        {
+            await foreach (var snapshot in channel.Reader.ReadAllAsync(cancellationToken))
+            {
+                yield return snapshot;
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _broadcast.Remove(channel);
             }
         }
     }
@@ -564,6 +601,11 @@ public sealed class SolverJobService
                 }
 
                 foreach (var subscriber in Subscribers)
+                {
+                    subscriber.Writer.TryWrite(snapshot);
+                }
+
+                foreach (var subscriber in owner._broadcast)
                 {
                     subscriber.Writer.TryWrite(snapshot);
                 }

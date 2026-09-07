@@ -10,7 +10,9 @@ namespace Scheduler.ArchitectureTests;
 ///   求解器相依只存在於 Scheduler.Solver，由介面隔離，保留日後替換引擎的可能。
 /// - 只有 Scheduler.Persistence 可以引用 EF Core；Application 不引用 Persistence。
 ///   Repository 介面在 Application、實作在 Persistence。
-/// 規則 #2（Shell 只引用 Api）在 Scheduler.Shell 動工的 PR 補。
+/// - 硬性規則 #2：Scheduler.Shell 只是 Api 的 host，專案檔只能掛 Scheduler.Api，且關掉傳遞引用，
+///   讓 Application／Domain／Persistence／Solver 的型別在 Shell 裡連編譯都過不了。
+///   Shell 是 net8.0-windows，這個測試專案引用不到它的組件，所以只守 csproj 層。
 ///
 /// 這些規則若被打破，編譯仍會成功，只有這個測試會擋下來。
 ///
@@ -156,6 +158,34 @@ public class LayeringRules
             offenders.Length == 0,
             $"{assembly.GetName().Name} 引用了 OR-Tools：{string.Join(", ", offenders)}。" +
             " 求解器相依必須隔離在 Scheduler.Solver，見 docs/ARCHITECTURE.md §3.1。");
+    }
+
+    // ---- 規則 #2：Shell 只引用 Api ----
+
+    [Fact]
+    public void Shell_專案檔只能掛_Api()
+    {
+        var references = ProjectReferences("src/Scheduler.Shell/Scheduler.Shell.csproj")
+            .Select(Path.GetFileNameWithoutExtension)
+            .ToArray();
+
+        Assert.Equal(new[] { "Scheduler.Api" }, references);
+    }
+
+    [Fact]
+    public void Shell_必須關掉傳遞專案引用()
+    {
+        // 沒有這個旗標，Api 掛的 Application／Persistence／Solver 會傳遞進 Shell，csproj 檢查就守不住
+        var value = Property("src/Scheduler.Shell/Scheduler.Shell.csproj", "DisableTransitiveProjectReferences");
+        Assert.Equal("true", value, ignoreCase: true);
+    }
+
+    private static string? Property(string relativePath, string name)
+    {
+        var full = Path.Combine(RepositoryRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(full), $"找不到專案檔：{full}");
+
+        return XDocument.Load(full).Descendants(name).Select(e => e.Value.Trim()).LastOrDefault();
     }
 
     private static string[] ReferencedNames(Assembly assembly)

@@ -284,6 +284,46 @@ public class SolverJobServiceTests
     }
 
     [Fact]
+    public async Task 全域訂閱_不分工作_每筆帶_jobId_含終態_不會自己結束()
+    {
+        var gate = new TaskCompletionSource();
+        var (service, _, _) = Setup(async (r, ct) =>
+        {
+            await gate.Task.WaitAsync(ct);
+            return OneDuty(r);
+        });
+
+        using var stop = new CancellationTokenSource();
+        var events = new List<SolverProgressSnapshot>();
+        var reading = Task.Run(async () =>
+        {
+            await foreach (var e in service.SubscribeAllAsync(stop.Token))
+            {
+                events.Add(e);
+            }
+        });
+
+        var created = await service.CreateAsync(Oct, 1, 1);
+        await Task.Delay(50);
+        gate.SetResult();
+
+        // 工作結束後序列還活著：只有呼叫端的 token 收得掉
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline && !events.Any(e => e.Status == SolverJobStatus.Succeeded))
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.False(reading.IsCompleted);
+        stop.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reading.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        Assert.NotEmpty(events);
+        Assert.All(events, e => Assert.Equal(created.Record.JobId, e.JobId));
+        Assert.Equal(SolverJobStatus.Succeeded, events[^1].Status);
+    }
+
+    [Fact]
     public async Task 結束的工作從資料庫讀_不存在的_404()
     {
         var (service, _, _) = Setup();

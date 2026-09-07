@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Api.Tests", "test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Solver.Tests", "tests\Scheduler.Solver.Tests\Scheduler.Solver.Tests.csproj", "{B590BFDA-7826-4493-B21E-763756FCE982}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scheduler.Shell.Tests", "tests\Scheduler.Shell.Tests\Scheduler.Shell.Tests.csproj", "{BB0EAB1A-D68B-4A28-A8AA-8B780A52467E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -88,6 +90,10 @@ Global
 		{B590BFDA-7826-4493-B21E-763756FCE982}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B590BFDA-7826-4493-B21E-763756FCE982}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B590BFDA-7826-4493-B21E-763756FCE982}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BB0EAB1A-D68B-4A28-A8AA-8B780A52467E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB0EAB1A-D68B-4A28-A8AA-8B780A52467E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB0EAB1A-D68B-4A28-A8AA-8B780A52467E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB0EAB1A-D68B-4A28-A8AA-8B780A52467E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{77FACCCF-5606-4555-A526-476CFCD413F4} = {11951F66-270D-4DE6-BA38-EA996EB99804}
@@ -102,5 +108,6 @@ Global
 		{CE4EBB0B-C6F2-43EA-AD0A-05C2CE94C31B} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
 		{4DED4160-EDE5-4E3C-9F6E-A87CB4119661} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
 		{B590BFDA-7826-4493-B21E-763756FCE982} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
+		{BB0EAB1A-D68B-4A28-A8AA-8B780A52467E} = {1DB0EBB5-F4EF-4DBA-BA0C-58138564A228}
 	EndGlobalSection
 EndGlobal

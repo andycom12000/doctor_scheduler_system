@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Scheduler.Api.Solving;
 
 namespace Scheduler.Api.Tests;
 
@@ -170,5 +172,44 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
         // 結束後再連：只有一筆終態，馬上結束
         var after = await _api.Client.GetStringAsync($"/api/solver-jobs/{jobId}/stream");
         Assert.Single(after.Split("\n\n", StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>Shell 拿的是 <see cref="ISolverProgressFeed"/>：全域訂閱、每筆是契約 JSON、與 SSE 寫的是同一份。</summary>
+    [Fact]
+    public async Task 進度事件來源_全域訂閱的每筆都符合契約_與_SSE_同一份()
+    {
+        var feed = _api.Services.GetRequiredService<ISolverProgressFeed>();
+        using var stop = new CancellationTokenSource();
+        var fromFeed = new List<string>();
+        var pumping = Task.Run(async () =>
+        {
+            await foreach (var json in feed.AllAsync(stop.Token))
+            {
+                fromFeed.Add(json);
+            }
+        });
+
+        var created = await PostAsync("/api/solver-jobs", """{"yearMonth":"2026-10","variantCount":1,"timeLimitSecPerVariant":1}""", "createSolverJob", HttpStatusCode.Accepted);
+        var jobId = created["jobId"]!.GetValue<string>();
+        var sse = await _api.Client.GetStringAsync($"/api/solver-jobs/{jobId}/stream");
+        await WaitForTerminalAsync(jobId);
+        await Task.Delay(200);
+        stop.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pumping.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        var mine = fromFeed.Select(j => JsonNode.Parse(j)!).Where(e => e["jobId"]!.GetValue<string>() == jobId).ToList();
+        Assert.NotEmpty(mine);
+        foreach (var e in mine)
+        {
+            var errors = ContractSchema.Current.ValidateComponent("SolverProgress", e);
+            Assert.True(errors.Count == 0, string.Join("\n", errors) + "\n" + e.ToJsonString());
+        }
+
+        Assert.Equal("succeeded", mine[^1]["status"]!.GetValue<string>());
+
+        // SSE 寫進 data: 的字串就是 feed 給的字串（同一個序列化方法）。SSE 連上時會先重播一筆當下快照，
+        // 那一筆不一定廣播過，所以只比終態那一筆
+        var sseLines = sse.Split("\n\n", StringSplitOptions.RemoveEmptyEntries).Select(l => l["data: ".Length..].Trim()).ToList();
+        Assert.Contains(sseLines[^1], fromFeed);
     }
 }
