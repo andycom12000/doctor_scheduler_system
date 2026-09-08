@@ -7,6 +7,9 @@
 
   <ItemGroup>
     <!-- TestServer：正式版 Shell 與契約守法測試都用它在 process 內跑同一個 pipeline（§6.2） -->
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <!-- ClosedXML 宣告的是 [1.0.0, 3.0.0)；1.0.0 是 Apache-2.0，2.x 起是 Six Labors Split License，釘在下界（ARCHITECTURE §6.4） -->
+    <PackageReference Include="SixLabors.Fonts" Version="1.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.30" />
   </ItemGroup>
 

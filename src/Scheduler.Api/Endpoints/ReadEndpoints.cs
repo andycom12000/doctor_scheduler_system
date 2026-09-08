@@ -1,4 +1,5 @@
 using Scheduler.Api.Contracts;
+using Scheduler.Api.Export;
 using Scheduler.Api.Http;
 using Scheduler.Application.BlockedDays;
 using Scheduler.Application.Calendars;
@@ -11,7 +12,7 @@ namespace Scheduler.Api.Endpoints;
 /// <summary>
 /// 讀取路徑與 validate 的端點。每個端點只做「解參數 → 呼叫 Application → 包回應」，
 /// 業務判斷（404 的條件、篩選、排序）全部在 Application。
-/// 尚未接的端點見 api-contract.yaml：寫入、匯出、求解工作。
+/// 寫入在 WriteEndpoints、求解工作在 SolverEndpoints；匯出也在這裡，因為它是唯讀的 GET（ADR-0004）。
 /// </summary>
 internal static class ReadEndpoints
 {
@@ -43,6 +44,14 @@ internal static class ReadEndpoints
 
         schedules.MapGet("/{ym}/vacancies", async (string ym, ScheduleQueries q, CancellationToken ct) =>
             (await q.ListVacanciesAsync(Parse.YearMonth(ym), ct)).ToContract());
+
+        // 匯出直接回位元組（契約 exportSchedule）：Application 攤成表格、這裡轉 xlsx 包回應，不落暫存檔（§6.4）
+        schedules.MapGet("/{ym}/export", async (string ym, string? layout, ScheduleExportQueries q, CancellationToken ct) =>
+        {
+            var month = Parse.YearMonth(ym);
+            var table = await q.BuildAsync(month, Parse.OptionalLayout(layout), ct);
+            return Results.File(XlsxRenderer.Render(table), XlsxRenderer.ContentType, $"{ScheduleExportQueries.FileStem(month)}.xlsx");
+        });
 
         schedules.MapGet("/{ym}/candidates", async (string ym, string? areaId, string? date, ScheduleQueries q, CancellationToken ct) =>
             (await q.ListCandidatesAsync(

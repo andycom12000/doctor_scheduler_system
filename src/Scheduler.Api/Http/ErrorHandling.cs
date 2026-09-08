@@ -64,6 +64,14 @@ internal static class Parse
             ? null
             : ContractNames.ToStaffStatus(status) ?? throw Invalid($"status 只能是 active 或 inactive：{status}");
 
+    /// <summary>匯出版面；沒給就是契約的預設 <c>area-by-day</c>。空字串不算沒給，與其他選填參數一致。</summary>
+    public static Application.Schedules.ExportLayout OptionalLayout(string? layout) => layout switch
+    {
+        null or "area-by-day" => Application.Schedules.ExportLayout.AreaByDay,
+        "day-by-staff" => Application.Schedules.ExportLayout.DayByStaff,
+        _ => throw Invalid($"layout 只能是 area-by-day 或 day-by-staff：{layout}"),
+    };
+
     public static string Required(string? value, string name) =>
         string.IsNullOrWhiteSpace(value) ? throw Invalid($"缺少必要參數 {name}") : value;
 
