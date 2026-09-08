@@ -40,6 +40,15 @@ public sealed class ExportEndpointTests : IClassFixture<ApiFixture>
         Assert.Equal("張新人", sheet.Cell(2, 2).GetString()); // fixture：area-a 9/1 是 s-pgy1
         Assert.Equal("總值", sheet.Cell(6, 1).GetString());
         Assert.Equal("李總值", sheet.Cell(6, 3).GetString()); // area-chief 9/2 是 s-r5
+
+        // 9/5 是週六：整欄上底色、只到表格範圍；9/1 平日不上色
+        var holiday = XLColor.FromArgb(0xFF, 0xF2, 0xF2);
+        Assert.Equal(holiday, sheet.Cell(1, 6).Style.Fill.BackgroundColor);
+        Assert.Equal(holiday, sheet.Cell(6, 6).Style.Fill.BackgroundColor);
+        Assert.NotEqual(holiday, sheet.Cell(7, 6).Style.Fill.BackgroundColor);
+        Assert.NotEqual(holiday, sheet.Cell(2, 2).Style.Fill.BackgroundColor);
+        Assert.Equal(1, sheet.SheetView.SplitRow);
+        Assert.Equal(1, sheet.SheetView.SplitColumn);
     }
 
     [Fact]
@@ -59,7 +68,14 @@ public sealed class ExportEndpointTests : IClassFixture<ApiFixture>
         var col = Array.IndexOf(header, "張新人") + 1;
         Assert.True(col > 1, "人員欄應有張新人");
         Assert.Equal("A", sheet.Cell(2, col).GetString());
-        Assert.DoesNotContain("已離職", header); // 停用且本月沒值班的人不出現
+        Assert.DoesNotContain(header, h => h.StartsWith("已離職", StringComparison.Ordinal)); // 停用且本月沒值班的人不出現
+
+        // 9/5 週六那一列整列上底色、只到表格範圍
+        var holiday = XLColor.FromArgb(0xFF, 0xF2, 0xF2);
+        Assert.Equal(holiday, sheet.Cell(6, 1).Style.Fill.BackgroundColor);
+        Assert.Equal(holiday, sheet.Cell(6, header.Length).Style.Fill.BackgroundColor);
+        Assert.NotEqual(holiday, sheet.Cell(6, header.Length + 1).Style.Fill.BackgroundColor);
+        Assert.NotEqual(holiday, sheet.Cell(2, 1).Style.Fill.BackgroundColor);
     }
 
     [Fact]
@@ -69,10 +85,12 @@ public sealed class ExportEndpointTests : IClassFixture<ApiFixture>
         Assert.Equal("NOT_FOUND", body["error"]!["code"]!.GetValue<string>());
     }
 
-    [Fact]
-    public async Task layout不合法_422_INVALID_REQUEST()
+    [Theory]
+    [InlineData("by-magic")]
+    [InlineData("")]
+    public async Task layout不合法_422_INVALID_REQUEST(string layout)
     {
-        var body = await _api.GetAsync("/api/schedules/2026-09/export?layout=by-magic", "exportSchedule", HttpStatusCode.UnprocessableEntity);
+        var body = await _api.GetAsync($"/api/schedules/2026-09/export?layout={layout}", "exportSchedule", HttpStatusCode.UnprocessableEntity);
         Assert.Equal("INVALID_REQUEST", body["error"]!["code"]!.GetValue<string>());
     }
 }

@@ -43,7 +43,7 @@ public sealed class ScheduleExportQueries
         };
     }
 
-    /// <summary>列 = 區域（設定的順序）、欄 = 日、格子 = 人名；同格多人以「、」相連。</summary>
+    /// <summary>列 = 區域（設定的順序）、欄 = 日、格子 = 人名。目前每格只會有一人（同格是結構不變式），「、」相連是為 <c>RequiredPerDay &gt; 1</c> 預留。</summary>
     private static ExportTable AreaByDay(SchedulingContext ctx)
     {
         var days = ctx.Month.Days().Select(d => ctx.Calendar[d]).ToArray();

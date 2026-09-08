@@ -5,7 +5,7 @@ namespace Scheduler.Api.Export;
 
 /// <summary>
 /// 把 Application 的 <see cref="ExportTable"/> 寫成 xlsx 位元組（ARCHITECTURE §6.4）。
-/// 內容全由 Application 決定，這裡只管格式：標題列凍結、假日欄／列上底色、欄寬依內容。
+/// 內容全由 Application 決定，這裡只管格式：標題列凍結、假日欄／列整條上底色（限表格範圍）、欄寬依內容。
 /// 全程在記憶體裡，portable 環境沒有暫存檔可以放。
 /// </summary>
 internal static class XlsxRenderer
@@ -19,14 +19,16 @@ internal static class XlsxRenderer
         using var workbook = new XLWorkbook();
         var sheet = workbook.Worksheets.Add(SafeSheetName(table.SheetName));
 
+        var lastRow = table.Rows.Count + 1;
+        var lastColumn = table.Columns.Count + 1;
+
         sheet.Cell(1, 1).Value = table.CornerLabel;
         for (var c = 0; c < table.Columns.Count; c++)
         {
-            var cell = sheet.Cell(1, c + 2);
-            cell.Value = table.Columns[c].Header;
+            sheet.Cell(1, c + 2).Value = table.Columns[c].Header;
             if (table.Columns[c].IsHoliday)
             {
-                cell.Style.Fill.BackgroundColor = HolidayFill;
+                sheet.Range(1, c + 2, lastRow, c + 2).Style.Fill.BackgroundColor = HolidayFill;
             }
         }
 
@@ -41,11 +43,11 @@ internal static class XlsxRenderer
 
             if (row.IsHoliday)
             {
-                sheet.Row(r + 2).Style.Fill.BackgroundColor = HolidayFill;
+                sheet.Range(r + 2, 1, r + 2, lastColumn).Style.Fill.BackgroundColor = HolidayFill;
             }
         }
 
-        var used = sheet.Range(1, 1, table.Rows.Count + 1, table.Columns.Count + 1);
+        var used = sheet.Range(1, 1, lastRow, lastColumn);
         used.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
         used.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
         used.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;

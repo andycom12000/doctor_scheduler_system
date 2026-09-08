@@ -57,6 +57,24 @@ public class ScheduleExportQueriesTests
     }
 
     [Fact]
+    public async Task 三十一天的月份_欄數跟著月份_補班日印補班()
+    {
+        var oct = new YearMonth(2026, 10);
+        var store = new InMemoryStore().WithStaff("s-r2", DefaultRanks.R2).WithDraft(oct);
+        var makeUp = new DateOnly(2026, 10, 3); // 週六，憑空造成補班日
+        store.CalendarExceptions[makeUp] = new Application.Persistence.CalendarException(
+            new CalendarDay(makeUp, IsHoliday: false, IsPublicHoliday: false, IsMakeUpWorkday: true), Overridden: false);
+
+        var table = await new ScheduleExportQueries(store.Loader).BuildAsync(oct, ExportLayout.AreaByDay);
+
+        Assert.Equal(31, table.Columns.Count);
+        Assert.All(table.Rows, r => Assert.Equal(31, r.Cells.Count));
+        Assert.Equal("10/3 (六) 補班", table.Columns[2].Header);
+        Assert.False(table.Columns[2].IsHoliday);
+        Assert.Equal("10/31 (六)", table.Columns[30].Header);
+    }
+
+    [Fact]
     public async Task 日乘人員_欄依身分再依員編_停用者只有本月有值班才出現且排最後_格子是區域代碼()
     {
         var table = await new ScheduleExportQueries(Store().Loader).BuildAsync(Sep, ExportLayout.DayByStaff);

@@ -437,7 +437,8 @@ portable 環境沒有 HTTP server 能提供那種連結，也沒有可放暫存�
 實作分兩半：Application 的 `ScheduleExportQueries` 把值班表攤成格式無關的 `ExportTable`
 （哪列哪欄放什麼字、哪些欄／列是假日），Api 的 `Export/XlsxRenderer` 用 **ClosedXML** 轉成 xlsx
 位元組——排版是「包回應」的一種，業務內容不在 Api。ClosedXML 是 MIT、純 managed，唯一非 MIT 的
-遞移相依 `SixLabors.Fonts` 1.0.0 是 Apache-2.0，可隨 portable 發佈。整個過程在記憶體裡，不落暫存檔。
+遞移相依 `SixLabors.Fonts` 1.0.0 是 Apache-2.0，可隨 portable 發佈；ClosedXML 宣告的範圍是 `[1.0.0, 3.0.0)`
+而 2.x 起改為 Six Labors Split License，所以 `Scheduler.Api.csproj` 明確釘在 1.0.0，別讓 restore 往上漂。整個過程在記憶體裡，不落暫存檔。
 值班表不存在時 404、`layout` 不認得時 422，與其他 schedule 端點一致。
 
 **列印純前端**（CSS `@media print`），不需要任何端點。
