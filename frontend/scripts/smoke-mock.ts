@@ -391,6 +391,27 @@ async function main() {
       })
       assert(reapply.status === 409, '對已發布值班表套用變體 → 409')
     })
+
+    console.log('14. GET /schedules/:ym/export')
+    {
+      const missing = await fetch(`${BASE}/schedules/2030-01/export`)
+      assert(missing.status === 404, '尚無值班表的月份匯出 → 404')
+      const bad = await fetch(`${BASE}/schedules/2030-01/export?layout=by-magic`)
+      assert(bad.status === 422, 'layout 不合法 → 422')
+    }
+    await mockOnly('14b. GET /schedules/2026-09/export 本體', '依賴 mock 種子的 2026-09 值班表', async () => {
+      const res = await fetch(`${BASE}/schedules/2026-09/export?layout=day-by-staff`)
+      assert(res.status === 200, '匯出 → 200')
+      assert(
+        res.headers.get('content-type')?.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') === true,
+        'Content-Type 是 xlsx',
+      )
+      assert(res.headers.get('content-disposition')?.includes('duty-2026-09.xlsx') === true, 'Content-Disposition 帶檔名')
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      assert(bytes.length > 0, '本體非空')
+      // mock 回的是 CSV 佔位；真後端是 zip（PK 魔數）
+      if (!isMock) assert(bytes[0] === 0x50 && bytes[1] === 0x4b, '真後端回的是 xlsx（zip 魔數）')
+    })
   } finally {
     server?.close()
   }

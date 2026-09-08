@@ -245,8 +245,13 @@ const scheduleHandlers = [
   http.get('/api/schedules/:ym/export', ({ params, request }) => {
     const ym = params.ym as string
     const layout = new URL(request.url).searchParams.get('layout') ?? 'area-by-day'
+    // 與後端一致：layout 不認得是 422、該月尚無值班表是 404
+    if (layout !== 'area-by-day' && layout !== 'day-by-staff') {
+      return errorResponse(422, 'INVALID_REQUEST', `layout 只能是 area-by-day 或 day-by-staff：${layout}`)
+    }
     const schedule = store.schedules.get(ym)
-    const duties = schedule ? scheduleToDuties(schedule) : []
+    if (!schedule) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
+    const duties = scheduleToDuties(schedule)
 
     // 簡化：不是真正的 xlsx，回一份最小的 CSV 位元組，content-type 與檔名照契約。
     // layout 目前不影響輸出內容——mock 端不實作版面差異。

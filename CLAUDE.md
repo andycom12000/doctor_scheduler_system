@@ -61,7 +61,10 @@
   **寫入端點**也已接上：`Endpoints/WriteEndpoints`（22 個）、`Contracts/RequestMapper`（DTO → Domain，
   缺欄位與不認得的列舉字串是 422）、`Http/RequestBody`（本體自己讀，壞 JSON／空本體統一 422；
   行事曆覆寫從 `JsonObject` 讀，才分得出 `holidayName` 沒送與送 null）。請求 DTO 的欄位全是
-  nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。匯出端點尚未接
+  nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。
+  **匯出端點**也接上了（§6.4）：`Application/Schedules/ScheduleExportQueries` 攤成格式無關的 `ExportTable`
+  （兩種版面、停用者只在有值班時出現、國定假日印名稱），`Api/Export/XlsxRenderer` 用 ClosedXML 轉位元組。
+  Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 42 個操作已全部落地
 - **求解**已落地（ARCHITECTURE §4.8）。`Scheduler.Application/Solving/`：`ISolver`（一次解一份；權重另放
   `EffectiveWeights`，因為 `ConstraintDefinition.Weight` 上限 100 裝不下乘過 1.5 的數）、`VariantProfiles`
   （三個具名立場的乘數表、多樣性 15 格）、`SolverJobService`（singleton，單一 slot、狀態機、序列三份、
@@ -78,7 +81,7 @@
   頁面回 `index.html`、其餘讀 `wwwroot/`；**不用 `SetVirtualHostNameToFolderMapping`**（實測會搶在事件前
   吃掉請求，§6.2）。純轉換在 `WebViewBridge`（`tests/Scheduler.Shell.Tests` 連結原始檔測）。進度事件從
   Api 的 `ISolverProgressFeed.AllAsync` 拿、`PostWebMessageAsJson` 推。啟動先探 `data/` 可寫，失敗以對話框
-  說明後關閉。開發機沒有 `webview2/` 資料夾時退回機器上的 Evergreen runtime。匯出端點與發佈包
+  說明後關閉。開發機沒有 `webview2/` 資料夾時退回機器上的 Evergreen runtime。發佈包
   （`build/webview2.json` 仍是 TODO）尚未接
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）

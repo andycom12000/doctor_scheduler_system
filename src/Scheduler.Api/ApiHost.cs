@@ -101,6 +101,7 @@ public static class ApiHost
     {
         services.AddScoped<SchedulingContextLoader>();
         services.AddScoped<ScheduleQueries>();
+        services.AddScoped<ScheduleExportQueries>();
         services.AddScoped<BlockedDayQueries>();
         services.AddScoped<StaffQueries>();
         services.AddScoped<CalendarQueries>();

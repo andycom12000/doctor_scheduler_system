@@ -308,6 +308,13 @@ paths:
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema: { type: string, format: binary }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: layout 不是 area-by-day 或 day-by-staff
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/schedules/{ym}/violations:
     parameters:

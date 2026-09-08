@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <!-- TestServer：正式版 Shell 與契約守法測試都用它在 process 內跑同一個 pipeline（§6.2） -->
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.30" />
   </ItemGroup>
 
