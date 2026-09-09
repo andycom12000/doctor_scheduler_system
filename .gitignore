@@ -21,8 +21,10 @@ src/Scheduler.Shell/wwwroot/
 frontend/src/api/schema.d.ts
 
 # ---- 隨附 runtime ----
-# WebView2 Fixed Version 約 180MB，由 build/fetch-webview2.ps1 下載，不進版控。
+# WebView2 Fixed Version 解開約 800MB，由 build/fetch-webview2.ps1 解壓，不進版控。
 build/webview2-runtime/
+# 手動下載的 Fixed Version .cab（~350MB），同樣不進版控
+build/*.cab
 
 # ---- portable 執行期資料 ----
 # 所有狀態都寫在程式旁的 data/，見 docs/ARCHITECTURE.md §3.2

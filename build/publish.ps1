@@ -6,7 +6,8 @@
 .DESCRIPTION
     步驟：
       1. 建置前端（輸出到 src/Scheduler.Shell/wwwroot）
-      2. dotnet publish Scheduler.Shell（self-contained、win-x64、不 trim、不單一檔）
+      2. dotnet publish Scheduler.Shell（self-contained、win-x64、不 trim、不單一檔），
+         並清掉 Api 的 apphost 殘留與前端開發用檔案（Scheduler.Api.dll 是殼引用的組件，不能刪）
       3. app-local 放入 VC++ runtime（msvcp140 / vcruntime140 / vcruntime140_1）
          —— OR-Tools 的 native 程式庫依賴它們，NuGet 套件不附帶，見 docs/ARCHITECTURE.md §9
       4. 複製 WebView2 Fixed Version runtime 到 webview2/
@@ -71,6 +72,29 @@ dotnet publish (Join-Path $repoRoot 'src/Scheduler.Shell/Scheduler.Shell.csproj'
     --output $OutputPath `
     --nologo
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish 失敗' }
+
+# 殼關掉了 ValidateExecutableReferencesMatchSelfContained，Api 專案的 apphost 與其設定檔會跟著掉進輸出；
+# 殼是在 process 內 host Api（規則 2），從不執行它。**Scheduler.Api.dll 不能刪**——那是殼引用的組件本體，
+# 刪掉會在 OnLoaded 丟 FileNotFoundException（實測）。appsettings.Development.json 也會被 ContentRoot 讀到，
+# 使用者機器若設了 ASPNETCORE_ENVIRONMENT=Development 就會疊上去。MSW 的 service worker 是前端開發用檔案。
+# pdb 刻意留著：單機版沒有遙測，例外堆疊裡的行號是唯一的現場診斷資訊。
+Write-Host '      清掉殘留檔 …' -ForegroundColor DarkGray
+$leftovers = @(
+    'Scheduler.Api.exe', 'Scheduler.Api.runtimeconfig.json', 'Scheduler.Api.deps.json',
+    'appsettings.Development.json',
+    'wwwroot/mockServiceWorker.js'
+)
+foreach ($rel in $leftovers) {
+    $p = Join-Path $OutputPath $rel
+    if (Test-Path $p) { Remove-Item $p -Force }
+}
+
+# 前端建置目標與隨附 runtime 的主版號要一致（CLAUDE.md「改一邊就要改另一邊」），這裡機械性地守住
+$wv2 = Get-Content (Join-Path $PSScriptRoot 'webview2.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$viteConfig = Get-Content (Join-Path $repoRoot 'frontend/vite.config.ts') -Raw -Encoding UTF8
+if ($viteConfig -notmatch "WEBVIEW2_CHROMIUM_TARGET\s*=\s*'chrome$($wv2.chromiumMajor)'") {
+    throw "frontend/vite.config.ts 的 WEBVIEW2_CHROMIUM_TARGET 不是 chrome$($wv2.chromiumMajor)，與 build/webview2.json 脫鉤"
+}
 
 # --- 3. VC++ runtime（app-local）---
 # OR-Tools 的 native DLL（ortools.dll、google-ortools-native.dll、abseil、protobuf、SCIP、HiGHS…）

@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     portable 發佈的必要條件：目標機器不會裝 WebView2 Evergreen runtime，
-    因此必須把 Fixed Version（約 180MB）隨程式一起帶走。
+    因此必須把 Fixed Version（152 版解開約 800MB，.cab 約 350MB）隨程式一起帶走。
     見 docs/ARCHITECTURE.md §1.1 與 §6。
 
     Microsoft 沒有為 Fixed Version 提供穩定的直接下載網址，也沒有公開 NuGet 套件，
@@ -16,7 +16,7 @@
 
 .EXAMPLE
     pwsh build/fetch-webview2.ps1
-    pwsh build/fetch-webview2.ps1 -CabPath ~/Downloads/Microsoft.WebView2.FixedVersionRuntime.141.0.3537.85.x64.cab
+    pwsh build/fetch-webview2.ps1 -CabPath ~/Downloads/Microsoft.WebView2.FixedVersionRuntime.152.0.4191.62.x64.cab
 #>
 [CmdletBinding()]
 param(
@@ -26,7 +26,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $buildDir  = $PSScriptRoot
-$config    = Get-Content (Join-Path $buildDir 'webview2.json') -Raw | ConvertFrom-Json
+$config    = Get-Content (Join-Path $buildDir 'webview2.json') -Raw -Encoding UTF8 | ConvertFrom-Json  # 5.1 預設會用 ANSI 讀，中文註解會壞掉
 $targetDir = Join-Path $buildDir 'webview2-runtime'
 
 if ($config.version -eq 'TODO') {
@@ -73,7 +73,8 @@ if (Test-Path $targetDir) {
 New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 
 Write-Host "解壓 $actualName …" -ForegroundColor Cyan
-& expand.exe $CabPath -F:* $targetDir | Out-Null
+# 用完整路徑：Git for Windows 的 usr/bin 也有一支 GNU expand.exe，PATH 排前面時會被搶走
+& (Join-Path $env:SystemRoot 'System32\expand.exe') $CabPath -F:* $targetDir | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "expand.exe 失敗，結束碼 $LASTEXITCODE" }
 
 # .cab 內是一層以版號命名的資料夾，攤平以簡化發佈時的複製。

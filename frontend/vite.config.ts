@@ -11,7 +11,7 @@ import vue from '@vitejs/plugin-vue'
  * 提高這個數字前，先確認 build/webview2.json 裡實際隨附的 runtime 版本。
  * 見 docs/ARCHITECTURE.md §5。
  */
-const WEBVIEW2_CHROMIUM_TARGET = 'chrome120'
+const WEBVIEW2_CHROMIUM_TARGET = 'chrome152' // build/webview2.json：152.0.4191.62
 
 export default defineConfig({
   plugins: [vue()],
