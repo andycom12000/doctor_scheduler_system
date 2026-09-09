@@ -10,7 +10,8 @@ namespace Scheduler.Solver.Tests;
 /// 目標函數的方向守門（#21）：Solver 最小化的目標值必須等於「1e9 × 空缺數 + 100 × Domain 重算的軟分數」。
 /// 硬違規的漂移由 <see cref="DriftGateTests"/> 守；這裡守的是軟項——任何一項符號建反、權重換算不一致、
 /// 或 Solver 與 <see cref="ScheduleScores"/> 對同一原語的算法不同，等式就會破。
-/// 出廠軟約束的範圍只有身分，所以對應是精確的（度量累計含區域類型／日類範圍時 Solver 與檢查器有微小差異，見 ScheduleModel.MetricTotal）。
+/// 精確相等的前提是出廠的 Fairness 軟約束（S1／S7）範圍只有身分：度量累計的 scope 在 Domain 端是忽略的（MetricEvaluator），
+/// 在 Solver 端會篩區域類型與日類（ScheduleModel.MetricTotal）。Preference 帶區域／日類範圍（S3、S4、S6）兩邊數的都是被罰的格子，沒有這個問題。
 /// </summary>
 public sealed class ObjectiveConsistencyTests
 {
@@ -29,7 +30,7 @@ public sealed class ObjectiveConsistencyTests
     public async Task 公平性點數啟用_唯一的_reified_項也在同一把尺上()
     {
         var ctx = new ContextBuilder().WithReferenceRoster().Build();
-        var settings = DefaultConstraints.Settings.With("S7_FAIRNESS_POINT", c => c with { Weight = 50 });
+        var settings = DefaultConstraints.Settings.With(DefaultConstraints.S7FairnessPoint, c => c with { Weight = 50 });
 
         await AssertObjectiveMatchesDomainAsync(ctx, settings, TimeSpan.FromSeconds(6));
     }
@@ -59,12 +60,11 @@ public sealed class ObjectiveConsistencyTests
         Assert.NotNull(result.Bound);
 
         // 進度回呼每找到一個更好的解就推一次，最後一次的解數要與結果一致；結果不會比最後一次進度差（時限邊緣
-        // 可能回一個沒經過回呼的更好的解），bound 只會收緊、不會鬆
+        // 可能回一個沒經過回呼的更好的解）。bound ≤ objective 由 SolverFixture.SolveAsync 對每個測試守
         Assert.NotEmpty(progress);
         Assert.True(progress[0].SolutionCount >= 1);
         Assert.Equal(result.SolutionCount, progress[^1].SolutionCount);
         Assert.True(result.Objective <= progress[^1].BestObjective + 1e-6, $"結果目標值 {result.Objective} 比最後一次進度 {progress[^1].BestObjective} 差");
-        Assert.True(result.Bound <= result.Objective + 1e-6);
 
         SolverFixture.AssertOnlyCoverageViolations(ctx, result.Duties, settings);
         var solved = ctx.WithDuties(result.Duties);

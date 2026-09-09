@@ -20,7 +20,7 @@ public sealed record ConstraintCount(int Hard, int Soft);
 
 /// <summary>
 /// 一次求解工作的持久化紀錄。只在狀態轉換時寫入（ARCHITECTURE §4.8）；
-/// 逐秒的進度不進資料庫，只留「最後一份完成的變體」的搜尋統計（<c>Last*</c> 三欄），
+/// 逐秒的進度不進資料庫，只留「最後一份**完成**的變體」是第幾份與它的搜尋統計（<c>Last*</c> 四欄），
 /// 工作結束、從資料庫讀回時 <c>progress</c> 才不會退回 0／null（#22）。
 /// </summary>
 public sealed record SolverJobRecord(
@@ -37,6 +37,7 @@ public sealed record SolverJobRecord(
     IReadOnlyList<string> Warnings,
     SolverScale? Scale,
     ConstraintCount? ConstraintCount,
+    int? LastVariantIndex = null,
     int? LastSolutionCount = null,
     double? LastBestObjective = null,
     double? LastBestBound = null);

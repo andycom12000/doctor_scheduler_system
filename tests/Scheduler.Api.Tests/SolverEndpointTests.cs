@@ -56,7 +56,8 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
         Assert.True(done["elapsedSec"]!.GetValue<double>() >= 0);
         Assert.Equal("succeeded", done["progress"]!["status"]!.GetValue<string>());
         Assert.Null(done["failureReason"]);
-        // 結束後再查一次：已離開記憶體、從資料庫組回來的進度也要有最後一份變體的搜尋統計（#22）
+        // 結束後再查一次：不論工作還在記憶體或已從資料庫組回，進度都要有最後一份變體的搜尋統計（#22；
+        // 保證走資料庫的那條在 Application.Tests）
         var reread = await _api.GetAsync($"/api/solver-jobs/{jobId}", "getSolverJob");
         foreach (var progress in new[] { done["progress"]!, reread["progress"]! })
         {

@@ -197,6 +197,7 @@ internal sealed class SolverJobRepository : ISolverJobRepository
         entity.ScaleVariables = job.Scale?.Variables;
         entity.HardConstraintCount = job.ConstraintCount?.Hard;
         entity.SoftConstraintCount = job.ConstraintCount?.Soft;
+        entity.LastVariantIndex = job.LastVariantIndex;
         entity.LastSolutionCount = job.LastSolutionCount;
         entity.LastBestObjective = job.LastBestObjective;
         entity.LastBestBound = job.LastBestBound;
@@ -219,6 +220,7 @@ internal sealed class SolverJobRepository : ISolverJobRepository
                 ? new SolverScale(st, ar, dy, vr)
                 : null,
             j.HardConstraintCount is int h && j.SoftConstraintCount is int s ? new ConstraintCount(h, s) : null,
+            j.LastVariantIndex,
             j.LastSolutionCount,
             j.LastBestObjective,
             j.LastBestBound);

@@ -503,6 +503,10 @@ namespace Scheduler.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("last_solution_count");
 
+                    b.Property<int?>("LastVariantIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_variant_index");
+
                     b.Property<int>("Month")
                         .HasColumnType("INTEGER")
                         .HasColumnName("month");

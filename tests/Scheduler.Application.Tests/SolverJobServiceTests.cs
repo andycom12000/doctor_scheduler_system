@@ -107,7 +107,7 @@ public class SolverJobServiceTests
         Assert.NotNull(persisted.ElapsedSec);
         Assert.Null(persisted.FailureReason);
         // 最後一份變體的搜尋統計跟著紀錄落盤（#22）
-        Assert.Equal((3, 12.0, 12.0), (persisted.LastSolutionCount, persisted.LastBestObjective, persisted.LastBestBound));
+        Assert.Equal((3, 3, 12.0, 12.0), (persisted.LastVariantIndex, persisted.LastSolutionCount, persisted.LastBestObjective, persisted.LastBestBound));
         // 建立、開始、三份變體、結束：每個狀態轉換一次 commit
         Assert.True(store.Commits >= 6, $"只 commit 了 {store.Commits} 次");
     }

@@ -21,6 +21,7 @@ public sealed class SolverJobEntity
     public int? ScaleVariables { get; set; }
     public int? HardConstraintCount { get; set; }
     public int? SoftConstraintCount { get; set; }
+    public int? LastVariantIndex { get; set; }
     public int? LastSolutionCount { get; set; }
     public double? LastBestObjective { get; set; }
     public double? LastBestBound { get; set; }

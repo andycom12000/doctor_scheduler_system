@@ -54,10 +54,11 @@ public sealed class CpSatSolver : ISolver
             _ => throw new InvalidOperationException($"CP-SAT 拒絕模型：{status}。{solver.ResponseStats()}"),
         };
 
-        // 目標值用回傳的解直接對目標式求值，不用 solver.ObjectiveValue：時限內停下的 Feasible 解，ObjectiveValue
-        // 可能比這個解的真實目標值高（實測差額是 Fairness 項的整數倍——presolve 把 AddMaxEquality 之類只出現在目標式的
-        // 輔助變數放鬆，搜尋中的值帶鬆弛，回傳的解經 postsolve 後才是緊的）。這樣 Objective 才與 Extract 出來的班表、
-        // Domain 重算的分數對得上（tests/Scheduler.Solver.Tests/ObjectiveConsistencyTests）。
+        // 目標值用回傳的解直接對目標式求值，不用 solver.ObjectiveValue：實測（OR-Tools 9.15）時限內停下的 Feasible 解，
+        // ObjectiveValue 與 callback 的 ObjectiveValue() 可能比這個解的真實目標值高，差額是 Fairness 項的整數倍；把解固定回
+        // 模型重算、或 solver.Value(目標式)，都與 Domain 重算的分數相等。推測是 presolve 放鬆了只出現在目標式裡的
+        // AddMaxEquality 輔助變數，搜尋中的值帶鬆弛，回傳的解經 postsolve 後才是緊的——機制未經證實，觀察是可重現的
+        // （tests/Scheduler.Solver.Tests/ObjectiveConsistencyTests）。
         SolveResult Result(SolveStatus s) => new(
             s, model.Extract(solver), callback.SolutionCount, (double)solver.Value(model.Objective), solver.BestObjectiveBound, model.VariableCount);
     }

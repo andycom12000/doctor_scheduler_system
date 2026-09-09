@@ -27,6 +27,12 @@ namespace Scheduler.Persistence.Migrations
                 table: "solver_job",
                 type: "INTEGER",
                 nullable: true);
+
+            migrationBuilder.AddColumn<int>(
+                name: "last_variant_index",
+                table: "solver_job",
+                type: "INTEGER",
+                nullable: true);
         }
 
         /// <inheritdoc />
@@ -42,6 +48,10 @@ namespace Scheduler.Persistence.Migrations
 
             migrationBuilder.DropColumn(
                 name: "last_solution_count",
+                table: "solver_job");
+
+            migrationBuilder.DropColumn(
+                name: "last_variant_index",
                 table: "solver_job");
         }
     }

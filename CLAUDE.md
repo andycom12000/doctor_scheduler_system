@@ -111,7 +111,7 @@ Shell 是 net8.0-windows，只守得到 csproj 層，編譯期由那個旗標守
 `tests/Scheduler.Solver.Tests` 是漂移守門（§4.8）：真的跑 CP-SAT，任一輸出丟給 `ViolationChecker`，硬違規只准是
 覆蓋。情境含參考名單 33 人、NP 四條、跨月尾巴、登記爆量、關 H2、多樣性、中止、S7 的 reification。
 `ObjectiveConsistencyTests` 守軟項方向：Solver 目標值 = `1e9 × 空缺 + 100 × Application 的 VariantScoring.SoftScore`
-（精確相等，出廠軟約束範圍只有身分才成立）。fixture 借 Domain.Tests 的 `ContextBuilder`。每個 Solver PR 必過，CI 有跑。
+（精確相等；前提是 Fairness 軟約束 S1／S7 的範圍只有身分——度量累計的 scope Domain 端忽略、Solver 端會篩）。fixture 借 Domain.Tests 的 `ContextBuilder`。每個 Solver PR 必過，CI 有跑。
 `tests/Scheduler.Api.Tests` 是契約守法測試：`ApiFixture` 用 TestServer + SQLite in-memory 把 Api 跑起來，
 `ContractSchema` 把 `api-contract.yaml` 轉成 JSON Schema（`components/schemas` 搬進 `$defs`、
 `$ref` 改寫、`format: date` 檢查開著），每個端點的回應都驗形狀與狀態碼。新端點要跟著加一個測試。寫入端點的測試在 `WriteEndpointTests`，

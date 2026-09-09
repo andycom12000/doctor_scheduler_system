@@ -297,9 +297,11 @@ public sealed class SolverJobService
                         : $"第 {i + 1} 份變體在 {live.Record.TimeLimitSecPerVariant} 秒內找不到任何可行解");
                 }
 
-                live.CompleteVariant(result, _clock.GetUtcNow());
                 var variant = BuildVariant(live, profile, result.Duties);
                 await WithRepositoryAsync(repo => repo.AddVariantAsync(variant, CancellationToken.None), CancellationToken.None);
+                // 變體存進去了才算「完成」，Last* 才不會指到一份沒落盤的變體
+                live.CompleteVariant(i + 1, result, _clock.GetUtcNow());
+                live.Publish(this);
                 avoid.Add(result.Duties);
             }
 
@@ -481,10 +483,14 @@ public sealed class SolverJobService
 
     // ---- helpers ----
 
-    /// <summary>已結束、只剩資料庫紀錄的工作：搜尋統計是最後一份完成的變體的（中途中止或失敗則是前一份，一份都沒完成是 0／null）。</summary>
+    /// <summary>
+    /// 已結束、只剩資料庫紀錄的工作。variantIndex 與搜尋統計都是「最後一份完成的變體」的：成功時就是最後一份；
+    /// 中止或失敗時是之前完成的那份（一份都沒完成則是 0／null），與工作還活著時最後推出去的那筆（未完成那份的即時值）不同。
+    /// elapsedSec 是整個工作的耗時（紀錄裡只有這個），不是活著時的本份變體耗時。
+    /// </summary>
     private static SolverProgressSnapshot TerminalSnapshot(SolverJobRecord r) =>
         new(
-            r.JobId, r.Status, r.VariantCount, r.VariantCount, r.ElapsedSec ?? 0, r.TimeLimitSecPerVariant,
+            r.JobId, r.Status, r.LastVariantIndex ?? 0, r.VariantCount, r.ElapsedSec ?? 0, r.TimeLimitSecPerVariant,
             r.LastSolutionCount ?? 0, r.LastBestObjective, r.LastBestBound, GapOf(r.LastBestObjective, r.LastBestBound));
 
     /// <summary>收斂間隙 |obj − bound| / |obj|；還沒有可行解（任一為 null）時是 null，目標為 0 就是已證明最佳。</summary>
@@ -500,7 +506,10 @@ public sealed class SolverJobService
     private static SchedulerException Busy(string? jobId) =>
         new(ErrorCode.SolverBusy, "已有求解工作在執行中", jobId is null ? null : new Dictionary<string, object?> { ["jobId"] = jobId });
 
-    /// <summary>活著的工作：紀錄、輸入、進度快照、訂閱者。所有變更都在 <see cref="SolverJobService._gate"/> 下。</summary>
+    /// <summary>
+    /// 活著的工作：紀錄、輸入、進度快照、訂閱者。紀錄與快照的變更在自己的 <c>_sync</c> 下；
+    /// <see cref="SolverJobService._gate"/> 只保護 _live、_broadcast 與 Subscribers。
+    /// </summary>
     private sealed class LiveJob
     {
         private readonly object _sync = new();
@@ -564,12 +573,13 @@ public sealed class SolverJobService
         /// 進度回呼只在找到新解時觸發，最後的 bound 收緊（含證明最佳）不會再推一次；多樣性退讓重解時
         /// <see cref="BeginVariant"/> 也已把快照歸零，所以以求解結果為準。
         /// </summary>
-        public void CompleteVariant(SolveResult result, DateTimeOffset now)
+        public void CompleteVariant(int index, SolveResult result, DateTimeOffset now)
         {
             lock (_sync)
             {
                 Record = Record with
                 {
+                    LastVariantIndex = index,
                     LastSolutionCount = result.SolutionCount,
                     LastBestObjective = result.Objective,
                     LastBestBound = result.Bound,

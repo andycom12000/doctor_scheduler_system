@@ -11,7 +11,7 @@ using Scheduler.Persistence;
 namespace Scheduler.Persistence.Migrations
 {
     [DbContext(typeof(SchedulerDbContext))]
-    [Migration("20260909154237_SolverJobLastSearchStats")]
+    [Migration("20260909162620_SolverJobLastSearchStats")]
     partial class SolverJobLastSearchStats
     {
         /// <inheritdoc />
@@ -505,6 +505,10 @@ namespace Scheduler.Persistence.Migrations
                     b.Property<int?>("LastSolutionCount")
                         .HasColumnType("INTEGER")
                         .HasColumnName("last_solution_count");
+
+                    b.Property<int?>("LastVariantIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_variant_index");
 
                     b.Property<int>("Month")
                         .HasColumnType("INTEGER")
