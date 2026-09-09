@@ -101,11 +101,27 @@ $osProvided = @(
     '^netapi32\.dll$', '^wevtapi\.dll$', '^pdh\.dll$', '^activeds\.dll$', '^shcore\.dll$',
     '^msvcrt\.dll$', '^windows\.', '^combase\.dll$', '^oleaut32\.dll$', '^clbcatq\.dll$',
     '^mfplat\.dll$', '^mf\.dll$', '^wintrust\.dll$', '^cabinet\.dll$', '^winspool\.drv$',
-    '^d3d9\.dll$', '^opengl32\.dll$', '^hid\.dll$', '^ktmw32\.dll$', '^authz\.dll$', '^fltlib\.dll$'
+    '^d3d9\.dll$', '^opengl32\.dll$', '^hid\.dll$', '^ktmw32\.dll$', '^authz\.dll$', '^fltlib\.dll$',
+    # 掃 WebView2 152 的核心檔（msedgewebview2.exe、EmbeddedBrowserWebView.dll…）補上的，一樣是 Windows 10/11 自帶
+    '^avrt\.dll$', '^bcp47langs\.dll$', '^bcp47mrm\.dll$', '^bcryptprimitives\.dll$', '^coremessaging\.dll$',
+    '^dcomp\.dll$', '^dnsapi\.dll$', '^elscore\.dll$', '^httpapi\.dll$', '^profapi\.dll$', '^rometadata\.dll$',
+    '^usp10\.dll$', '^wer\.dll$', '^xmllite\.dll$'
 )
 
 $root = Get-Item $Path
-$files = Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in '.dll', '.exe' }
+# webview2/ 是 Microsoft 原封不動的 Fixed Version 封裝，核心檔照掃（它們的 import 都是 OS 自帶，上面白名單已補齊）。
+# 只跳過兩樣 Microsoft 自己就載不起來、也與我們無關的東西（實測 152.0.4191.62）：
+#   - undocked_copilot/：Copilot 語音編解碼器硬 import GStreamer（glib、gobject、gstreamer…），封裝內沒附
+#   - prefs_enclave_x64.dll：VBS enclave 內載入，import ucrtbase_enclave／vertdll
+# runtime 本身的完整性由乾淨 Windows 的實機驗收守（ARCHITECTURE §10）。
+$runtimeDir = Join-Path $root.FullName 'webview2'
+$skip = @(
+    ((Join-Path $runtimeDir 'undocked_copilot') + [IO.Path]::DirectorySeparatorChar),   # 逗號比 + 先結合，要多包一層括號
+    (Join-Path $runtimeDir 'prefs_enclave_x64.dll')
+)
+$files = Get-ChildItem $root.FullName -Recurse -File |
+    Where-Object { $_.Extension -in '.dll', '.exe' } |
+    Where-Object { $f = $_.FullName; -not ($skip | Where-Object { $f.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }) }
 $present = @{}
 foreach ($f in $files) { $present[$f.Name.ToLowerInvariant()] = $true }
 
@@ -121,7 +137,7 @@ foreach ($f in $files) {
 }
 
 if ($missing.Count -eq 0) {
-    Write-Host "native 相依檢查通過：$($files.Count) 個 PE 檔，所有 import 都在包內或作業系統內。" -ForegroundColor Green
+    Write-Host "native 相依檢查通過：$($files.Count) 個 PE 檔（不含 webview2/ 的 Copilot 與 enclave），所有 import 都在包內或作業系統內。" -ForegroundColor Green
     exit 0
 }
 

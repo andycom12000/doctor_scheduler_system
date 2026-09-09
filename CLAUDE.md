@@ -81,8 +81,8 @@
   頁面回 `index.html`、其餘讀 `wwwroot/`；**不用 `SetVirtualHostNameToFolderMapping`**（實測會搶在事件前
   吃掉請求，§6.2）。純轉換在 `WebViewBridge`（`tests/Scheduler.Shell.Tests` 連結原始檔測）。進度事件從
   Api 的 `ISolverProgressFeed.AllAsync` 拿、`PostWebMessageAsJson` 推。啟動先探 `data/` 可寫，失敗以對話框
-  說明後關閉。開發機沒有 `webview2/` 資料夾時退回機器上的 Evergreen runtime。發佈包
-  （`build/webview2.json` 仍是 TODO）尚未接
+  說明後關閉。開發機沒有 `webview2/` 資料夾時退回機器上的 Evergreen runtime。發佈包由
+  `build/publish.ps1` 產出，隨附 WebView2 Fixed Version 152.0.4191.62（`build/webview2.json`）
 
 ## 兩條硬性規則（違反時編譯會過，但架構測試會擋）
 

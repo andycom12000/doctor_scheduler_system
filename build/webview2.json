@@ -2,10 +2,10 @@
   "$comment": [
     "隨附的 WebView2 Fixed Version runtime 版本，全專案的唯一真相來源。",
     "改動這裡時必須同步檢查 frontend/vite.config.ts 的 WEBVIEW2_CHROMIUM_TARGET。",
-    "version 請填 Fixed Version 發佈頁上的完整版號，例如 141.0.3537.85。"
+    "version 請填 Fixed Version 發佈頁上的完整版號，例如 152.0.4191.62。"
   ],
-  "version": "TODO",
+  "version": "152.0.4191.62",
   "architecture": "x64",
   "downloadPage": "https://developer.microsoft.com/microsoft-edge/webview2/#download",
-  "chromiumMajor": "TODO"
+  "chromiumMajor": "152"
 }

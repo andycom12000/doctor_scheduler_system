@@ -45,7 +45,7 @@ Per-Monitor V2 DPI 行為較佳——目標環境螢幕組合混亂（4K 筆電�
 CSS Grid 成本極低，在 WPF DataGrid 是一場硬仗。同時前端要交給專職 JS 開發者，需標準前端生態。
 
 **為何 Fixed Version WebView2**：portable 的必要條件。Evergreen 模式要求目標機器已安裝
-runtime，不符合免安裝前提。代價約 180MB 與自行負責更新。
+runtime，不符合免安裝前提。代價是體積（152.0.4191.62 解開約 800MB，發佈包合計約 1.1GB）與自行負責更新。
 
 **為何 `WebResourceRequested` 而非 `AddHostObjectToScript`**：host objects 是 COM proxy
 語意，前端得寫 Windows 專屬程式碼，遷移時整份重寫。攔截法讓前端寫標準 `fetch('/api/...')`，
@@ -496,7 +496,8 @@ core.Settings.AreDevToolsEnabled = true;   // Debug 建置開啟，Release 關�
 - **VC++ runtime 三個檔案 app-local 隨附**（`msvcp140.dll`、`vcruntime140.dll`、`vcruntime140_1.dll`），
   由 `build/publish.ps1` 從 Visual Studio / Build Tools 的 `VC\Redist\MSVC\<ver>\x64\Microsoft.VC143.CRT`
   複製到發佈包根目錄。理由見 §9
-- `build/check-native-deps.ps1` 掃描發佈包內每個 PE 檔的 import table，任何既不在包內、
+- `build/check-native-deps.ps1` 掃描發佈包內每個 PE 檔的 import table（只跳過 `webview2/` 裡 Microsoft
+  自己就載不起來的 Copilot 語音編解碼器與 enclave DLL），任何既不在包內、
   也不是 Windows 自帶的 DLL 都會讓 publish 失敗。它是靜態分析，**取代不了乾淨機器實測**，
   但能在開發機上擋住「少帶一個 DLL」這一類的退化
 
@@ -514,7 +515,7 @@ HospitalScheduler/
 ├─ msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll
 │                                # VC++ runtime，app-local，由 publish.ps1 放入
 ├─ runtimes/win-x64/native/      # 只剩 WebView2Loader.dll 的副本（套件行為，無害）
-├─ webview2/                     # Fixed Version runtime（~180MB）
+├─ webview2/                     # Fixed Version runtime（152 版 ~800MB）
 ├─ wwwroot/                      # 前端 build 產物
 └─ data/                         # 所有狀態，含 scheduler.db 與 WebView2 user data
 ```
