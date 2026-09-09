@@ -29,7 +29,7 @@ public sealed class CpSatSolver : ISolver
             StringParameters = string.Create(CultureInfo.InvariantCulture,
                 $"max_time_in_seconds:{request.TimeLimit.TotalSeconds:0.###}, num_workers:{Workers}"),
         };
-        var callback = new ProgressCallback(onProgress, cancellationToken);
+        var callback = new ProgressCallback(model, onProgress, cancellationToken);
 
         CpSolverStatus status;
         using (cancellationToken.Register(() => solver.StopSearch()))
@@ -54,18 +54,24 @@ public sealed class CpSatSolver : ISolver
             _ => throw new InvalidOperationException($"CP-SAT 拒絕模型：{status}。{solver.ResponseStats()}"),
         };
 
+        // 目標值用回傳的解直接對目標式求值，不用 solver.ObjectiveValue：時限內停下的 Feasible 解，ObjectiveValue
+        // 可能比這個解的真實目標值高（實測差額是 Fairness 項的整數倍——presolve 把 AddMaxEquality 之類只出現在目標式的
+        // 輔助變數放鬆，搜尋中的值帶鬆弛，回傳的解經 postsolve 後才是緊的）。這樣 Objective 才與 Extract 出來的班表、
+        // Domain 重算的分數對得上（tests/Scheduler.Solver.Tests/ObjectiveConsistencyTests）。
         SolveResult Result(SolveStatus s) => new(
-            s, model.Extract(solver), callback.SolutionCount, solver.ObjectiveValue, solver.BestObjectiveBound, model.VariableCount);
+            s, model.Extract(solver), callback.SolutionCount, (double)solver.Value(model.Objective), solver.BestObjectiveBound, model.VariableCount);
     }
 
     /// <summary>每找到一個解回報一次。從求解器的執行緒被叫，回呼裡的例外不能漏到 native 端。</summary>
     private sealed class ProgressCallback : CpSolverSolutionCallback
     {
+        private readonly ScheduleModel _model;
         private readonly Action<SolveProgress>? _onProgress;
         private readonly CancellationToken _cancellationToken;
 
-        public ProgressCallback(Action<SolveProgress>? onProgress, CancellationToken cancellationToken)
+        public ProgressCallback(ScheduleModel model, Action<SolveProgress>? onProgress, CancellationToken cancellationToken)
         {
+            _model = model;
             _onProgress = onProgress;
             _cancellationToken = cancellationToken;
         }
@@ -82,7 +88,8 @@ public sealed class CpSatSolver : ISolver
 
             try
             {
-                _onProgress?.Invoke(new SolveProgress(WallTime(), SolutionCount, ObjectiveValue(), BestObjectiveBound()));
+                // 與最終結果同一個算法（見 Result），進度看到的數字才不會比結果高
+                _onProgress?.Invoke(new SolveProgress(WallTime(), SolutionCount, (double)Value(_model.Objective), BestObjectiveBound()));
             }
             catch
             {

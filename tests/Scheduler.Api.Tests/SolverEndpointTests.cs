@@ -56,6 +56,15 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
         Assert.True(done["elapsedSec"]!.GetValue<double>() >= 0);
         Assert.Equal("succeeded", done["progress"]!["status"]!.GetValue<string>());
         Assert.Null(done["failureReason"]);
+        // 結束後再查一次：已離開記憶體、從資料庫組回來的進度也要有最後一份變體的搜尋統計（#22）
+        var reread = await _api.GetAsync($"/api/solver-jobs/{jobId}", "getSolverJob");
+        foreach (var progress in new[] { done["progress"]!, reread["progress"]! })
+        {
+            Assert.True(progress["solutionCount"]!.GetValue<int>() >= 1);
+            Assert.NotNull(progress["bestObjective"]);
+            Assert.NotNull(progress["bestBound"]);
+            Assert.NotNull(progress["gap"]);
+        }
 
         var variants = (await _api.GetAsync($"/api/solver-jobs/{jobId}/variants", "listVariants"))["variants"]!.AsArray();
         var variant = Assert.Single(variants)!;

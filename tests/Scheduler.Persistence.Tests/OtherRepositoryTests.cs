@@ -186,6 +186,9 @@ public class SolverJobRepositoryTests
             Scale = new SolverScale(33, 5, 30, 4950),
             ConstraintCount = new ConstraintCount(7, 6),
             Warnings = Array.Empty<string>(),
+            LastSolutionCount = 4,
+            LastBestObjective = 2_000_012_300,
+            LastBestBound = 2_000_011_000,
         };
 
         using (var scope = db.Scope())

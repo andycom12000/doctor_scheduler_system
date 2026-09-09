@@ -294,7 +294,15 @@ C# → JS 用 `core.PostWebMessageAsJson(...)`。開發期 transport 另提供
 
 **漂移守門測試**：Solver 的任一輸出丟給 `ViolationChecker`，硬違規必須為零，
 唯一允許的例外是覆蓋（空缺）。情境含 NP 四條、跨月、登記爆量。每個 Solver PR 必過。
-這是 ADR-0002 的自動化守門。
+這是 ADR-0002 的自動化守門。軟項另有**方向守門**（`ObjectiveConsistencyTests`）：
+Solver 回報的目標值必須恰等於 `1e9 × 空缺數 + 100 × Σ（使用者權重 × Domain 重算的分數）`，
+任一軟項符號建反、權重換算不一致、或兩邊對同一原語的算法不同都會破。
+目標值因此用回傳的解對目標式直接求值，不用 `CpSolver.ObjectiveValue`——時限內停下的
+Feasible 解，後者可能比解的真實目標值高（presolve 放鬆只出現在目標式裡的輔助變數）。
+
+**已結束的工作只留最後一份變體的搜尋統計**（`solver_job.last_solution_count / last_best_objective /
+last_best_bound`）：逐秒進度不落盤，但 `GET /solver-jobs/{id}` 在工作離開記憶體後仍要能回
+`progress.solutionCount` 等欄位，不能退回 0／null。
 
 **進度事件只有一個來源，兩個訂閱者**：Api 的 SSE endpoint 與 Shell 的
 `PostWebMessageAsJson`，收到的 JSON 一模一樣。

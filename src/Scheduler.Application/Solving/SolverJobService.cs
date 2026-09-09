@@ -297,6 +297,7 @@ public sealed class SolverJobService
                         : $"第 {i + 1} 份變體在 {live.Record.TimeLimitSecPerVariant} 秒內找不到任何可行解");
                 }
 
+                live.CompleteVariant(result, _clock.GetUtcNow());
                 var variant = BuildVariant(live, profile, result.Duties);
                 await WithRepositoryAsync(repo => repo.AddVariantAsync(variant, CancellationToken.None), CancellationToken.None);
                 avoid.Add(result.Duties);
@@ -450,17 +451,7 @@ public sealed class SolverJobService
             fairnessPoint is null ? null : scores.FairnessByGroup(fairnessPoint.Scope, Metric.FairnessPoint).Values.Sum());
 
         // 軟分數用使用者的原始權重（不乘立場乘數），三份變體才能放在同一把尺上比
-        var softScore = 0.0;
-        foreach (var x in constraints.Soft.Where(x => x.IsActive))
-        {
-            var score = x.Primitive switch
-            {
-                Primitive.Fairness => scores.Fairness(x),
-                Primitive.Consistency => scores.Consistency(x),
-                _ => validation.Violations.Count(v => v.Code == x.Code),
-            };
-            softScore += x.Weight * score;
-        }
+        var softScore = VariantScoring.SoftScore(ctx, constraints, validation);
 
         return new VariantRecord(
             live.Record.JobId, profile.Id, profile.Label, profile.Multipliers,
@@ -490,8 +481,17 @@ public sealed class SolverJobService
 
     // ---- helpers ----
 
+    /// <summary>已結束、只剩資料庫紀錄的工作：搜尋統計是最後一份完成的變體的（中途中止或失敗則是前一份，一份都沒完成是 0／null）。</summary>
     private static SolverProgressSnapshot TerminalSnapshot(SolverJobRecord r) =>
-        new(r.JobId, r.Status, r.VariantCount, r.VariantCount, r.ElapsedSec ?? 0, r.TimeLimitSecPerVariant, 0, null, null, null);
+        new(
+            r.JobId, r.Status, r.VariantCount, r.VariantCount, r.ElapsedSec ?? 0, r.TimeLimitSecPerVariant,
+            r.LastSolutionCount ?? 0, r.LastBestObjective, r.LastBestBound, GapOf(r.LastBestObjective, r.LastBestBound));
+
+    /// <summary>收斂間隙 |obj − bound| / |obj|；還沒有可行解（任一為 null）時是 null，目標為 0 就是已證明最佳。</summary>
+    private static double? GapOf(double? objective, double? bound) =>
+        objective is double obj && bound is double bnd
+            ? (obj == 0 ? 0 : Math.Round(Math.Abs(obj - bnd) / Math.Abs(obj), 4))
+            : null;
 
     private static string NewJobId() => "job-" + Guid.NewGuid().ToString("N")[..12];
 
@@ -559,6 +559,32 @@ public sealed class SolverJobService
             }
         }
 
+        /// <summary>
+        /// 一份變體解完：用 <see cref="SolveResult"/> 的最終統計蓋掉快照，並記進紀錄。
+        /// 進度回呼只在找到新解時觸發，最後的 bound 收緊（含證明最佳）不會再推一次；多樣性退讓重解時
+        /// <see cref="BeginVariant"/> 也已把快照歸零，所以以求解結果為準。
+        /// </summary>
+        public void CompleteVariant(SolveResult result, DateTimeOffset now)
+        {
+            lock (_sync)
+            {
+                Record = Record with
+                {
+                    LastSolutionCount = result.SolutionCount,
+                    LastBestObjective = result.Objective,
+                    LastBestBound = result.Bound,
+                };
+                Snapshot = Snapshot with
+                {
+                    ElapsedSec = Math.Round((now - _variantStartedAt).TotalSeconds, 1),
+                    SolutionCount = result.SolutionCount,
+                    BestObjective = result.Objective,
+                    BestBound = result.Bound,
+                    Gap = GapOf(result.Objective, result.Bound),
+                };
+            }
+        }
+
         public void Touch(DateTimeOffset now)
         {
             lock (_sync)
@@ -575,16 +601,13 @@ public sealed class SolverJobService
         {
             lock (_sync)
             {
-                var gap = p.BestObjective is double obj && p.BestBound is double bound
-                    ? (obj == 0 ? 0 : Math.Round(Math.Abs(obj - bound) / Math.Abs(obj), 4))
-                    : (double?)null;
                 Snapshot = Snapshot with
                 {
                     ElapsedSec = Math.Round((now - _variantStartedAt).TotalSeconds, 1),
                     SolutionCount = p.SolutionCount,
                     BestObjective = p.BestObjective,
                     BestBound = p.BestBound,
-                    Gap = gap,
+                    Gap = GapOf(p.BestObjective, p.BestBound),
                 };
             }
 

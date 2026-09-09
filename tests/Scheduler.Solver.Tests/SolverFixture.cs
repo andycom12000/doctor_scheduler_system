@@ -39,11 +39,12 @@ internal static class SolverFixture
         IReadOnlyList<IReadOnlyList<Duty>>? avoid = null,
         int minDifferent = VariantProfiles.MinDifferentCells,
         TimeSpan? limit = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<SolveProgress>? onProgress = null)
     {
         var settings = constraints ?? DefaultConstraints.Settings;
         var request = new SolveRequest(ctx, settings, UserWeights(settings), avoid ?? Array.Empty<IReadOnlyList<Duty>>(), minDifferent, limit ?? ShortLimit);
-        return new CpSatSolver().SolveAsync(request, null, cancellationToken);
+        return new CpSatSolver().SolveAsync(request, onProgress, cancellationToken);
     }
 
     public static SchedulingContext WithDuties(this SchedulingContext c, IReadOnlyList<Duty> duties) => new(

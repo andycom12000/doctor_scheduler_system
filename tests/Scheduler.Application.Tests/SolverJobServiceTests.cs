@@ -22,6 +22,41 @@ public class SolverJobServiceTests
         return (new SolverJobService(store, solver, TimeProvider.System), store, solver);
     }
 
+    [Fact]
+    public async Task 結束後從資料庫讀回_進度仍是最後一份變體的搜尋統計_不退回零()
+    {
+        // 假求解器的進度回呼只報 1 個解、目標 20；最終結果是 3 個解、目標 12、bound 12：以結果為準
+        var (service, _, _) = Setup();
+
+        var created = await service.CreateAsync(Oct, 2, 1);
+        var done = await WaitForTerminalAsync(service, created.Record.JobId);
+        // 等背景工作把 slot 放掉（能再建一個工作就代表放掉了）：之後的 GetAsync 一定走資料庫紀錄，不再是記憶體裡的活工作
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            try
+            {
+                await service.CreateAsync(Oct, 1, 1);
+                break;
+            }
+            catch (SchedulerException ex) when (ex.Code == ErrorCode.SolverBusy && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20);
+            }
+        }
+
+        var reread = await service.GetAsync(created.Record.JobId);
+        foreach (var view in new[] { done, reread })
+        {
+            Assert.Equal(SolverJobStatus.Succeeded, view.Progress.Status);
+            Assert.Equal(2, view.Progress.VariantIndex);
+            Assert.Equal(3, view.Progress.SolutionCount);
+            Assert.Equal(12.0, view.Progress.BestObjective);
+            Assert.Equal(12.0, view.Progress.BestBound);
+            Assert.Equal(0.0, view.Progress.Gap);
+        }
+    }
+
     /// <summary>把 s1 排進 10/1 的 ICU，其他全空：合法但空缺一堆。</summary>
     private static SolveResult OneDuty(SolveRequest r) =>
         new(SolveStatus.Optimal, new[] { new Duty("area-icu", D(1), "s1") }, 3, 12.0, 12.0, r.Context.Staff.Count * 5);
@@ -71,6 +106,8 @@ public class SolverJobServiceTests
         Assert.NotNull(persisted.FinishedAt);
         Assert.NotNull(persisted.ElapsedSec);
         Assert.Null(persisted.FailureReason);
+        // 最後一份變體的搜尋統計跟著紀錄落盤（#22）
+        Assert.Equal((3, 12.0, 12.0), (persisted.LastSolutionCount, persisted.LastBestObjective, persisted.LastBestBound));
         // 建立、開始、三份變體、結束：每個狀態轉換一次 commit
         Assert.True(store.Commits >= 6, $"只 commit 了 {store.Commits} 次");
     }
