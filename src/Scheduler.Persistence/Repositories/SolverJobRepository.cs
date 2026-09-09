@@ -197,6 +197,10 @@ internal sealed class SolverJobRepository : ISolverJobRepository
         entity.ScaleVariables = job.Scale?.Variables;
         entity.HardConstraintCount = job.ConstraintCount?.Hard;
         entity.SoftConstraintCount = job.ConstraintCount?.Soft;
+        entity.LastVariantIndex = job.LastVariantIndex;
+        entity.LastSolutionCount = job.LastSolutionCount;
+        entity.LastBestObjective = job.LastBestObjective;
+        entity.LastBestBound = job.LastBestBound;
     }
 
     private static SolverJobRecord ToDomain(SolverJobEntity j, IEnumerable<string> warnings) =>
@@ -215,5 +219,9 @@ internal sealed class SolverJobRepository : ISolverJobRepository
             j.ScaleStaff is int st && j.ScaleAreas is int ar && j.ScaleDays is int dy && j.ScaleVariables is int vr
                 ? new SolverScale(st, ar, dy, vr)
                 : null,
-            j.HardConstraintCount is int h && j.SoftConstraintCount is int s ? new ConstraintCount(h, s) : null);
+            j.HardConstraintCount is int h && j.SoftConstraintCount is int s ? new ConstraintCount(h, s) : null,
+            j.LastVariantIndex,
+            j.LastSolutionCount,
+            j.LastBestObjective,
+            j.LastBestBound);
 }

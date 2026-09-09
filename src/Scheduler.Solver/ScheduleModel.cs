@@ -69,10 +69,14 @@ internal sealed class ScheduleModel
 
         Diversity();
         Hints();
-        Model.Minimize(_objective.Count == 0 ? LinearExpr.Constant(0) : LinearExpr.Sum(_objective));
+        Objective = _objective.Count == 0 ? LinearExpr.Constant(0) : LinearExpr.Sum(_objective);
+        Model.Minimize(Objective);
     }
 
     public CpModel Model { get; }
+
+    /// <summary>目標式本體。<see cref="CpSatSolver"/> 對解直接求值取目標值，不用 <c>CpSolver.ObjectiveValue</c>（理由見那裡）。</summary>
+    public LinearExpr Objective { get; }
 
     public int VariableCount => _x.Count;
 

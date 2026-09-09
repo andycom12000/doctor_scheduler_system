@@ -33,17 +33,25 @@ internal static class SolverFixture
     public static IReadOnlyDictionary<string, double> UserWeights(ConstraintSettings settings) =>
         settings.Soft.ToDictionary(c => c.Code, c => (double)c.Weight, StringComparer.Ordinal);
 
-    public static Task<SolveResult> SolveAsync(
+    public static async Task<SolveResult> SolveAsync(
         SchedulingContext ctx,
         ConstraintSettings? constraints = null,
         IReadOnlyList<IReadOnlyList<Duty>>? avoid = null,
         int minDifferent = VariantProfiles.MinDifferentCells,
         TimeSpan? limit = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<SolveProgress>? onProgress = null)
     {
         var settings = constraints ?? DefaultConstraints.Settings;
         var request = new SolveRequest(ctx, settings, UserWeights(settings), avoid ?? Array.Empty<IReadOnlyList<Duty>>(), minDifferent, limit ?? ShortLimit);
-        return new CpSatSolver().SolveAsync(request, null, cancellationToken);
+        var result = await new CpSatSolver().SolveAsync(request, onProgress, cancellationToken);
+        // 目標值對回傳的解求值、下界來自求解器：bound ≤ 真實最佳 ≤ objective 恆成立，否則 gap 會算成正數、已證明最佳看起來像沒證明
+        if (result.Objective is double objective && result.Bound is double bound)
+        {
+            Assert.True(bound <= objective + 1e-6, $"下界 {bound} 大於目標值 {objective}");
+        }
+
+        return result;
     }
 
     public static SchedulingContext WithDuties(this SchedulingContext c, IReadOnlyList<Duty> duties) => new(
@@ -62,9 +70,10 @@ internal static class SolverFixture
         return result;
     }
 
+    /// <summary>空缺數，與 SolverJobService.BuildVariant 同一條公式：每格 max(0, requiredPerDay − 已排人數)。</summary>
     public static int Vacancies(SchedulingContext ctx, IReadOnlyList<Duty> duties)
     {
-        var filled = duties.Select(d => (d.AreaId, d.Date)).ToHashSet();
-        return ctx.Areas.Sum(a => ctx.Month.Days().Count(d => !filled.Contains((a.Id, d))));
+        var byCell = duties.ToLookup(d => (d.AreaId, d.Date));
+        return ctx.Areas.Sum(a => ctx.Month.Days().Sum(d => Math.Max(0, a.RequiredPerDay - byCell[(a.Id, d)].Count())));
     }
 }
