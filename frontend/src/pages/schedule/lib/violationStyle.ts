@@ -13,6 +13,8 @@
  * 不依賴違規清單的原始順序。
  */
 import type { Severity, Violation } from '@/api/types'
+import { parseCellKey } from './cellNav'
+import { staffCellKey } from './scheduleGrid'
 
 export type CellRenderKind = 'vacancy' | 'violation-stripe' | 'violation-bg'
 
@@ -48,4 +50,34 @@ export function buildCellRenderIndex(violations: readonly Violation[]): Map<stri
     }
   }
   return index
+}
+
+/**
+ * 逐格違規大多用 `area:{areaId}:{date}` 記位置（H1、H2、H5……凡是「這一格排錯人」的規則）；
+ * 日 × 人檢視是「人 × 日」的格線，同一個違規要轉成「當天在那個區值班的人」才畫得出來——
+ * 這正是 PR #44 review 抓到的「H5 在日 × 人畫不出來」。H1（空缺）轉不出人，天生被排除
+ * （`dutiesByArea` 查不到就跳過）。`staff:` 開頭的違規（H3／H4／H6／H7 本人累計型）
+ * 已經是對的格子，原樣併入；兩邊命中同一格時一樣照 `PRIORITY` 取高的。
+ */
+export function projectRenderIndexToStaffView(
+  index: ReadonlyMap<string, CellRenderKind>,
+  dutiesByArea: ReadonlyMap<string, string>,
+): Map<string, CellRenderKind> {
+  const result = new Map<string, CellRenderKind>()
+  const upsert = (key: string, kind: CellRenderKind): void => {
+    const current = result.get(key)
+    if (!current || PRIORITY[kind] > PRIORITY[current]) result.set(key, kind)
+  }
+  for (const [cellKey, kind] of index) {
+    const parsed = parseCellKey(cellKey)
+    if (!parsed) continue
+    if (parsed.kind === 'staff') {
+      upsert(cellKey, kind)
+      continue
+    }
+    const staffId = dutiesByArea.get(`${parsed.id}|${parsed.date}`)
+    if (!staffId) continue // H1 空缺或該格根本沒人值班：轉不出「那個人」，跳過
+    upsert(staffCellKey(staffId, parsed.date), kind)
+  }
+  return result
 }

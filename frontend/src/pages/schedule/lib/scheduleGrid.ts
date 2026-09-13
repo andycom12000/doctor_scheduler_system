@@ -8,7 +8,7 @@
  * （契約上那個欄位非必要，且 cellKey 定義上是「渲染層的索引鍵」，前端自己算才不會
  * 因為某個端點忘了帶而漏掉）。
  */
-import type { CalendarDay, Duty, PointBoardGroup } from '@/api/types'
+import type { CalendarDay, Duty, PointBoardGroup, Staff } from '@/api/types'
 
 export function areaCellKey(areaId: string, date: string): string {
   return `area:${areaId}:${date}`
@@ -24,12 +24,22 @@ export interface StaffDirectoryEntry {
   rankCode: string
   groupCode: string
   groupName: string
+  /** 組在點數看板裡出現的順序（0-based），畫面用來配 `--group-1..4`；查無所屬組時是 `null`。 */
+  groupIndex: number | null
+  status: 'active' | 'inactive'
 }
 
-/** 由點數看板攤平出人員名冊；只含在職人員（點數看板本來就只列在職）。 */
-export function buildStaffDirectory(groups: readonly PointBoardGroup[]): Map<string, StaffDirectoryEntry> {
+/**
+ * 由點數看板攤平出人員名冊；點數看板本來就只列在職，選配的 `staffList`（`GET /staff`）
+ * 補在職名冊查不到的人——最常見的是「當月仍有班、後來被停用」的人，區域 × 日／日 × 人
+ * 格內至少要印得出名字與身分，不能因為不在點數看板裡就整格空白或只剩 staffId。
+ */
+export function buildStaffDirectory(
+  groups: readonly PointBoardGroup[],
+  staffList: readonly Staff[] = [],
+): Map<string, StaffDirectoryEntry> {
   const directory = new Map<string, StaffDirectoryEntry>()
-  for (const group of groups) {
+  groups.forEach((group, groupIndex) => {
     for (const row of group.rows) {
       directory.set(row.staffId, {
         staffId: row.staffId,
@@ -37,8 +47,22 @@ export function buildStaffDirectory(groups: readonly PointBoardGroup[]): Map<str
         rankCode: row.rankCode,
         groupCode: group.groupCode,
         groupName: group.groupName,
+        groupIndex,
+        status: 'active',
       })
     }
+  })
+  for (const staff of staffList) {
+    if (directory.has(staff.id)) continue
+    directory.set(staff.id, {
+      staffId: staff.id,
+      name: staff.name,
+      rankCode: staff.rankCode,
+      groupCode: '',
+      groupName: '',
+      groupIndex: null,
+      status: staff.status,
+    })
   }
   return directory
 }
@@ -46,6 +70,12 @@ export function buildStaffDirectory(groups: readonly PointBoardGroup[]): Map<str
 /** 姓名簡稱（格內顯示用）：取前兩個字，非中文姓名也至少截兩碼。 */
 export function abbreviate(name: string): string {
   return [...name].slice(0, 2).join('')
+}
+
+/** 兩邊名冊都查不到時的最後備援（理論上不該發生——人員只會停用不會消失）：取 `staffId` 最後一段。 */
+export function shortStaffCode(staffId: string): string {
+  const dash = staffId.lastIndexOf('-')
+  return dash >= 0 ? staffId.slice(dash + 1) : staffId
 }
 
 /** `area:{areaId}|{date}` → `staffId`，區域 × 日檢視查表用。 */

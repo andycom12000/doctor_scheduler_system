@@ -40,12 +40,19 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
       <p v-if="violations.length === 0" class="violation-sidebar__empty">目前沒有違規。</p>
     </div>
     <p class="violation-sidebar__note">
-      API 只帶 code 與 severity；底色／斜紋／外框由前端決定。公平性是身分組層級的分數，指不到格子，不出現在這裡。
+      公平性（S1／S7）是身分組層級的分數，指不到特定日期或格子，不會列在這裡——請到點數看板看。
     </p>
   </section>
 </template>
 
 <style scoped>
+.k {
+  font: 600 10px/1 var(--font-heading);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .violation-sidebar {
   display: flex;
   flex-direction: column;
@@ -59,10 +66,12 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
   gap: var(--space-2);
 }
 
-.violation-sidebar__title .tag-outline {
+/* `.tag-outline` 不在 styles.css 的最小共用元件類別裡（只有 tag-neutral／tag-accent），
+   三個用到它的檔案（這裡、DayDetailPanel、UtilizationPanel）統一補這個 Industry 原版。 */
+.tag-outline {
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
 }
 
 .violation-sidebar__list {

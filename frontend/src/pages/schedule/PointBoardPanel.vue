@@ -2,7 +2,9 @@
 /**
  * 點數看板：依身分組分區，主欄是額度點數（已排／上限、剩餘、假日班）。
  * 公平性點數欄只在 S7（`S7_FAIRNESS_POINT`）權重 > 0 時顯示。
- * 「由上月帶入」直接用 `carryOverApplied`；已發布時加一句「發布時凍結」提示。
+ * 「由上月帶入」直接用 `carryOverApplied`——這是公平性計算的起始偏移，跟額度點數是兩套點數
+ * （CONTEXT.md），文案與 title 都要講清楚，不能寫成「前月+N」讓人誤會是額度加成。
+ * NP 的 `quotaCap` 是 null（不計額度），改印 H6（`H6_NP_MONTHLY_DAYS`）的天數上限。
  */
 import type { PointBoardGroup } from '@/api/types'
 
@@ -10,6 +12,8 @@ defineProps<{
   groups: PointBoardGroup[]
   fairOn: boolean
   published: boolean
+  /** `H6_NP_MONTHLY_DAYS.params.cap`；讀不到時是 null，NP 那欄退回只顯示已值天數。 */
+  npDutyCap: number | null
 }>()
 
 function percentOf(points: number, cap: number | null): number {
@@ -40,11 +44,23 @@ function percentOf(points: number, cap: number | null): number {
               :style="{ width: `${percentOf(row.quotaPoints, row.quotaCap)}%` }"
             />
           </div>
-          <span class="point-board__pts">{{ row.quotaCap === null ? `${row.duties} 天` : `${row.quotaPoints}/${row.quotaCap}` }}</span>
+          <span class="point-board__pts">
+            {{
+              row.quotaCap === null
+                ? npDutyCap !== null
+                  ? `${row.duties}/${npDutyCap} 天`
+                  : `${row.duties} 天`
+                : `${row.quotaPoints}/${row.quotaCap}`
+            }}
+          </span>
           <span class="point-board__left">{{ row.quotaRemaining === null ? '不計' : `餘 ${row.quotaRemaining}` }}</span>
           <span class="point-board__holiday">假{{ row.holidayDuties }}</span>
           <span v-if="fairOn" class="point-board__fair">公{{ row.fairnessPoints ?? '—' }}</span>
-          <span v-if="row.carryOverApplied" class="point-board__carry">前月+{{ row.carryOverApplied }}</span>
+          <span
+            v-if="row.carryOverApplied"
+            class="point-board__carry"
+            title="公平性計算的起始偏移，不計入額度點數"
+          >由上月帶入 +{{ row.carryOverApplied }}</span>
         </div>
       </div>
     </div>
@@ -53,6 +69,13 @@ function percentOf(points: number, cap: number | null): number {
 </template>
 
 <style scoped>
+.k {
+  font: 600 10px/1 var(--font-heading);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .point-board {
   border-top: 1px solid var(--color-divider);
   padding-top: var(--space-3);

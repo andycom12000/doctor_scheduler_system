@@ -1,14 +1,19 @@
 <script setup lang="ts">
 /**
- * 日 × 人：列＝天、欄＝在職人員依 4 身分組分區，右側「空缺」欄。
+ * 日 × 人：列＝天、欄＝在職人員依 4 身分組分區，右側「未填補」欄。
  * 欄很多，欄寬窄、表頭旋轉；第一欄（日期）與表頭固定（`position: sticky`）。
  *
- * `staff:{staffId}:{date}` cellKey 的違規（值休休、額度超標等）疊在對應欄位上。
+ * `staffRenderIndex` 是 index.vue 用 `projectRenderIndexToStaffView` 轉換過的結果——
+ * 逐格違規（H1、H2、H5…）原始用 `area:{areaId}:{date}` 記位置，這裡已經轉成
+ * 「當天在那個區值班的人」，不用也不該自己再解一次 cellKey。
+ *
+ * 「當月有班、但已停用」的人不在點數看板裡（點數看板只列在職），額外併一欄「停用」，
+ * 不讓他的班憑空從畫面消失。
  */
 import { computed } from 'vue'
 import type { Area, PointBoardGroup, VacancyByDate } from '@/api/types'
-import type { DayColumn } from './lib/scheduleGrid'
-import { staffCellKey } from './lib/scheduleGrid'
+import { staffCellKey, type DayColumn, type StaffDirectoryEntry } from './lib/scheduleGrid'
+import { cellKindOf } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
 
@@ -17,27 +22,61 @@ const props = defineProps<{
   days: DayColumn[]
   pointBoardGroups: PointBoardGroup[]
   dutiesByStaff: Map<string, string>
-  cellRenderIndex: Map<string, CellRenderKind>
+  staffRenderIndex: Map<string, CellRenderKind>
   vacancyByDate: VacancyByDate[]
+  staffDirectory: Map<string, StaffDirectoryEntry>
+  blockedSet: ReadonlySet<string>
 }>()
 
 const emit = defineEmits<{ cellClick: [areaId: string, date: string] }>()
 
-const areaCodeById = computed(() => new Map(props.areas.map((area) => [area.id, area.name])))
+const areaLabelById = computed(() => new Map(props.areas.map((area) => [area.id, area.name])))
 const vacancyByDateMap = computed(() => new Map(props.vacancyByDate.map((entry) => [entry.date, entry])))
+
+/** 當月有班、但不在點數看板（已停用）的人；點數看板只列在職，這裡補一欄不讓班消失。 */
+const extraStaffRows = computed<StaffDirectoryEntry[]>(() => {
+  const known = new Set<string>()
+  for (const group of props.pointBoardGroups) {
+    for (const row of group.rows) known.add(row.staffId)
+  }
+  const seen = new Set<string>()
+  const rows: StaffDirectoryEntry[] = []
+  for (const key of props.dutiesByStaff.keys()) {
+    const staffId = key.slice(0, key.indexOf('|'))
+    if (known.has(staffId) || seen.has(staffId)) continue
+    seen.add(staffId)
+    const entry = props.staffDirectory.get(staffId)
+    if (entry) rows.push(entry)
+  }
+  return rows
+})
+
+const totalColumns = computed(
+  () => props.pointBoardGroups.reduce((n, g) => n + g.rows.length, 0) + extraStaffRows.value.length,
+)
 
 function areaAt(staffId: string, date: string): string | undefined {
   return props.dutiesByStaff.get(`${staffId}|${date}`)
 }
 
-function cellClass(staffId: string, date: string): Record<string, boolean> {
+function cellClass(staffId: string, date: string, isHoliday: boolean): Record<string, boolean> {
   const areaId = areaAt(staffId, date)
-  const render = props.cellRenderIndex.get(staffCellKey(staffId, date))
+  const render = props.staffRenderIndex.get(staffCellKey(staffId, date)) ?? null
+  const isBlocked = props.blockedSet.has(`${staffId}|${date}`)
+  const kind = cellKindOf({ hasDuty: Boolean(areaId), isHoliday, renderKind: render, isBlocked })
   return {
-    'dp-grid__cell--duty': Boolean(areaId) && !render,
-    'dp-grid__cell--violation-bg': render === 'violation-bg',
-    'dp-grid__cell--violation-stripe': render === 'violation-stripe',
+    'dp-grid__cell--duty': kind === 'duty' || kind === 'duty-holiday',
+    'dp-grid__cell--duty-holiday': kind === 'duty-holiday',
+    'dp-grid__cell--holiday': kind === 'holiday',
+    'dp-grid__cell--blocked': kind === 'blocked',
+    'dp-grid__cell--violation-bg': kind === 'violation-bg',
+    'dp-grid__cell--violation-stripe': kind === 'violation-stripe',
   }
+}
+
+function cellText(staffId: string, date: string): string {
+  const areaId = areaAt(staffId, date)
+  return areaId ? areaLabelById.value.get(areaId) ?? '' : ''
 }
 
 function cellClick(staffId: string, date: string): void {
@@ -48,16 +87,20 @@ function cellClick(staffId: string, date: string): void {
 
 <template>
   <div class="day-by-staff">
-    <div
-      class="dp-grid"
-      :style="{ gridTemplateColumns: `44px repeat(${pointBoardGroups.reduce((n, g) => n + g.rows.length, 0)}, 23px) 56px` }"
-    >
+    <div class="dp-grid" :style="{ gridTemplateColumns: `44px repeat(${totalColumns}, 23px) 56px` }">
       <div class="dp-grid__corner"></div>
       <template v-for="group in pointBoardGroups" :key="group.groupCode">
         <div class="dp-grid__group" :style="{ gridColumn: `span ${group.rows.length}` }">
           {{ group.groupCode }} · {{ group.rows.length }} 人
         </div>
       </template>
+      <div
+        v-if="extraStaffRows.length"
+        class="dp-grid__group dp-grid__group--extra"
+        :style="{ gridColumn: `span ${extraStaffRows.length}` }"
+      >
+        停用 · {{ extraStaffRows.length }} 人
+      </div>
       <div class="dp-grid__corner"></div>
 
       <div class="dp-grid__corner dp-grid__corner--label">日期</div>
@@ -67,6 +110,15 @@ function cellClick(staffId: string, date: string): void {
           <span class="dp-grid__head-rank">{{ row.rankCode }}</span>
         </div>
       </template>
+      <div
+        v-for="row in extraStaffRows"
+        :key="`extra-${row.staffId}`"
+        class="dp-grid__head dp-grid__head--extra"
+        :title="`${row.name}（${row.rankCode}）· 已停用`"
+      >
+        <span class="dp-grid__head-name">{{ row.name }}</span>
+        <span class="dp-grid__head-rank">{{ row.rankCode }}停</span>
+      </div>
       <div class="dp-grid__corner dp-grid__corner--label">未填補</div>
 
       <template v-for="day in days" :key="day.date">
@@ -80,32 +132,55 @@ function cellClick(staffId: string, date: string): void {
             :key="row.staffId"
             type="button"
             class="dp-grid__cell"
-            :class="cellClass(row.staffId, day.date)"
+            :class="cellClass(row.staffId, day.date, day.isHoliday)"
             @click="cellClick(row.staffId, day.date)"
           >
-            {{ areaAt(row.staffId, day.date) ? areaCodeById.get(areaAt(row.staffId, day.date)!) : '' }}
+            {{ cellText(row.staffId, day.date) }}
           </button>
         </template>
+        <button
+          v-for="row in extraStaffRows"
+          :id="domIdForCellKey(staffCellKey(row.staffId, day.date)) ?? undefined"
+          :key="`extra-${row.staffId}-${day.date}`"
+          type="button"
+          class="dp-grid__cell"
+          :class="cellClass(row.staffId, day.date, day.isHoliday)"
+          @click="cellClick(row.staffId, day.date)"
+        >
+          {{ cellText(row.staffId, day.date) }}
+        </button>
         <div class="dp-grid__vac" :class="{ 'dp-grid__vac--some': (vacancyByDateMap.get(day.date)?.count ?? 0) > 0 }">
-          {{ vacancyByDateMap.get(day.date)?.areaIds.map((id) => areaCodeById.get(id)).join(' ') ?? '' }}
+          {{ vacancyByDateMap.get(day.date)?.areaIds.map((id) => areaLabelById.get(id)).join(' ') ?? '' }}
         </div>
       </template>
     </div>
 
     <div class="ad-legend">
-      <span class="k">身分組</span>
-      <span v-for="group in pointBoardGroups" :key="group.groupCode" class="ad-legend__item">
-        <span class="ad-legend__swatch ad-legend__swatch--duty" />{{ group.groupName }}
+      <span class="k">圖例</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty" />平日值班（格內為區域代號）</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty-holiday" />假日值班</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--blocked" />不可排班日登記</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--holiday" />假日（整列底色）</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--vacancy" />未填補欄有空缺（H1）</span>
+      <span class="ad-legend__item">
+        <span class="ad-legend__swatch ad-legend__swatch--violation-bg" />其他硬違規（H2／H3／H4／H6／H7）
       </span>
       <span class="ad-legend__item">
-        <span class="ad-legend__swatch ad-legend__swatch--vacancy" />空缺（H1 · 登記過多時的正常結果）
+        <span class="ad-legend__swatch ad-legend__swatch--violation" />排到已登記的不可排班日（H5）
       </span>
-      <span class="dp-note">格內為區域代號 · 空白＝未值班 · 不可排班日與拖拉對調見 #34／#29</span>
+      <span class="dp-note">格內為區域代號 · 空白＝未值班 · 「停用」欄是當月仍有班、後來被停用的人</span>
     </div>
   </div>
 </template>
 
 <style scoped>
+.k {
+  font: 600 10px/1 var(--font-heading);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .day-by-staff {
   display: flex;
   flex-direction: column;
@@ -161,6 +236,11 @@ function cellClick(staffId: string, date: string): void {
   padding: 4px 0;
 }
 
+.dp-grid__group--extra {
+  background: color-mix(in srgb, var(--color-text) 16%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
 .dp-grid__head {
   position: sticky;
   top: 20px;
@@ -174,6 +254,10 @@ function cellClick(staffId: string, date: string): void {
   gap: 4px;
   overflow: hidden;
   padding: 4px 0;
+}
+
+.dp-grid__head--extra {
+  opacity: 0.75;
 }
 
 .dp-grid__head-name {
@@ -229,6 +313,18 @@ function cellClick(staffId: string, date: string): void {
   background: var(--cell-duty-bg);
 }
 
+.dp-grid__cell--duty-holiday {
+  background: var(--cell-duty-holiday-bg);
+}
+
+.dp-grid__cell--holiday {
+  background: var(--cell-holiday-bg);
+}
+
+.dp-grid__cell--blocked {
+  background: var(--cell-blocked-bg);
+}
+
 .dp-grid__cell--violation-bg {
   background: var(--cell-violation-bg);
   color: var(--color-bg);
@@ -277,8 +373,28 @@ function cellClick(staffId: string, date: string): void {
   background: var(--cell-duty-bg);
 }
 
+.ad-legend__swatch--duty-holiday {
+  background: var(--cell-duty-holiday-bg);
+}
+
+.ad-legend__swatch--blocked {
+  background: var(--cell-blocked-bg);
+}
+
+.ad-legend__swatch--holiday {
+  background: var(--cell-holiday-bg);
+}
+
 .ad-legend__swatch--vacancy {
   background: var(--cell-vacancy-bg);
+}
+
+.ad-legend__swatch--violation-bg {
+  background: var(--cell-violation-bg);
+}
+
+.ad-legend__swatch--violation {
+  background: var(--cell-violation-stripe);
 }
 
 .dp-note {

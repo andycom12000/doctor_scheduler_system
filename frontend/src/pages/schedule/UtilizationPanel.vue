@@ -36,6 +36,13 @@ const utilization = computed(() => computeGroupUtilization(props.groups))
 </template>
 
 <style scoped>
+.k {
+  font: 600 10px/1 var(--font-heading);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .utilization {
   display: flex;
   flex-direction: column;
@@ -49,11 +56,11 @@ const utilization = computed(() => computeGroupUtilization(props.groups))
 }
 
 /* `.tag-outline` 不在 styles.css 的最小共用元件類別裡（只有 tag-neutral／tag-accent），
-   這裡用 scoped 樣式補一個純外框的變化，不動全域檔案。 */
-.utilization__title .tag-outline {
+   三個用到它的檔案（這裡、DayDetailPanel、ViolationSidebar）統一補這個 Industry 原版。 */
+.tag-outline {
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
 }
 
 .utilization__row {

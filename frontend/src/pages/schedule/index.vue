@@ -12,6 +12,8 @@ import { useCalendar } from '@/composables/useCalendar'
 import { getSchedule, setDuty } from '@/api/schedules'
 import { getDayDetail, getPointBoard, listVacancies, listViolations } from '@/api/views'
 import { getAreaSettings, getConstraints } from '@/api/settings'
+import { getBlockedDays } from '@/api/blockedDays'
+import { listStaff } from '@/api/staff'
 import { ApiError } from '@/api/client'
 import { describeError } from '@/api/errors'
 import type { Violation } from '@/api/types'
@@ -24,7 +26,7 @@ import UtilizationPanel from './UtilizationPanel.vue'
 import ViolationSidebar from './ViolationSidebar.vue'
 import CandidatePanel from './CandidatePanel.vue'
 import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancyCountMap } from './lib/scheduleGrid'
-import { buildCellRenderIndex } from './lib/violationStyle'
+import { buildCellRenderIndex, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { domIdForCellKey, tabForCellKey } from './lib/cellNav'
 
 const { ym } = useYearMonth()
@@ -52,6 +54,25 @@ const constraints = useResource(constraintsKey, () => getConstraints())
 const fairOn = computed(
   () => (constraints.data.value?.soft.find((s) => s.code === 'S7_FAIRNESS_POINT')?.weight ?? 0) > 0,
 )
+// NP 的 quotaCap 是 null（不計額度）；點數看板改印 H6 的天數上限，不寫死 20 這個數字，
+// 讀不到（例如 H6 被停用）就退回只顯示已值天數。
+const npDutyCap = computed(() => {
+  const h6 = constraints.data.value?.hard.find((h) => h.code === 'H6_NP_MONTHLY_DAYS')
+  const cap = (h6?.params as { cap?: number } | undefined)?.cap
+  return typeof cap === 'number' ? cap : null
+})
+
+// -- 人員名冊：獨立於值班表存在，全院約 34 人一次抓；用來補點數看板（只列在職）查不到的人
+// ——最常見的是「當月有班、後來被停用」的人（PR #44 review：這種人的班不能憑空消失）--
+const staffListKey = ref('staff')
+const staffListRes = useResource(staffListKey, () => listStaff())
+
+// -- 不可排班日登記：獨立於值班表存在（ADR-0001），日 × 人檢視要疊這個狀態 --
+const blockedDaysKey = computed(() => (schedule.data.value ? `blocked-days/${ym.value}` : null))
+const blockedDaysRes = useResource(blockedDaysKey, () => getBlockedDays(ym.value))
+const blockedSet = computed(
+  () => new Set((blockedDaysRes.data.value?.entries ?? []).map((e) => `${e.staffId}|${e.date}`)),
+)
 
 // -- 由值班表推導的檢視：空月份一律不打（violationsKey 等在 schedule 不存在時是 null） --
 const violationsKey = computed(() => (schedule.data.value ? `schedules/${ym.value}/violations` : null))
@@ -64,10 +85,13 @@ const vacanciesKey = computed(() => (schedule.data.value ? `schedules/${ym.value
 const vacanciesRes = useResource(vacanciesKey, () => listVacancies(ym.value))
 
 const pointBoardGroups = computed(() => pointBoardRes.data.value?.groups ?? [])
-const staffDirectory = computed(() => buildStaffDirectory(pointBoardGroups.value))
+const staffDirectory = computed(() => buildStaffDirectory(pointBoardGroups.value, staffListRes.data.value?.items ?? []))
 const dutyMapByArea = computed(() => dutiesByArea(schedule.data.value?.duties ?? []))
 const dutyMapByStaff = computed(() => dutiesByStaff(schedule.data.value?.duties ?? []))
 const cellRenderIndex = computed(() => buildCellRenderIndex(violationsRes.data.value?.violations ?? []))
+// H1／H2／H5 這些「逐格」違規原始用 area:{areaId}:{date} 記位置；日 × 人是「人 × 日」的格線，
+// 轉成「當天在那個區值班的人」才畫得出來（PR #44 review：H5 在日 × 人畫不出來）。
+const dayByStaffRenderIndex = computed(() => projectRenderIndexToStaffView(cellRenderIndex.value, dutyMapByArea.value))
 const vacancyCounts = computed(() => vacancyCountMap(vacanciesRes.data.value?.byDate ?? []))
 
 // -- 單日詳表用：`GET days/{date}` 只帶 area.code（如 CHIEF），中文全名與區域類型
@@ -248,6 +272,7 @@ function goToBlockedDays(): void {
             :staff-directory="staffDirectory"
             :cell-render-index="cellRenderIndex"
             :vacancy-counts="vacancyCounts"
+            :point-board-groups="pointBoardGroups"
             @cell-click="openCell"
           />
           <DayByStaffGrid
@@ -256,8 +281,10 @@ function goToBlockedDays(): void {
             :days="days"
             :point-board-groups="pointBoardGroups"
             :duties-by-staff="dutyMapByStaff"
-            :cell-render-index="cellRenderIndex"
+            :staff-render-index="dayByStaffRenderIndex"
             :vacancy-by-date="vacanciesRes.data.value?.byDate ?? []"
+            :staff-directory="staffDirectory"
+            :blocked-set="blockedSet"
             @cell-click="openCell"
           />
           <DayDetailPanel
@@ -280,6 +307,7 @@ function goToBlockedDays(): void {
             :groups="pointBoardGroups"
             :fair-on="fairOn"
             :published="schedule.data.value?.status === 'published'"
+            :np-duty-cap="npDutyCap"
           />
         </div>
 

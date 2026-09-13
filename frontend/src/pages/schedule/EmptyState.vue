@@ -114,6 +114,7 @@ const emit = defineEmits<{
   display: grid;
   align-content: start;
   overflow: auto;
+  max-height: 480px;
   border-top: 1px solid var(--color-divider);
   border-left: 1px solid var(--color-divider);
 }

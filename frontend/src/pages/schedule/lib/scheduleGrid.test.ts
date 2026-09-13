@@ -6,12 +6,13 @@ import {
   dutiesByArea,
   dutiesByStaff,
   filledCountByDate,
+  shortStaffCode,
   staffCellKey,
   toDayColumns,
   vacancyCountMap,
   weekdayLabel,
 } from './scheduleGrid'
-import type { CalendarDay, Duty, PointBoardGroup } from '@/api/types'
+import type { CalendarDay, Duty, PointBoardGroup, Staff } from '@/api/types'
 
 describe('cellKey helpers', () => {
   it('area cellKey 是 area:{areaId}:{date}', () => {
@@ -43,7 +44,7 @@ describe('buildStaffDirectory', () => {
     },
   ]
 
-  it('由點數看板攤平出 staffId → 名冊', () => {
+  it('由點數看板攤平出 staffId → 名冊，帶組序給 --group-1..4 用', () => {
     const directory = buildStaffDirectory(groups)
     expect(directory.get('staff-001')).toEqual({
       staffId: 'staff-001',
@@ -51,11 +52,42 @@ describe('buildStaffDirectory', () => {
       rankCode: 'PGY1',
       groupCode: 'JUNIOR',
       groupName: '低年級',
+      groupIndex: 0,
+      status: 'active',
     })
   })
 
   it('查不到的 staffId 回 undefined，呼叫端自行 fallback', () => {
     expect(buildStaffDirectory(groups).get('staff-999')).toBeUndefined()
+  })
+
+  it('點數看板查不到的人（例如當月有班但已停用）由 staffList 補上，groupIndex 是 null', () => {
+    const staffList: Staff[] = [
+      { id: 'staff-001', employeeNo: 'E001', name: '陳建宏', rankCode: 'PGY1', status: 'active', eligibleAreaTypes: ['WARD'] },
+      { id: 'staff-050', employeeNo: 'E050', name: '停用小明', rankCode: 'R2', status: 'inactive', eligibleAreaTypes: ['WARD'] },
+    ]
+    const directory = buildStaffDirectory(groups, staffList)
+    // 點數看板已有的人不被 staffList 覆蓋
+    expect(directory.get('staff-001')?.groupIndex).toBe(0)
+    expect(directory.get('staff-050')).toEqual({
+      staffId: 'staff-050',
+      name: '停用小明',
+      rankCode: 'R2',
+      groupCode: '',
+      groupName: '',
+      groupIndex: null,
+      status: 'inactive',
+    })
+  })
+})
+
+describe('shortStaffCode', () => {
+  it('取 staffId 最後一段', () => {
+    expect(shortStaffCode('staff-001')).toBe('001')
+  })
+
+  it('沒有連字號時原樣回傳', () => {
+    expect(shortStaffCode('abc')).toBe('abc')
   })
 })
 

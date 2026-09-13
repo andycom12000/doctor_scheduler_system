@@ -33,14 +33,13 @@ function areaTypeLabel(code: string): string {
       <div class="day-detail__heading">
         <div class="day-detail__date">{{ date }}</div>
         <div v-if="detail" class="day-detail__sub">
-          {{ detail.isHoliday ? '假日' : '平日' }} · 1 班 {{ detail.quotaPointValue }} 點 · 5 區各 1 人
+          {{ detail.isHoliday ? '假日' : '平日' }} · 1 班 {{ detail.quotaPointValue }} 點 · {{ detail.areas.length }} 區各 1 人
         </div>
       </div>
       <button type="button" class="btn btn-secondary" :disabled="!canNext" @click="emit('next')">次一日</button>
       <span v-if="detail" class="tag" :class="detail.areas.some((a) => !a.filled) ? 'tag-accent' : 'tag-outline'">
         {{ detail.areas.filter((a) => !a.filled).length ? `${detail.areas.filter((a) => !a.filled).length} 區空缺` : '全數填補' }}
       </span>
-      <span class="day-detail__note">月負載由 GET /schedules/{ym}/days/{date} 自帶，不需另打點數看板</span>
     </div>
 
     <div v-if="loading" class="day-detail__state">載入中…</div>
@@ -97,10 +96,12 @@ function areaTypeLabel(code: string): string {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
-.day-detail__note {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+/* `.tag-outline` 不在 styles.css 的最小共用元件類別裡（只有 tag-neutral／tag-accent），
+   三個用到它的檔案（這裡、UtilizationPanel、ViolationSidebar）統一補這個 Industry 原版。 */
+.tag-outline {
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
 }
 
 .day-detail__state {

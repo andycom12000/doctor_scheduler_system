@@ -1,12 +1,21 @@
 <script setup lang="ts">
 /**
  * 區域 × 日：列＝5 區（依區域類型分組顯示，比照設計稿的一般病房／ICU／總值三段），
- * 欄＝天。格內姓名簡稱；假日欄底色、值班格底色（平日／假日）、空缺／違規疊上
- * `violationStyle.ts` 算出的渲染種類。
+ * 欄＝天。值班格底色照該員身分組（`--group-1..4`，PR #44 review：身分組圖例四色塊
+ * 不能全同色）；假日值班在值班格上疊一層外框，不再用另一種底色蓋掉組別顏色。
+ * 空缺／違規疊上 `lib/cellStyle.ts` 算出的優先序，一律蓋過值班／假日的底色。
  */
 import { computed } from 'vue'
-import type { Area, AreaType } from '@/api/types'
-import { abbreviate, areaCellKey, type DayColumn, type StaffDirectoryEntry } from './lib/scheduleGrid'
+import type { Area, AreaType, PointBoardGroup } from '@/api/types'
+import {
+  abbreviate,
+  areaCellKey,
+  filledCountByDate,
+  shortStaffCode,
+  type DayColumn,
+  type StaffDirectoryEntry,
+} from './lib/scheduleGrid'
+import { cellKindOf, groupColorIndex } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
 
@@ -18,6 +27,7 @@ const props = defineProps<{
   staffDirectory: Map<string, StaffDirectoryEntry>
   cellRenderIndex: Map<string, CellRenderKind>
   vacancyCounts: Map<string, number>
+  pointBoardGroups: PointBoardGroup[]
 }>()
 
 const emit = defineEmits<{ cellClick: [areaId: string, date: string] }>()
@@ -33,6 +43,11 @@ const groups = computed<GroupedAreas[]>(() =>
     .filter((group) => group.areas.length > 0),
 )
 
+/** 身分組圖例：色階依組在點數看板出現的順序分配，標籤用真實 `groupName`，不寫死。 */
+const groupLegend = computed(() =>
+  props.pointBoardGroups.map((group, index) => ({ colorIndex: groupColorIndex(index), name: group.groupName })),
+)
+
 function staffIdAt(areaId: string, date: string): string | undefined {
   return props.dutyMap.get(`${areaId}|${date}`)
 }
@@ -43,14 +58,29 @@ function directoryOf(staffId: string | undefined): StaffDirectoryEntry | undefin
 
 function cellClass(areaId: string, date: string, isHoliday: boolean): Record<string, boolean> {
   const staffId = staffIdAt(areaId, date)
-  const render = props.cellRenderIndex.get(areaCellKey(areaId, date))
-  return {
-    'ad-grid__cell--duty': Boolean(staffId) && render !== 'violation-stripe' && render !== 'violation-bg',
-    'ad-grid__cell--holiday': isHoliday && Boolean(staffId),
-    'ad-grid__cell--vacancy': render === 'vacancy',
-    'ad-grid__cell--violation-stripe': render === 'violation-stripe',
-    'ad-grid__cell--violation-bg': render === 'violation-bg',
+  const render = props.cellRenderIndex.get(areaCellKey(areaId, date)) ?? null
+  const kind = cellKindOf({ hasDuty: Boolean(staffId), isHoliday, renderKind: render })
+  const classes: Record<string, boolean> = {
+    'ad-grid__cell--duty': kind === 'duty' || kind === 'duty-holiday',
+    'ad-grid__cell--duty-holiday': kind === 'duty-holiday',
+    'ad-grid__cell--holiday': kind === 'holiday',
+    'ad-grid__cell--vacancy': kind === 'vacancy',
+    'ad-grid__cell--violation-stripe': kind === 'violation-stripe',
+    'ad-grid__cell--violation-bg': kind === 'violation-bg',
   }
+  const groupIndex = directoryOf(staffId)?.groupIndex
+  if ((kind === 'duty' || kind === 'duty-holiday') && groupIndex !== null && groupIndex !== undefined) {
+    classes[`ad-grid__cell--group-${groupColorIndex(groupIndex)}`] = true
+  }
+  return classes
+}
+
+/** 空格一律印「缺」（比照設計稿），值班格印姓名簡稱；兩邊名冊都查不到時退回 staffId 短碼。 */
+function cellText(areaId: string, date: string): string {
+  const staffId = staffIdAt(areaId, date)
+  if (!staffId) return '缺'
+  const dir = directoryOf(staffId)
+  return dir ? abbreviate(dir.name) : shortStaffCode(staffId)
 }
 
 function filled(areaId: string): number {
@@ -86,7 +116,7 @@ function filled(areaId: string): number {
             :class="cellClass(area.id, day.date, day.isHoliday)"
             @click="emit('cellClick', area.id, day.date)"
           >
-            {{ directoryOf(staffIdAt(area.id, day.date))?.name ? abbreviate(directoryOf(staffIdAt(area.id, day.date))!.name) : '' }}
+            {{ cellText(area.id, day.date) }}
           </button>
           <div class="ad-grid__stat">{{ filled(area.id) }}/{{ days.length }}</div>
         </template>
@@ -94,24 +124,39 @@ function filled(areaId: string): number {
 
       <div class="ad-grid__label ad-grid__label--foot">每日已填補</div>
       <div v-for="day in days" :key="day.date" class="ad-grid__fill">
-        {{ areas.length - (vacancyCounts.get(day.date) ?? 0) }}
+        {{ filledCountByDate(areas.length, vacancyCounts, day.date) }}
       </div>
       <div class="ad-grid__fill"></div>
     </div>
 
     <div class="ad-legend">
-      <span class="k">圖例</span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty" />平日值班（格內為姓名簡稱）</span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty-holiday" />假日值班</span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--blocked" />不可排班日（求解輸入，見不可排班日登記）</span>
+      <span class="k">身分組</span>
+      <span v-for="g in groupLegend" :key="g.colorIndex" class="ad-legend__item">
+        <span class="ad-legend__swatch" :class="`ad-legend__swatch--group-${g.colorIndex}`" />{{ g.name }}
+      </span>
       <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--holiday" />假日（整列底色）</span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--vacancy" />該日有區域空缺（H1）</span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--violation" />排到已登記的不可排班日（H5）</span>
+      <span class="ad-legend__item">
+        <span class="ad-legend__swatch ad-legend__swatch--vacancy" />空缺（H1 · 登記過多時的正常結果）
+      </span>
+      <span class="ad-legend__item">
+        <span class="ad-legend__swatch ad-legend__swatch--violation-bg" />其他硬違規（H2／H3／H4／H6／H7）
+      </span>
+      <span class="ad-legend__item">
+        <span class="ad-legend__swatch ad-legend__swatch--violation" />排到已登記的不可排班日（H5）
+      </span>
+      <span class="dp-note">格內為姓名簡稱 · 假日值班疊外框</span>
     </div>
   </div>
 </template>
 
 <style scoped>
+.k {
+  font: 600 10px/1 var(--font-heading);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .area-by-day {
   display: flex;
   flex-direction: column;
@@ -123,6 +168,7 @@ function filled(areaId: string): number {
   display: grid;
   align-content: start;
   overflow: auto;
+  max-height: 480px;
   border-top: 1px solid var(--color-divider);
   border-left: 1px solid var(--color-divider);
 }
@@ -230,8 +276,35 @@ function filled(areaId: string): number {
   background: var(--cell-duty-bg);
 }
 
-.ad-grid__cell--duty.ad-grid__cell--holiday {
-  background: var(--cell-duty-holiday-bg);
+/* 4 身分組色階：只在「值班、沒有更高優先序的狀態」時套用，蓋掉上面的預設值班底色。 */
+.ad-grid__cell--group-1 {
+  background: var(--group-1);
+  color: var(--group-1-fg);
+}
+
+.ad-grid__cell--group-2 {
+  background: var(--group-2);
+  color: var(--group-2-fg);
+}
+
+.ad-grid__cell--group-3 {
+  background: var(--group-3);
+  color: var(--group-3-fg);
+}
+
+.ad-grid__cell--group-4 {
+  background: var(--group-4);
+  color: var(--group-4-fg);
+}
+
+/* 假日值班：不换底色（身分組顏色才是重點），疊一層外框標記假日。 */
+.ad-grid__cell--duty-holiday {
+  box-shadow: inset 0 0 0 1.5px var(--cell-duty-holiday-bg);
+}
+
+/* 假日空格（沒有值班、也沒有違規）：整格套假日底色，比照設計稿「假日（整列底色）」。 */
+.ad-grid__cell--holiday {
+  background: var(--cell-holiday-bg);
 }
 
 .ad-grid__cell--vacancy {
@@ -279,16 +352,20 @@ function filled(areaId: string): number {
   border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
-.ad-legend__swatch--duty {
-  background: var(--cell-duty-bg);
+.ad-legend__swatch--group-1 {
+  background: var(--group-1);
 }
 
-.ad-legend__swatch--duty-holiday {
-  background: var(--cell-duty-holiday-bg);
+.ad-legend__swatch--group-2 {
+  background: var(--group-2);
 }
 
-.ad-legend__swatch--blocked {
-  background: var(--cell-blocked-bg);
+.ad-legend__swatch--group-3 {
+  background: var(--group-3);
+}
+
+.ad-legend__swatch--group-4 {
+  background: var(--group-4);
 }
 
 .ad-legend__swatch--holiday {
@@ -299,7 +376,16 @@ function filled(areaId: string): number {
   background: var(--cell-vacancy-bg);
 }
 
+.ad-legend__swatch--violation-bg {
+  background: var(--cell-violation-bg);
+}
+
 .ad-legend__swatch--violation {
   background: var(--cell-violation-stripe);
+}
+
+.dp-note {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 </style>
