@@ -22,19 +22,26 @@ import { cancelSolverJob, createSolverJob, getSolverJob, listVariants } from '@/
 import { subscribe, type Unsubscribe } from '@/realtime'
 import type { SolverJob, SolverProgress, Variant } from '@/api/types'
 import { daysInMonth } from './dates'
-import { diffVariants } from './diff'
+import { diffVariants, isVariantSelected } from './diff'
 import { staffGroupIndex } from './heatmap'
 import { readLastJobId, rememberJobId, resolveJobId } from './jobStorage'
 import ProgressOverlay from './ProgressOverlay.vue'
 import VariantCard from './VariantCard.vue'
 import {
   acceptPolledSnapshot,
+  accumulateElapsed,
+  averagePerVariantSeconds,
   buildMetricRows,
   describeFailure,
+  disabledSoftCodes,
+  type ElapsedAccumulator,
+  formatDisabledSuffix,
   formatSeconds,
+  initialElapsedAccumulator,
   isFairnessPointEnabled,
   isTerminalStatus,
   shortJobId,
+  totalElapsedSec,
 } from './variantView'
 
 const route = useRoute()
@@ -81,6 +88,10 @@ const staffNameById = computed(() => new Map((staffResource.data.value?.items ??
 const showFairnessPoint = computed(() => isFairnessPointEnabled(constraintSettings.data.value?.soft))
 // 該月已發布時套用鈕停用，不讓使用者撞 409 SCHEDULE_ALREADY_PUBLISHED。
 const schedulePublished = computed(() => scheduleResource.data.value?.status === 'published')
+// 標題橫幅「軟約束 6（S7 停用）」：契約的 constraintCount 只給數字，停用的是哪幾條要另外從
+// 這份設定推（見 variantView.ts 的 disabledSoftCodes 說明）。
+const disabledSoftSuffix = computed(() => formatDisabledSuffix(disabledSoftCodes(constraintSettings.data.value?.soft)))
+const scheduleDuties = computed(() => scheduleResource.data.value?.duties ?? [])
 
 // ---------------------------------------------------------------------------
 // 求解工作狀態
@@ -91,6 +102,21 @@ const jobLoading = ref(false)
 const jobNotice = ref<string | null>(null)
 const variants = ref<Variant[]>([])
 const variantsError = ref<unknown>(null)
+// 標題橫幅的「耗時」在求解中要跟著進度事件動：`SolverProgress.elapsedSec` 只是本份變體的耗時，
+// 一換下一份就歸零，累加器才是整個工作的耗時（見 variantView.ts 的說明，issue #54）。
+const elapsedAcc = ref<ElapsedAccumulator | null>(null)
+/**
+ * 優先看累加器，不是「終態就看 job.elapsedSec」：終態事件是 `SolverProgress`（只有
+ * `progress` 欄位），`job.value.elapsedSec` 要等 `refreshAfterTerminal` 的 GET 落地才會更新，
+ * 中間那一小段空窗如果直接讀 `job.elapsedSec` 會顯示剛 attach 時的舊值（新工作是 0），
+ * 使用者的視線正好在這時候從覆蓋層移到橫幅，會看到「共 0.0s」閃一下。累加器在那次 GET
+ * 落地時才會被清空（見 refreshAfterTerminal／pollJobOnce／cancelJob），所以優先看它。
+ */
+const displayElapsedSec = computed(() => {
+  if (!job.value) return null
+  if (elapsedAcc.value) return totalElapsedSec(elapsedAcc.value)
+  return job.value.elapsedSec ?? null
+})
 // 提前宣告：下面的 `loadForYearMonth` 在 immediate watcher 觸發時是同步呼叫到這兩個 ref，
 // 若宣告留在檔案後段（套用／逐格差異區塊）會撞 TDZ（ReferenceError）。
 const applyError = ref<string | null>(null)
@@ -128,6 +154,7 @@ async function pollJobOnce(id: string, targetYm: string): Promise<void> {
     // 終態是單向門：目前已經是終態就不重複刷新——可能是 SSE 或 cancelJob 已經先處理過。
     if (!acceptPolledSnapshot(job.value.status)) return
     job.value = result
+    elapsedAcc.value = null // result.elapsedSec 已是權威終值，往後改看它，不再看累加器
     teardownSubscription()
     await loadVariants(id, targetYm)
   } catch {
@@ -155,6 +182,7 @@ function resetJobDisplayState(): void {
   variantsError.value = null
   diffSelection.value = []
   applyError.value = null
+  elapsedAcc.value = null
 }
 
 async function loadVariants(id: string, targetYm: string): Promise<void> {
@@ -172,9 +200,12 @@ async function loadVariants(id: string, targetYm: string): Promise<void> {
 async function refreshAfterTerminal(id: string, targetYm: string): Promise<void> {
   try {
     const result = await getSolverJob(id)
-    if (ym.value === targetYm && jobId.value === id) job.value = result
+    if (ym.value === targetYm && jobId.value === id) {
+      job.value = result
+      elapsedAcc.value = null // result.elapsedSec 已是權威終值，往後改看它，不再看累加器
+    }
   } catch {
-    // 結束時再 GET 失敗——保留目前顯示的最後一份快照，不讓畫面整個消失。
+    // 結束時再 GET 失敗——保留目前顯示的最後一份快照（含累加器），不讓畫面整個消失或退回 0。
   }
   await loadVariants(id, targetYm)
 }
@@ -183,6 +214,9 @@ function handleProgressEvent(id: string, targetYm: string, event: SolverProgress
   if (ym.value !== targetYm || jobId.value !== id || !job.value) return
   if (isTerminalStatus(job.value.status)) return // 已經在終態，訂閱理應已拆——多一層保險，不讓事件把數字退回去
   job.value = { ...job.value, status: event.status, progress: event }
+  if (elapsedAcc.value) {
+    elapsedAcc.value = accumulateElapsed(elapsedAcc.value, { variantIndex: event.variantIndex, elapsedSec: event.elapsedSec })
+  }
   if (isTerminalStatus(event.status)) {
     teardownSubscription()
     void refreshAfterTerminal(id, targetYm)
@@ -215,8 +249,14 @@ async function attachJob(id: string, targetYm: string): Promise<AttachOutcome> {
     rememberJobId(targetYm, id)
 
     if (isTerminalStatus(result.status)) {
+      elapsedAcc.value = null
       await loadVariants(id, targetYm)
     } else {
+      elapsedAcc.value = initialElapsedAccumulator(
+        result.elapsedSec ?? 0,
+        result.progress?.variantIndex ?? 0,
+        result.progress?.elapsedSec ?? 0,
+      )
       unsubscribe = subscribe(id, (event) => handleProgressEvent(id, targetYm, event))
       startWatchdog(id, targetYm)
     }
@@ -259,7 +299,9 @@ async function loadForYearMonth(targetYm: string): Promise<void> {
   }
 
   if (outcome !== 'attached' && !jobNotice.value) {
-    jobNotice.value = '找不到可顯示的求解工作，登記完成後可以直接求解。'
+    // 後端有工作但本機沒記錄（localStorage／query 都對不上）時也用同一句，不跟真的
+    // 「這個月從沒求解過」分開講——使用者分不出兩者的差別，也不需要分（issue #54）。
+    jobNotice.value = '這個月還沒有求解紀錄。'
   }
 }
 
@@ -352,6 +394,7 @@ async function cancelJob(): Promise<void> {
     if (!acceptPolledSnapshot(job.value.status)) return
     job.value = result
     if (isTerminalStatus(result.status)) {
+      elapsedAcc.value = null // result.elapsedSec 已是權威終值，往後改看它，不再看累加器
       teardownSubscription()
       await loadVariants(id, targetYm)
     }
@@ -428,6 +471,14 @@ const metricMax = computed(() => {
 const overlayVisible = computed(() => job.value?.status === 'queued' || job.value?.status === 'running')
 const failureText = computed(() => describeFailure(job.value?.failureReason))
 const showEmptyState = computed(() => !jobId.value && !jobLoading.value)
+// 契約沒有「每份變體的耗時」欄位，退回整體耗時／完成的份數的平均值（PR 說明列出這個近似）。
+// 用 displayElapsedSec 而不是 job.elapsedSec：兩者在終態 GET 失敗那條分支會不同步
+// （job.elapsedSec 保留 attach 當下的舊值，displayElapsedSec 優先看累加器），橫幅與
+// 卡片右上角的耗時要同源，不然會出現橫幅正確、卡片卻用舊數字的矛盾（協調者審查回饋）。
+const perVariantSeconds = computed(() => averagePerVariantSeconds(displayElapsedSec.value, variants.value.length))
+function isVariantApplied(variant: Variant): boolean {
+  return isVariantSelected(variant.duties, scheduleDuties.value)
+}
 const variantListEmptyNote = computed(() => {
   if (job.value?.status === 'cancelled' || job.value?.status === 'failed') return '尚無已完成的變體，可以重新求解。'
   return '尚無已完成的變體。'
@@ -444,7 +495,7 @@ const variantListEmptyNote = computed(() => {
 
     <div class="variants-page">
       <section v-if="showEmptyState" class="empty-state">
-        <p class="empty-state__notice">{{ jobNotice ?? '尚無求解工作。' }}</p>
+        <p class="empty-state__notice">{{ jobNotice ?? '這個月還沒有求解紀錄。' }}</p>
         <p class="empty-state__hint">
           先到「不可排班日登記」把這個月的登記帶入求解，或直接用目前的登記與設定求解。
         </p>
@@ -463,12 +514,12 @@ const variantListEmptyNote = computed(() => {
         <header class="job-header">
           <div class="job-header__title">SOLVER · 變體比較</div>
           <div class="job-header__meta">
-            {{ shortJobId(job.jobId) }} · 耗時 {{ formatSeconds(job.elapsedSec) }} ·
+            求解 #{{ shortJobId(job.jobId) }} · {{ job.variantCount }} 份變體 · 共 {{ formatSeconds(displayElapsedSec) }} ·
             {{ job.scale?.areas ?? '—' }} 區 × {{ job.scale?.days ?? '—' }} 日 = {{ job.scale?.variables ?? '—' }}
             個指派
           </div>
           <div class="job-header__constraints">
-            硬約束 {{ job.constraintCount?.hard ?? '—' }} · 軟約束 {{ job.constraintCount?.soft ?? '—' }}
+            硬約束 {{ job.constraintCount?.hard ?? '—' }} · 軟約束 {{ job.constraintCount?.soft ?? '—' }}{{ disabledSoftSuffix }}
           </div>
         </header>
 
@@ -503,6 +554,8 @@ const variantListEmptyNote = computed(() => {
             :show-fairness-point="showFairnessPoint"
             :metric-max="metricMax"
             :diff-selected="diffSelection.includes(variant.id)"
+            :applied="isVariantApplied(variant)"
+            :per-variant-seconds="perVariantSeconds"
             :applying="applyingVariantId === variant.id"
             :apply-disabled="schedulePublished"
             :apply-disabled-reason="schedulePublished ? '已發布的值班表只能逐格改，不能整份套用變體' : null"
@@ -572,22 +625,40 @@ const variantListEmptyNote = computed(() => {
   margin-top: var(--space-2);
 }
 
+/*
+  設計稿的深色標題列（screen-04.html 的 .nv）。用負邊界頂開 PageLayout 本體的
+  padding，讓橫幅左右到頂——不改 PageLayout.vue，只在這個頁面內把它「借」出來用。
+*/
 .job-header {
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--color-divider);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-4);
+  row-gap: 2px;
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0;
+  padding: 10px var(--space-4);
+  background: var(--color-accent-900);
+  color: var(--color-bg);
 }
 
 .job-header__title {
+  /* 不設 margin-right: auto——只有最右邊的 .job-header__constraints 該把剩餘空間吃掉
+     （screen-04.html:66-68 只有最右一個 span 用 margin-left:auto），標題與 meta 兩個
+     span 之間只留 column-gap，meta 才會緊貼標題右側而不是被推到橫幅中段（協調者審查回饋）。 */
   font-family: var(--font-heading);
   font-size: 15px;
   letter-spacing: 0.08em;
 }
 
-.job-header__meta,
-.job-header__constraints {
+.job-header__meta {
   font-size: 11.5px;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
-  margin-top: 2px;
+  opacity: 0.72;
+}
+
+.job-header__constraints {
+  margin-left: auto;
+  font-size: 11.5px;
+  opacity: 0.72;
 }
 
 .job-header__actions {

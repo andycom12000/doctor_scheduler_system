@@ -5,7 +5,15 @@
  */
 import { computed } from 'vue'
 import type { SolverJob } from '@/api/types'
-import { VARIANT_SLOT_IDS, formatGap, formatSeconds, progressHeadline, shortJobId, variantSlotStatuses } from './variantView'
+import {
+  VARIANT_SLOT_IDS,
+  formatGap,
+  formatSeconds,
+  progressHeadline,
+  shortJobId,
+  stanceLine,
+  variantSlotStatuses,
+} from './variantView'
 
 const props = defineProps<{ job: SolverJob; cancelling: boolean; cancelError: string | null }>()
 const emit = defineEmits<{ cancel: [] }>()
@@ -15,6 +23,7 @@ const variantIndex = computed(() => progress.value?.variantIndex ?? 0)
 const variantCount = computed(() => props.job.variantCount)
 
 const headline = computed(() => progressHeadline(props.job.status, variantIndex.value, variantCount.value))
+const stance = computed(() => stanceLine(variantIndex.value))
 const slots = computed(() =>
   variantSlotStatuses(variantCount.value, variantIndex.value).map((status, i) => ({
     id: VARIANT_SLOT_IDS[i] ?? `v-${i + 1}`,
@@ -28,8 +37,9 @@ const slotLabel: Record<string, string> = { done: '完成', running: '求解中'
 <template>
   <div class="progress-overlay">
     <div class="progress-overlay__panel">
-      <div class="progress-overlay__kicker">求解中 · {{ shortJobId(job.jobId) }}</div>
+      <div class="progress-overlay__kicker">求解中 · #{{ shortJobId(job.jobId) }}</div>
       <div class="progress-overlay__headline">{{ headline }}</div>
+      <p v-if="stance" class="progress-overlay__stance">{{ stance }}</p>
 
       <div class="progress-overlay__stats">
         <div class="progress-overlay__stat">
@@ -109,6 +119,12 @@ const slotLabel: Record<string, string> = { done: '完成', running: '求解中'
   font-family: var(--font-heading);
   font-size: 26px;
   letter-spacing: 0.02em;
+}
+
+.progress-overlay__stance {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 .progress-overlay__stats {

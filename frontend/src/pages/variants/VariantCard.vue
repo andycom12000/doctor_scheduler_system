@@ -6,7 +6,7 @@
 import { computed } from 'vue'
 import type { Variant } from '@/api/types'
 import { buildHeatmap } from './heatmap'
-import { buildMetricRows, formatMultipliers } from './variantView'
+import { buildMetricRows, formatMetricValue, formatMultipliers, formatSeconds, variantTitle } from './variantView'
 
 const props = defineProps<{
   variant: Variant
@@ -16,6 +16,8 @@ const props = defineProps<{
   groupIndexByStaff: Map<string, number>
   showFairnessPoint: boolean
   diffSelected: boolean
+  /** 這份變體逐格比對目前草稿完全相同——已經是套用過的那一份（issue #54）。 */
+  applied: boolean
   applying: boolean
   applyDisabled: boolean
   applyDisabledReason: string | null
@@ -25,10 +27,16 @@ const props = defineProps<{
    * （空缺 vs 同區延續）沒有意義，見 PR 說明。
    */
   metricMax: Record<string, number>
+  /**
+   * 契約沒有「每份變體的耗時」欄位，退回「整體耗時／份數」的平均值；`null` 時不顯示
+   * （PR 說明列出這個近似）。
+   */
+  perVariantSeconds: number | null
 }>()
 
 const emit = defineEmits<{ apply: []; toggleDiff: [] }>()
 
+const title = computed(() => variantTitle(props.variant.id))
 const multipliers = computed(() => formatMultipliers(props.variant.weightProfile))
 const metricRows = computed(() => buildMetricRows(props.variant.metrics, props.showFairnessPoint))
 const heatmap = computed(() => buildHeatmap(props.variant.duties, props.areaIds, props.days, props.groupIndexByStaff))
@@ -36,15 +44,21 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
 </script>
 
 <template>
-  <article class="variant-card" :class="{ 'variant-card--selected': diffSelected }">
+  <article class="variant-card" :class="{ 'variant-card--selected': diffSelected, 'variant-card--applied': applied }">
     <header class="variant-card__head">
-      <h3 class="variant-card__title">{{ variant.label }}</h3>
-      <span class="variant-card__id">{{ variant.id }}</span>
+      <h3 class="variant-card__title">{{ title }}</h3>
+      <span class="tag tag-neutral" :title="variant.description ?? undefined">{{ variant.label }}</span>
+      <span class="variant-card__secs">{{ formatSeconds(perVariantSeconds) }}</span>
     </header>
-    <p v-if="variant.description" class="variant-card__desc">{{ variant.description }}</p>
 
-    <div v-if="multipliers.length" class="variant-card__mults">
-      <span v-for="m in multipliers" :key="m.code" class="tag tag-neutral">{{ m.text }}</span>
+    <div class="variant-card__mults">
+      <!-- 平衡變體（乘數全部是 1）formatMultipliers 回空陣列——顯示一顆「全部 ×1」晶片
+           而不是整排消失，跟 stanceLine 04b 的說法一致（canvas-data.js:788 同樣是
+           mults: ['全部 ×1']，協調者審查回饋）。 -->
+      <template v-if="multipliers.length">
+        <span v-for="m in multipliers" :key="m.code" class="tag tag-neutral">{{ m.text }}</span>
+      </template>
+      <span v-else class="tag tag-neutral">全部 ×1</span>
     </div>
 
     <p v-if="variant.hardViolationCount > 0" class="variant-card__hard-warning">
@@ -79,23 +93,25 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
             :style="{ width: `${Math.min(100, (Math.abs(row.value) / Math.max(1, metricMax[row.key] ?? 0)) * 100)}%` }"
           />
         </div>
-        <dd>{{ row.value }}</dd>
+        <dd>{{ formatMetricValue(row.key, row.value) }}</dd>
       </div>
     </dl>
 
-    <p v-if="vacancies > 0" class="variant-card__vacancy-note">
+    <p v-if="vacancies > 0" class="variant-card__vacancy-note variant-card__vacancy-note--warn">
       空缺 {{ vacancies }} 格：登記過多時的正常結果，求解器回「空缺最少」的變體，而不是整份無解。
     </p>
+    <p v-else class="variant-card__vacancy-note">無空缺：{{ areaIds.length }} 區 × {{ days.length }} 日全數填補。</p>
 
     <div class="variant-card__actions">
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn"
+        :class="applied ? 'btn-primary' : 'btn-secondary'"
         :disabled="applyDisabled || applying"
         :title="applyDisabledReason ?? undefined"
         @click="emit('apply')"
       >
-        {{ applying ? '套用中…' : '套用為草稿' }}
+        {{ applying ? '套用中…' : applied ? '✓ 已選定' : '選定此變體' }}
       </button>
       <button
         type="button"
@@ -126,6 +142,13 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
   background: color-mix(in srgb, var(--color-accent) 6%, transparent);
 }
 
+/* 已套用為草稿的那一份：比逐格差異的高亮更強調，兩個狀態可以同時成立。 */
+.variant-card--applied {
+  border-width: 2px;
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
 .variant-card__head {
   display: flex;
   align-items: baseline;
@@ -137,15 +160,10 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
   font-size: 20px;
 }
 
-.variant-card__id {
-  font: 600 11px ui-monospace, Menlo, monospace;
+.variant-card__secs {
+  margin-left: auto;
+  font: 600 11px var(--font-heading);
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
-}
-
-.variant-card__desc {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 .variant-card__mults {
@@ -225,7 +243,8 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
 
 .variant-card__metric-row dd {
   margin: 0;
-  width: 40px;
+  width: 64px;
+  flex: none;
   text-align: right;
   font-weight: 600;
 }
@@ -235,7 +254,12 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
   padding: 6px 8px;
   font-size: 10.5px;
   line-height: 1.5;
-  border: 1px solid var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.variant-card__vacancy-note--warn {
+  border-color: var(--color-accent);
   color: var(--color-accent-900);
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Duty } from '@/api/types'
-import { diffVariants } from './diff'
+import { diffVariants, isVariantSelected } from './diff'
 
 describe('diffVariants', () => {
   it('只回傳兩邊指派不同的格子', () => {
@@ -45,5 +45,24 @@ describe('diffVariants', () => {
       '2026-09-01:area-a',
       '2026-09-01:area-b',
     ])
+  })
+})
+
+describe('isVariantSelected', () => {
+  it('逐格完全相同視為已選定', () => {
+    const duties: Duty[] = [{ areaId: 'area-a', date: '2026-09-01', staffId: 's-1', cellKey: 'x' }]
+    expect(isVariantSelected(duties, duties)).toBe(true)
+  })
+  it('有任何一格不同就不是已選定', () => {
+    const variant: Duty[] = [{ areaId: 'area-a', date: '2026-09-01', staffId: 's-1', cellKey: 'x' }]
+    const schedule: Duty[] = [{ areaId: 'area-a', date: '2026-09-01', staffId: 's-2', cellKey: 'x' }]
+    expect(isVariantSelected(variant, schedule)).toBe(false)
+  })
+  it('草稿是空班表時不算已選定', () => {
+    const variant: Duty[] = [{ areaId: 'area-a', date: '2026-09-01', staffId: 's-1', cellKey: 'x' }]
+    expect(isVariantSelected(variant, [])).toBe(false)
+  })
+  it('變體本身是空陣列時不算已選定，即使草稿也是空的', () => {
+    expect(isVariantSelected([], [])).toBe(false)
   })
 })

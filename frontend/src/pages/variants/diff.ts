@@ -18,6 +18,12 @@ function cellKeyOf(areaId: string, date: string): string {
   return `${areaId} ${date}`
 }
 
+/**
+ * 鍵是 `areaId + date`，一格只留一筆——如果某區某天 `requiredPerDay > 1`（同一格要
+ * 排多人），這裡會後蓋前、只留最後一筆，逐格差異／已選定判定都會少算。出廠值
+ * `requiredPerDay` 全部是 1（`docs/constraint-defaults.md`），目前不會踩到；
+ * 要是之後哪一區改成 > 1，這裡要先跟著改成「同格多筆」的結構（協調者審查回饋）。
+ */
 function indexByCell(duties: Duty[]): Map<string, Duty> {
   const map = new Map<string, Duty>()
   for (const duty of duties) map.set(cellKeyOf(duty.areaId, duty.date), duty)
@@ -49,4 +55,16 @@ export function diffVariants(a: Duty[], b: Duty[]): CellDiff[] {
   }
 
   return diffs.sort((x, y) => (x.date === y.date ? x.areaId.localeCompare(y.areaId) : x.date.localeCompare(y.date)))
+}
+
+/**
+ * 這份變體是不是目前草稿值班表已選定套用的那一份：逐格比對完全相同才算
+ * （issue #54）。不看 `jobId`／`variantId` 之類的中繼資料——套用之後值班表
+ * 可能又被逐格改過，比對值班內容本身才不會顯示「已選定」卻其實跟草稿不同。
+ */
+export function isVariantSelected(variantDuties: Duty[], scheduleDuties: Duty[]): boolean {
+  // 變體理論上不會是空陣列，但守一下：兩邊都空時不算「已選定」，避免尚未載入完成的
+  // 草稿誤判成套用過。
+  if (variantDuties.length === 0) return false
+  return diffVariants(variantDuties, scheduleDuties).length === 0
 }
