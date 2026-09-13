@@ -131,8 +131,8 @@ async function main() {
       if (isMock) {
         assert(rosterIntact, 'staff.items.length === 34（33 醫師 + 1 NP）且 counts.active === 34')
       } else if (!rosterIntact) {
-        // 真後端的參考名單沒有可執行的清除路徑（#37），之後的 agent 一旦對真後端寫入人員，
-        // 這條硬斷就會誤報成後端壞掉，所以在真後端只警告、不判失敗。
+        // 真後端的名冊會被 3b 這類測試改動（新增／停用／刪除），之後的 agent 一旦對真後端
+        // 寫入人員，這條硬斷就會誤報成後端壞掉，所以在真後端只警告、不判失敗。
         console.warn('名冊已被改過，34 人斷言略過')
       }
     }

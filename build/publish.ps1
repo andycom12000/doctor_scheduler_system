@@ -154,4 +154,5 @@ Write-Host '交付前請跑過 docs/ARCHITECTURE.md §10 的驗收清單，尤�
 Write-Host '  - 在一台沒有 .NET / WebView2 / VC++ Redist 的乾淨 Windows 上解壓執行' -ForegroundColor Yellow
 Write-Host '    （上面的 native 相依檢查是靜態分析，只能證明「沒有懸空的 import」，取代不了這一步）' -ForegroundColor Yellow
 Write-Host '  - 確認 %APPDATA% / %LOCALAPPDATA% / 登錄檔沒有任何寫入' -ForegroundColor Yellow
-Write-Host '  - 第一次啟動後 GET /api/staff 應為空（#37：參考名單種子只在 DEBUG 建置種）' -ForegroundColor Yellow
+Write-Host '  - 第一次啟動後人員管理畫面的清單應為空（或以 SQLite 工具開 data/scheduler.db 確認' -ForegroundColor Yellow
+Write-Host '    staff 表為空）——#37：參考名單種子只在 DEBUG 建置種，發佈包不開 socket 打不到 API' -ForegroundColor Yellow

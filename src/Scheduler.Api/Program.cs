@@ -6,5 +6,8 @@
 
 using Scheduler.Api;
 
-var app = await ApiHost.BuildAsync(new ApiHostOptions(Args: args));
+// SeedReferenceRoster 預設是 false（fail-safe，#37）；這裡明確開回 true，因為這個進入點只有
+// dotnet run 的開發期 :5080 會用，前端 npm run dev 與 frontend/scripts/smoke-mock.ts 的
+// api:smoke 都預期打到真後端時人員名冊有 34 人。
+var app = await ApiHost.BuildAsync(new ApiHostOptions(Args: args, SeedReferenceRoster: true));
 app.Run();

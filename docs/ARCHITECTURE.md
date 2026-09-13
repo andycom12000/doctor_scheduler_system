@@ -609,5 +609,7 @@ win-x64 publish，解析每個 native DLL 的 PE import table（`build/check-nat
 - [ ] 4K 螢幕與 1080p 外接螢幕間拖曳視窗，DPI 縮放正常
 - [ ] 列印輸出正常（A4）
 - [ ] 前端 build 產物可直接部署至靜態主機，搭配 `Scheduler.Api` 正常運作（遷移路徑驗證）
-- [ ] 發佈包第一次啟動後 `GET /api/staff` 應為空（#37：參考名單種子只在 DEBUG 建置種，
-      `Scheduler.Shell` 的 Release 建置關閉；行事曆與約束等其他出廠設定不受影響）
+- [ ] 發佈包第一次啟動後人員管理畫面的清單為空（或以 SQLite 工具開 `data/scheduler.db`
+      確認 `staff` 表為空）——#37：參考名單種子只在 DEBUG 建置種，`Scheduler.Shell` 的
+      Release 建置關閉；行事曆與約束等其他出廠設定不受影響。發佈包不開 socket，
+      無法直接打 `GET /api/staff`

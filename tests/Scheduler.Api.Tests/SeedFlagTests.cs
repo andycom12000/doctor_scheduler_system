@@ -11,7 +11,8 @@ namespace Scheduler.Api.Tests;
 /// <summary>
 /// #37：<c>ApiHostOptions.SeedReferenceRoster</c> 要真的從 <see cref="ApiHost.BuildAsync"/> 一路
 /// 傳到 <c>SchedulerDatabase.InitializeAsync</c>。自己一顆資料庫、自己組 host——不透過
-/// <see cref="ApiFixture"/>，它固定用 true 且會先清空再灌回固定情境的 8 人。
+/// <see cref="ApiFixture"/>：它也是用 <c>SeedReferenceRoster: false</c> 再灌自己固定情境的 8 人，
+/// 這裡要驗證的是旗標本身有沒有生效，不想跟它共用同一份組裝邏輯。
 /// </summary>
 public sealed class SeedFlagTests : IAsyncLifetime
 {
@@ -35,6 +36,14 @@ public sealed class SeedFlagTests : IAsyncLifetime
         await _app.StopAsync();
         await _app.DisposeAsync();
         await _connection.DisposeAsync();
+    }
+
+    [Fact]
+    public void 預設值是_fail_safe_關閉的()
+    {
+        // 不經 Shell 直接部署 Scheduler.Api 的遷移路徑（§3.2 硬性規則 2）不該預設出貨假名單；
+        // 開發期 Program.cs 與 Shell 的 DEBUG 分支都要明確開回 true 才種得到。
+        Assert.False(new ApiHostOptions().SeedReferenceRoster);
     }
 
     [Fact]
