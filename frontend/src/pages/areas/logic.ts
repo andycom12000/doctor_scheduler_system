@@ -4,7 +4,7 @@
  *
  * 不掛 DOM，全部進 vitest。
  */
-import type { Area, AreaType, EligibilityMatrix, Rank } from '@/api/types'
+import type { Area, AreaType, EligibilityMatrix, MonthlyOverride, Rank } from '@/api/types'
 
 /**
  * 某個身分依資格矩陣可值的區域類型名稱，依 `areaTypes` 給定的順序join（矩陣本身是
@@ -64,4 +64,19 @@ export function isEqualJson(a: unknown, b: unknown): boolean {
  */
 export function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+/**
+ * 本月覆寫的「有效形狀」正規化，比較前用。真後端 `GET` 一律回
+ * `{ yearMonth, quotaCapByRank: {} }`（`JsonIgnoreCondition.Never`），MSW mock 未覆寫時
+ * 省略整個 `quotaCapByRank`（回 `{ yearMonth }`）——語意相同（沒有任何身分被覆寫），
+ * 但直接 JSON 比對會判定不相等。清空 R6 覆寫後草稿也可能是任一種形狀（見
+ * `r6Override` 的 setter），一律正規化成「缺 key 當空物件」再比，兩邊後端都不會
+ * 卡在「儲存鈕永遠亮著」。
+ */
+export function normalizeOverride(
+  override: MonthlyOverride | null,
+): { yearMonth: string; quotaCapByRank: Record<string, number> } | null {
+  if (!override) return null
+  return { yearMonth: override.yearMonth, quotaCapByRank: override.quotaCapByRank ?? {} }
 }

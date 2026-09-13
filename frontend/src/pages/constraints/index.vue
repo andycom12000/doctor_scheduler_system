@@ -1,11 +1,16 @@
 <script setup lang="ts">
 /**
  * SCREEN 03 資格與約束（issue #28）。兩份設定文件、一顆頁面級儲存鈕：
- * 載入 → 本地草稿（深拷貝）→ 儲存（只 PUT 真的改過的文件）→ invalidate。
+ * 載入 → 本地草稿（深拷貝）→ 儲存（只 PUT 真的改過的文件，`Promise.allSettled`，
+ * 失敗的那份不 invalidate、草稿留著讓使用者重試）→ invalidate 成功的那幾份。
  *
- * 儲存資格矩陣後 invalidate('staff')（可值區域類型由矩陣重推）與 invalidate('settings')
- * （SCREEN 02 的「可值類型」欄跟著變）。儲存約束後只需 invalidate('settings')——
- * S7 權重改動影響 SCREEN 01／04 的公平性欄，那兩頁自己重抓 constraints，這裡不用特別處理。
+ * 矩陣 PUT 成功才 invalidate('settings/eligibility-matrix')（SCREEN 02 的「可值類型」欄
+ * 跟著變）與 invalidate('staff')（可值區域類型由矩陣重推）；約束 PUT 成功才
+ * invalidate('settings/constraints')——S7 權重改動影響 SCREEN 01／04 的公平性欄，
+ * 那兩頁自己重抓 constraints，這裡不用特別處理。
+ *
+ * 硬約束只有 H2_ELIGIBILITY 給 enabled 開關（拍板照計畫 §3.3）：關 H1 求解器會回空表、
+ * 關 H5 會把人排到不可排班日，一次點擊無確認就落盤風險太高，其餘 6 條唯讀顯示狀態。
  */
 import { computed, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
@@ -66,20 +71,39 @@ function toggleCell(rankCode: string, areaTypeCode: string): void {
 const saving = ref(false)
 const saveError = ref<string | null>(null)
 
+interface SaveJob {
+  /** 成功時要 invalidate 的 key；矩陣多一個 'staff'（可值區域類型由矩陣重推）。 */
+  invalidateKeys: string[]
+  run: () => Promise<unknown>
+}
+
 async function save(): Promise<void> {
   if (!dirty.value || invalid.value || saving.value) return
   saving.value = true
   saveError.value = null
   try {
-    const tasks: Promise<unknown>[] = []
-    if (matrixDirty.value && matrixDraft.value) tasks.push(putEligibilityMatrix(matrixDraft.value))
-    if (constraintsDirty.value && constraintsDraft.value) tasks.push(putConstraints(constraintsDraft.value))
-    await Promise.all(tasks)
-  } catch (err) {
-    saveError.value = describeError(err)
+    const jobs: SaveJob[] = []
+    if (matrixDirty.value && matrixDraft.value) {
+      const draft = matrixDraft.value
+      jobs.push({ invalidateKeys: ['settings/eligibility-matrix', 'staff'], run: () => putEligibilityMatrix(draft) })
+    }
+    if (constraintsDirty.value && constraintsDraft.value) {
+      const draft = constraintsDraft.value
+      jobs.push({ invalidateKeys: ['settings/constraints'], run: () => putConstraints(draft) })
+    }
+
+    const results = await Promise.allSettled(jobs.map((job) => job.run()))
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (firstFailure) saveError.value = describeError(firstFailure.reason)
+
+    // 只讓真的存成功的那幾份文件（與矩陣連帶的 staff）失效重抓；失敗的那份留著本地草稿，
+    // 使用者剛改的內容不會被 finally 重抓回來的舊資料蓋掉。
+    const keysToInvalidate = results
+      .map((result, index) => ({ result, job: jobs[index] }))
+      .filter((entry) => entry.result.status === 'fulfilled')
+      .flatMap((entry) => entry.job.invalidateKeys)
+    await Promise.all(keysToInvalidate.map((key) => invalidate(key)))
   } finally {
-    if (matrixDirty.value) await invalidate('staff')
-    await invalidate('settings')
     saving.value = false
   }
 }
@@ -170,10 +194,17 @@ onBeforeRouteLeave(async () => {
             <span class="constraints__scope">{{ describeScope(hard.scope) }}</span>
             <span class="constraints__params">{{ describeHardConstraintParams(hard.metric, hard.params) }}</span>
             <span class="tag tag-accent constraints__primitive">{{ hard.primitive }}</span>
-            <label class="constraints__toggle">
+            <label v-if="hard.code === 'H2_ELIGIBILITY'" class="constraints__toggle">
               <input type="checkbox" v-model="hard.enabled" />
               <span>{{ hard.enabled ? '已啟用' : '已停用' }}</span>
             </label>
+            <!--
+              只有 H2_ELIGIBILITY 給開關（拍板照計畫 §3.3）：關 H1 求解器會回空表、
+              關 H5 會把人排到不可排班日，其餘 6 條唯讀顯示目前狀態，不能一次點擊無確認就落盤。
+            -->
+            <span v-else class="constraints__toggle constraints__toggle--readonly">
+              {{ hard.enabled ? '已啟用' : '已停用' }}
+            </span>
           </div>
         </div>
         <p v-else-if="constraintsRes.loading.value">載入中…</p>
@@ -340,6 +371,10 @@ onBeforeRouteLeave(async () => {
   font-size: 11px;
   flex: none;
   width: 72px;
+}
+
+.constraints__toggle--readonly {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .input {

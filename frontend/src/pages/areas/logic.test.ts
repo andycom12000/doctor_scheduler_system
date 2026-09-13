@@ -7,6 +7,7 @@ import {
   isEqualJson,
   isNonNegativeInteger,
   isPositiveInteger,
+  normalizeOverride,
   pointTypeDisplay,
   quotaCapDisplay,
 } from './logic'
@@ -79,7 +80,12 @@ describe('isEqualJson', () => {
 })
 
 describe('cloneJson', () => {
-  it('接受 Vue reactive proxy（useResource 的 data 就是這種），structuredClone 會丟 DataCloneError', () => {
+  it('前提：structuredClone 對 Vue reactive proxy 會丟 DataCloneError（Proxy 帶額外內部 slot）', () => {
+    const src = reactive({ ranks: [{ code: 'R6', quotaCap: 5 }] })
+    expect(() => structuredClone(src)).toThrow()
+  })
+
+  it('接受 Vue reactive proxy（useResource 的 data 就是這種），不像 structuredClone 會丟 DataCloneError', () => {
     const src = reactive({ ranks: [{ code: 'R6', quotaCap: 5 }] })
     const out = cloneJson(src)
     expect(out).toEqual({ ranks: [{ code: 'R6', quotaCap: 5 }] })
@@ -91,5 +97,24 @@ describe('cloneJson', () => {
     const out = cloneJson(src)
     out.a = 2
     expect(src.a).toBe(1)
+  })
+})
+
+describe('normalizeOverride', () => {
+  it('真後端形狀（quotaCapByRank 一律存在但為空物件）與 mock 形狀（省略欄位）正規化後相等', () => {
+    const fromRealBackend = { yearMonth: '2026-09', quotaCapByRank: {} }
+    const fromMock = { yearMonth: '2026-09' }
+    expect(normalizeOverride(fromRealBackend)).toEqual(normalizeOverride(fromMock))
+  })
+
+  it('有覆寫時原樣保留', () => {
+    expect(normalizeOverride({ yearMonth: '2026-09', quotaCapByRank: { R6: 5 } })).toEqual({
+      yearMonth: '2026-09',
+      quotaCapByRank: { R6: 5 },
+    })
+  })
+
+  it('null 回 null', () => {
+    expect(normalizeOverride(null)).toBeNull()
   })
 })

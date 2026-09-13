@@ -1,11 +1,16 @@
 <script setup lang="ts">
 /**
  * SCREEN 02 區域與點數（issue #28）。四份設定文件、一顆頁面級儲存鈕：
- * 載入 → 本地草稿（深拷貝）→ 儲存（只 PUT 真的改過的文件）→ invalidate('settings')。
+ * 載入 → 本地草稿（深拷貝）→ 儲存（只 PUT 真的改過的文件，`Promise.allSettled`，
+ * 失敗的那份不 invalidate、草稿留著讓使用者重試）→ invalidate 成功的那幾份。
  *
  * 區域與區域類型唯讀顯示（GET /settings/areas，H1_AREA_COVERAGE 讀這裡，這頁不改它）。
  * 10 身分表可編額度點數上限／點數類型；R6 的當月覆寫走 /settings/monthly-overrides/{ym}
- * （唯一有實際用途的覆寫對象，見 docs/constraint-defaults.md）。
+ * （唯一有實際用途的覆寫對象，見 docs/constraint-defaults.md；其餘身分若 API 端已經有值
+ * 則唯讀顯示，沒有編輯入口）。
+ *
+ * 真後端 GET 一律回 `{ yearMonth, quotaCapByRank: {} }`，MSW mock 未覆寫時省略整個
+ * `quotaCapByRank`；比較 dirty 與清空覆寫時都要透過 `normalizeOverride` 正規化，見 './logic'。
  */
 import { computed, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
@@ -26,7 +31,15 @@ import {
   putRankSettings,
 } from '@/api/settings'
 import type { MonthlyOverride, PointRules, RankSettings } from '@/api/types'
-import { areasOfType, cloneJson, eligibleAreaTypeNames, isEqualJson, isNonNegativeInteger, isPositiveInteger } from './logic'
+import {
+  areasOfType,
+  cloneJson,
+  eligibleAreaTypeNames,
+  isEqualJson,
+  isNonNegativeInteger,
+  isPositiveInteger,
+  normalizeOverride,
+} from './logic'
 
 const { ym } = useYearMonth()
 const { confirm } = useConfirm()
@@ -41,9 +54,10 @@ const overrideRes = useResource(
   () => getMonthlyOverride(ym.value),
 )
 
-// 本地草稿：從各自的 useResource 深拷貝出來，成功儲存後 invalidate('settings') 重抓，
-// 下面的 watch 會用新資料把草稿蓋回去（不加「只在未修改時同步」的條件——PUT 之後
-// PutSettingsCommands 會正規化資料形狀，草稿若不跟著換，儲存鈕會卡在「亮著」）。
+// 本地草稿：從各自的 useResource 深拷貝出來，成功儲存後只 invalidate 那一份文件重抓
+// （見 save()），下面的 watch 會用新資料把草稿蓋回去（不加「只在未修改時同步」的條件——
+// PUT 之後 PutSettingsCommands 會正規化資料形狀，草稿若不跟著換，儲存鈕會卡在「亮著」）。
+// 失敗的那份不 invalidate，草稿維持使用者剛才填的值不被蓋掉。
 const ranksDraft = ref<RankSettings | null>(null)
 const pointRulesDraft = ref<PointRules | null>(null)
 const overrideDraft = ref<MonthlyOverride | null>(null)
@@ -54,7 +68,9 @@ watch(overrideRes.data, (value) => { overrideDraft.value = value ? cloneJson(val
 
 const ranksDirty = computed(() => !isEqualJson(ranksDraft.value, ranksRes.data.value))
 const pointRulesDirty = computed(() => !isEqualJson(pointRulesDraft.value, pointRulesRes.data.value))
-const overrideDirty = computed(() => !isEqualJson(overrideDraft.value, overrideRes.data.value))
+// 真後端 GET 一律回 quotaCapByRank:{}，mock 未覆寫時省略欄位；比較前先正規化兩邊，
+// 否則對真後端這裡會永遠判定「有變更」（見 normalizeOverride 註解）。
+const overrideDirty = computed(() => !isEqualJson(normalizeOverride(overrideDraft.value), normalizeOverride(overrideRes.data.value)))
 const dirty = computed(() => ranksDirty.value || pointRulesDirty.value || overrideDirty.value)
 
 // R6 是目前唯一有當月覆寫用途的身分（docs/constraint-defaults.md）；其餘身分只顯示「—」。
@@ -66,8 +82,10 @@ const r6Override = computed<number | null>({
       const capByRank = overrideDraft.value.quotaCapByRank
       if (capByRank) {
         delete capByRank.R6
-        // 清空後若沒有其他身分的覆寫，整個欄位一併移除，草稿才會等於「未覆寫」的原始 GET 形狀，
-        // 不然會卡在 { yearMonth, quotaCapByRank: {} } ≠ { yearMonth }，儲存鈕永遠亮著。
+        // 清空後若沒有其他身分的覆寫，把整個欄位一併移除，草稿形狀盡量貼近「省略欄位」；
+        // 但不能靠這個順手解決 dirty 判斷——真後端 GET 一律回 quotaCapByRank:{}，若草稿
+        // 因為這裡而變成缺欄位，兩者仍然不 JSON-equal。真正的比較正規化在
+        // overrideDirty（見上方，用 normalizeOverride 把「缺欄位」與「空物件」視為同一件事）。
         if (Object.keys(capByRank).length === 0) delete overrideDraft.value.quotaCapByRank
       }
       return
@@ -111,22 +129,46 @@ const invalid = computed(() => {
 const saving = ref(false)
 const saveError = ref<string | null>(null)
 
+interface SaveJob {
+  invalidateKey: string
+  run: () => Promise<unknown>
+}
+
 async function save(): Promise<void> {
   if (!dirty.value || invalid.value || saving.value) return
   saving.value = true
   saveError.value = null
   try {
-    const tasks: Promise<unknown>[] = []
-    if (ranksDirty.value && ranksDraft.value) tasks.push(putRankSettings(ranksDraft.value))
-    if (pointRulesDirty.value && pointRulesDraft.value) tasks.push(putPointRules(pointRulesDraft.value))
-    if (overrideDirty.value && overrideDraft.value) {
-      tasks.push(putMonthlyOverride(ym.value, { ...overrideDraft.value, yearMonth: ym.value }))
+    const jobs: SaveJob[] = []
+    if (ranksDirty.value && ranksDraft.value) {
+      const draft = ranksDraft.value
+      jobs.push({ invalidateKey: 'settings/ranks', run: () => putRankSettings(draft) })
     }
-    await Promise.all(tasks)
-  } catch (err) {
-    saveError.value = describeError(err)
+    if (pointRulesDirty.value && pointRulesDraft.value) {
+      const draft = pointRulesDraft.value
+      jobs.push({ invalidateKey: 'settings/point-rules', run: () => putPointRules(draft) })
+    }
+    if (overrideDirty.value && overrideDraft.value) {
+      const draft = overrideDraft.value
+      jobs.push({
+        invalidateKey: `settings/monthly-overrides/${ym.value}`,
+        run: () => putMonthlyOverride(ym.value, { ...draft, yearMonth: ym.value }),
+      })
+    }
+
+    const results = await Promise.allSettled(jobs.map((job) => job.run()))
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (firstFailure) saveError.value = describeError(firstFailure.reason)
+
+    // 只讓真的存成功的那幾份文件失效重抓；失敗的那份留著本地草稿，
+    // 使用者剛填的值不會被 finally 重抓回來的舊資料蓋掉。
+    await Promise.all(
+      results
+        .map((result, index) => ({ result, job: jobs[index] }))
+        .filter((entry) => entry.result.status === 'fulfilled')
+        .map((entry) => invalidate(entry.job.invalidateKey)),
+    )
   } finally {
-    await invalidate('settings')
     saving.value = false
   }
 }
@@ -158,7 +200,7 @@ function groupName(groupCode: string): string {
     <template #actions>
       <span v-if="saveError" class="areas__error"><CircleAlert :size="14" :stroke-width="1.5" />{{ saveError }}</span>
       <span v-else-if="invalid && dirty" class="areas__error">
-        <CircleAlert :size="14" :stroke-width="1.5" />有欄位格式錯誤（需為非負整數），請修正後再試
+        <CircleAlert :size="14" :stroke-width="1.5" />有欄位格式錯誤（見下方標紅欄位），請修正後再試
       </span>
       <span v-else-if="dirty" class="tag tag-accent">有未儲存的變更</span>
       <button type="button" class="btn btn-secondary" :disabled="!dirty || saving" @click="discard">
@@ -249,6 +291,16 @@ function groupName(groupCode: string): string {
                   />
                   <span v-if="r6Override !== null" class="tag tag-accent">已覆寫</span>
                 </div>
+                <!--
+                  非 R6 身分沒有編輯入口（唯一有實際用途的覆寫對象只有 R6，見
+                  docs/constraint-defaults.md），但 schema 上 quotaCapByRank 技術上可以放任何
+                  身分代碼；若資料裡真的有值（例如手動打過 API），顯示出來而不是用「—」蓋掉，
+                  避免看起來像沒有覆寫。
+                -->
+                <template v-else-if="overrideDraft?.quotaCapByRank?.[rank.code] !== undefined">
+                  <span class="areas__override-readonly">{{ overrideDraft.quotaCapByRank[rank.code] }}</span>
+                  <span class="tag tag-accent">已覆寫</span>
+                </template>
                 <span v-else class="areas__dash">—</span>
               </td>
             </tr>
@@ -264,11 +316,25 @@ function groupName(groupCode: string): string {
         <div v-if="pointRulesDraft" class="areas__fields">
           <label class="areas__field">
             <span>平日 1 班</span>
-            <input v-model.number="pointRulesDraft.quota.weekday" type="number" min="0" step="1" class="input" />
+            <input
+              v-model.number="pointRulesDraft.quota.weekday"
+              type="number"
+              min="0"
+              step="1"
+              class="input"
+              :class="{ 'input--invalid': !isNonNegativeInteger(pointRulesDraft.quota.weekday) }"
+            />
           </label>
           <label class="areas__field">
             <span>假日 1 班</span>
-            <input v-model.number="pointRulesDraft.quota.holiday" type="number" min="0" step="1" class="input" />
+            <input
+              v-model.number="pointRulesDraft.quota.holiday"
+              type="number"
+              min="0"
+              step="1"
+              class="input"
+              :class="{ 'input--invalid': !isNonNegativeInteger(pointRulesDraft.quota.holiday) }"
+            />
           </label>
           <label class="areas__field areas__field--wide">
             <span>假日認定</span>
@@ -322,6 +388,7 @@ function groupName(groupCode: string): string {
               min="0"
               step="1"
               class="input"
+              :class="{ 'input--invalid': !isNonNegativeInteger(pointRulesDraft.fairness.consecutiveSaturdayBonus.points) }"
             />
           </label>
           <label class="areas__field">
@@ -332,7 +399,11 @@ function groupName(groupCode: string): string {
               min="1"
               step="1"
               class="input"
+              :class="{ 'input--invalid': !isPositiveInteger(pointRulesDraft.fairness.consecutiveSaturdayBonus.windowDays) }"
             />
+            <span v-if="!isPositiveInteger(pointRulesDraft.fairness.consecutiveSaturdayBonus.windowDays)" class="areas__field-error">
+              至少 1 天
+            </span>
           </label>
           <label class="areas__field areas__field--wide">
             <span>喘息判定</span>
@@ -456,6 +527,11 @@ function groupName(groupCode: string): string {
   gap: var(--space-2);
 }
 
+.areas__override-readonly {
+  font: 600 12.5px 'Barlow Condensed', sans-serif;
+  margin-right: var(--space-2);
+}
+
 .input {
   font-family: var(--font-body);
   font-size: 12.5px;
@@ -502,6 +578,11 @@ function groupName(groupCode: string): string {
 
 .areas__field--wide {
   flex: 2;
+}
+
+.areas__field-error {
+  color: var(--color-accent-900);
+  font-size: 10.5px;
 }
 
 .areas__fair {

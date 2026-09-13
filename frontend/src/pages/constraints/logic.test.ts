@@ -128,7 +128,12 @@ describe('isEqualJson', () => {
 })
 
 describe('cloneJson', () => {
-  it('接受 Vue reactive proxy（useResource 的 data 就是這種），structuredClone 會丟 DataCloneError', () => {
+  it('前提：structuredClone 對 Vue reactive proxy 會丟 DataCloneError（Proxy 帶額外內部 slot）', () => {
+    const src = reactive({ hard: [{ code: 'H1', enabled: true }] })
+    expect(() => structuredClone(src)).toThrow()
+  })
+
+  it('接受 Vue reactive proxy（useResource 的 data 就是這種），不像 structuredClone 會丟 DataCloneError', () => {
     const src = reactive({ hard: [{ code: 'H1', enabled: true }] })
     const out = cloneJson(src)
     expect(out).toEqual({ hard: [{ code: 'H1', enabled: true }] })
