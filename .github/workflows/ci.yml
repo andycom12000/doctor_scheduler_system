@@ -120,6 +120,10 @@ jobs:
       - name: 型別檢查
         run: npm run typecheck
 
+      # 純函式與 composable 的單元測試（vitest），不需要瀏覽器。
+      - name: 單元測試
+        run: npm test
+
       - name: 建置
         run: npm run build
 
