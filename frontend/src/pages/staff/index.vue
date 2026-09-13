@@ -96,17 +96,21 @@ const selectedAreaTypeChips = computed(() =>
   areaTypeChips(areaTypes.value, selectedStaff.value?.eligibleAreaTypes ?? []),
 )
 
-// 姓名旁的「本月 3/12 · 餘 9 · 假日 1 班」，只在編輯既有人員時顯示——新增中的人員
-// 還沒有 staffId，點數看板查不到列。查無值班表（404）與其他載入失敗分開講，
-// 避免使用者把「這個月還沒排」誤會成畫面壞了。
+// 姓名旁的「{ym} 額度點數 3/12 · 餘 9 · 假日 1 班」，只在編輯既有人員時顯示——新增中的人員
+// 還沒有 staffId，點數看板查不到列。年月一律印進字串：`/staff` 沒有 `:ym` 路由參數，
+// `ym` 是 `useYearMonth` 模組層最後一次看到的年月，寫「本月」會誤導。查無值班表（404）
+// 與其他載入失敗分開講，避免使用者把「這個月還沒排」誤會成畫面壞了；其他錯誤照樣顯示
+// 訊息，不要靜默吞掉。
 const quotaLoadText = computed(() => {
   if (mode.value !== 'edit' || !selectedStaff.value) return null
   if (pointBoardResource.error.value) {
-    return isNotFoundError(pointBoardResource.error.value) ? '本月尚無值班表' : null
+    return isNotFoundError(pointBoardResource.error.value)
+      ? `${ym.value} 尚無值班表`
+      : describeError(pointBoardResource.error.value)
   }
   const groups = pointBoardResource.data.value?.groups
   if (!groups) return null
-  return describeQuotaLoad(findPointBoardRow(groups, selectedStaff.value.id)) ?? '—'
+  return describeQuotaLoad(findPointBoardRow(groups, selectedStaff.value.id), ym.value) ?? '—'
 })
 
 function startCreate(): void {
@@ -373,7 +377,8 @@ async function remove(): Promise<void> {
                 v-for="chip in selectedAreaTypeChips"
                 :key="chip.code"
                 class="tag"
-                :class="chip.eligible ? 'tag-accent' : 'tag-neutral'"
+                :class="chip.eligible ? 'tag-accent' : 'tag-neutral staff-form__area-chip--ineligible'"
+                :title="chip.eligible ? undefined : '依資格矩陣不可值'"
               >
                 {{ chip.name }}
               </span>
@@ -399,7 +404,7 @@ async function remove(): Promise<void> {
               <button type="button" class="staff-form__delete-link" :disabled="saving" @click="remove">
                 刪除人員
               </button>
-              <p class="staff-form__hint">已有值班紀錄，只能停用；刪除會回 409</p>
+              <p class="staff-form__hint">已有值班紀錄者只能停用，刪除會回 409</p>
             </div>
             <p v-if="deleteNote" class="staff-form__error">{{ deleteNote }}</p>
           </div>
@@ -668,6 +673,12 @@ async function remove(): Promise<void> {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* 可值／不可值的對比度要夠——單靠 .tag-accent／.tag-neutral 的顏色差在小晶片上太弱，
+   不可值再降低透明度並加 title，讓「這個人只能值一區」一眼看得出來。 */
+.staff-form__area-chip--ineligible {
+  opacity: 0.45;
 }
 
 .staff-form__hint {

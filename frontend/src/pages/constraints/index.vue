@@ -143,10 +143,10 @@ onBeforeRouteLeave(async () => {
 <template>
   <PageLayout title="資格與約束" subtitle="10 身分 × 3 區域類型資格矩陣 · 硬約束 7 條 · 軟約束 7 條">
     <template #actions>
-      <div class="seg" role="group" aria-label="捲到對應區塊">
-        <button type="button" class="seg-opt" @click="scrollToSection('matrix')">資格</button>
-        <button type="button" class="seg-opt" @click="scrollToSection('hard')">硬約束</button>
-        <button type="button" class="seg-opt" @click="scrollToSection('soft')">軟約束</button>
+      <div class="constraints__jump" role="group" aria-label="捲到對應區塊，不會切換畫面內容">
+        <button type="button" class="constraints__jump-link" @click="scrollToSection('matrix')">↓ 資格</button>
+        <button type="button" class="constraints__jump-link" @click="scrollToSection('hard')">↓ 硬約束</button>
+        <button type="button" class="constraints__jump-link" @click="scrollToSection('soft')">↓ 軟約束</button>
       </div>
       <span v-if="saveError" class="constraints__error"><CircleAlert :size="14" :stroke-width="1.5" />{{ saveError }}</span>
       <span v-else-if="invalid && dirty" class="constraints__error">
@@ -281,6 +281,8 @@ onBeforeRouteLeave(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  /* 捲動目標貼齊視窗頂端會被固定的頁首擋住一截，留一點餘裕。 */
+  scroll-margin-top: var(--space-4);
 }
 
 .constraints__heading {
@@ -438,27 +440,28 @@ onBeforeRouteLeave(async () => {
   color: var(--color-accent-900);
 }
 
-.seg {
+/*
+  故意不用 .seg／.seg-opt 那種帶框線分格的樣式——這三顆是「跳到」不是「切換」，
+  頁面內容不會因為點了哪顆而改變，做成分格按鈕會讓人誤以為在切換分頁／篩選。
+  這裡改成一組底線連結＋↓ 箭頭，視覺上就是錨點捲動。
+*/
+.constraints__jump {
   display: inline-flex;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  gap: var(--space-3);
 }
 
-.seg-opt {
-  padding: var(--space-1) var(--space-2);
+.constraints__jump-link {
+  padding: 0;
   font-size: 12px;
   background: transparent;
   border: none;
-  color: var(--color-text);
+  color: var(--color-accent-900);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
 
-.seg-opt:hover {
-  background: color-mix(in srgb, var(--color-text) 7%, transparent);
-}
-
-.seg-opt + .seg-opt {
-  border-left: 1px solid var(--color-divider);
+.constraints__jump-link:hover {
+  color: var(--color-accent);
 }
 </style>

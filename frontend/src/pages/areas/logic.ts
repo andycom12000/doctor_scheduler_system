@@ -37,16 +37,20 @@ export function areasOfType(areaTypeCode: string, areas: Area[]): Area[] {
 
 /**
  * 區域類型列右側的「每日 X 人 · 每區 Y 人」註記：X 是該類型底下所有區域
- * `requiredPerDay` 的加總，Y 取單一區域的 `requiredPerDay`。目前 5 個區域皆為 1
- * （`api-contract.yaml` 的說明），但欄位允許之後不同；若同一類型底下的區域
- * `requiredPerDay` 不一致，不硬湊一個「每區」數字，只顯示「每日」。
+ * `requiredPerDay` 的加總，Y 取單一區域的 `requiredPerDay`。「每區」只在該類型底下
+ * 有兩個以上區域、且彼此 `requiredPerDay` 一致時才顯示——只有一個區域時「每日」跟
+ * 「每區」是同一個數字，重複印出來沒有資訊量（設計稿的 ICU／總值就是這樣，只顯示
+ * 「每日 N 人」）；區域數量 ≥ 2 但 `requiredPerDay` 不一致時，也不硬湊一個「每區」
+ * 數字，只顯示「每日」。
  */
 export function areaTypeCapacityNote(areaTypeCode: string, areas: Area[]): string {
   const inType = areasOfType(areaTypeCode, areas)
   if (inType.length === 0) return ''
   const total = inType.reduce((sum, area) => sum + area.requiredPerDay, 0)
   const perAreaValues = new Set(inType.map((area) => area.requiredPerDay))
-  if (perAreaValues.size === 1) return `每日 ${total} 人 · 每區 ${inType[0].requiredPerDay} 人`
+  if (inType.length > 1 && perAreaValues.size === 1) {
+    return `每日 ${total} 人 · 每區 ${inType[0].requiredPerDay} 人`
+  }
   return `每日 ${total} 人`
 }
 

@@ -609,6 +609,15 @@ function onOverrideMonthSelect(event: Event): void {
   letter-spacing: normal;
 }
 
+/* .btn 的預設尺寸是給獨立按鈕用的，在 13px 大寫標題列裡太大；縮小並取消繼承來的
+   uppercase／letter-spacing，跟 .areas__note 對齊同一條基準線。 */
+.areas__add-type {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

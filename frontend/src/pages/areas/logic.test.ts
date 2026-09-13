@@ -54,12 +54,16 @@ describe('areasOfType', () => {
 })
 
 describe('areaTypeCapacityNote', () => {
-  it('每區 requiredPerDay 一致時顯示每日與每區兩個數字', () => {
+  it('兩個以上區域且 requiredPerDay 一致時顯示每日與每區兩個數字（WARD：A/B/C 三區）', () => {
     expect(areaTypeCapacityNote('WARD', areas)).toBe('每日 3 人 · 每區 1 人')
-    expect(areaTypeCapacityNote('ICU', areas)).toBe('每日 1 人 · 每區 1 人')
   })
 
-  it('同類型底下 requiredPerDay 不一致時只顯示每日，不硬湊每區數字', () => {
+  it('只有一個區域時只顯示每日，不重複印每區（ICU／總值就是這樣，設計稿同此）', () => {
+    expect(areaTypeCapacityNote('ICU', areas)).toBe('每日 1 人')
+    expect(areaTypeCapacityNote('CHIEF', areas)).toBe('每日 1 人')
+  })
+
+  it('兩個以上區域但 requiredPerDay 不一致時只顯示每日，不硬湊每區數字', () => {
     const mixed = [
       { id: 'x', code: 'X', name: 'X', areaTypeCode: 'MIXED', requiredPerDay: 1 },
       { id: 'y', code: 'Y', name: 'Y', areaTypeCode: 'MIXED', requiredPerDay: 2 },

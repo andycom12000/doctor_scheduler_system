@@ -217,22 +217,22 @@ describe('findPointBoardRow', () => {
     expect(findPointBoardRow(pointBoardGroups, 's-np')?.name).toBe('NP1')
   })
 
-  it('查不到回 undefined', () => {
+  it('查不到回 undefined（停用者不列入點數看板，也會落到這個分支）', () => {
     expect(findPointBoardRow(pointBoardGroups, 's-ghost')).toBeUndefined()
   })
 })
 
 describe('describeQuotaLoad', () => {
-  it('一般身分：本月已排/上限 · 餘額 · 假日班數', () => {
-    expect(describeQuotaLoad(pointBoardGroups[0].rows[0])).toBe('本月 3/10 · 餘 7 · 假日 1 班')
+  it('一般身分：年月 · 額度點數已排/上限 · 餘額 · 假日班數', () => {
+    expect(describeQuotaLoad(pointBoardGroups[0].rows[0], '2026-09')).toBe('2026-09 額度點數 3/10 · 餘 7 · 假日 1 班')
   })
 
-  it('quotaCap 為 null（NP）顯示不計', () => {
-    expect(describeQuotaLoad(pointBoardGroups[1].rows[0])).toBe('本月 5 · 不計 · 假日 2 班')
+  it('quotaCap 為 null（NP）改印值班天數，額度點數標「不計」而非印點數', () => {
+    expect(describeQuotaLoad(pointBoardGroups[1].rows[0], '2026-09')).toBe('2026-09 5 天 · 額度點數不計 · 假日 2 班')
   })
 
   it('查不到列回 null', () => {
-    expect(describeQuotaLoad(undefined)).toBeNull()
+    expect(describeQuotaLoad(undefined, '2026-09')).toBeNull()
   })
 })
 
