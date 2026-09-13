@@ -85,11 +85,28 @@ public class SeedTests
             Assert.Equal(DefaultAreas.Areas, (await settings.GetAreasAsync()).Areas); // 區域空了才補回
             Assert.Equal(4, (await settings.GetRanksAsync()).Ranks.Single(r => r.Code == DefaultRanks.R6).QuotaCap); // 身分沒被動
 
-            // 人員名冊沒被清空過，判空閘門第二次啟動不會重種；但這也是 #37 要處理的洞：
-            // 就算名冊「被清空」了，同一個閘門會把它當「全新」，下次啟動照樣復活成 34 人。
+            // 人員名冊沒被清空過，判空閘門第二次啟動不會重種。
             var staff = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
             Assert.Equal(34, (await staff.ListAsync()).Count);
         }
+    }
+
+    [Fact]
+    public async Task 旗標關閉時不種參考名單_但行事曆與設定照常種()
+    {
+        await using var db = await SqliteDatabase.CreateAsync(seedReferenceRoster: false);
+        using var scope = db.Scope();
+
+        var staff = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
+        Assert.Empty(await staff.ListAsync());
+
+        var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+        Assert.Equal(DefaultAreas.Areas, (await settings.GetAreasAsync()).Areas);
+        Assert.Equal(DefaultRanks.Ranks, (await settings.GetRanksAsync()).Ranks);
+
+        var calendar = scope.ServiceProvider.GetRequiredService<ICalendarRepository>();
+        var all = await calendar.GetExceptionsAsync(new DateOnly(2000, 1, 1), new DateOnly(2100, 12, 31));
+        Assert.Equal(BuiltInCalendar.Days.Count, all.Count);
     }
 
     [Fact]

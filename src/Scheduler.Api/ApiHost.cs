@@ -33,12 +33,19 @@ namespace Scheduler.Api;
 /// 在 Application 與 Solver 註冊之後再跑的覆寫，測試用來把 <see cref="ISolver"/> 換成假的。
 /// </param>
 /// <param name="Args">命令列參數，開發期 <c>dotnet run</c> 用。</param>
+/// <param name="SeedReferenceRoster">
+/// 首次啟動時是否種參考名單 34 人（#37）。開發期預設 true，方便前端與手動測試有資料可看；
+/// 行事曆例外日、約束等其他出廠設定不受這個旗標影響，永遠照常種。
+/// <c>Scheduler.Shell</c> 依 DEBUG/RELEASE 編譯期決定：發佈包（Release）關閉，
+/// 使用者拿到的出廠資料庫不含這份假名單。
+/// </param>
 public sealed record ApiHostOptions(
     bool UseTestServer = false,
     string? DatabasePath = null,
     Action<IServiceCollection>? ConfigurePersistence = null,
     Action<IServiceCollection>? ConfigureServices = null,
-    string[]? Args = null);
+    string[]? Args = null,
+    bool SeedReferenceRoster = true);
 
 /// <summary>
 /// 唯一一份 HTTP pipeline 的組裝（ARCHITECTURE §3.2 規則 2）。開發期 Program.cs 與正式版 Shell
@@ -86,7 +93,7 @@ public static class ApiHost
         var app = builder.Build();
 
         // 啟動流程：建 data/ → 套 migration → WAL → 首次 seed → 標記中斷的求解工作。可重複執行。
-        await SchedulerDatabase.InitializeAsync(app.Services, cancellationToken);
+        await SchedulerDatabase.InitializeAsync(app.Services, options.SeedReferenceRoster, cancellationToken);
 
         app.UseSchedulerErrors();
         app.MapReadEndpoints();

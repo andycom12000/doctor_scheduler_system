@@ -30,8 +30,8 @@
   record 當 entity）、`Repositories/`（六個 repository 實作 + `EfUnitOfWork`）、`Mapping/`
   （列舉字串與契約一致；時間戳一律 UTC ISO-8601 字串，SQLite 才能排序）、`Seed/`（出廠值與 2026
   行事曆例外日，含參考名單 34 人——33 位醫師 + 1 位 NP，姓名／組成照 `frontend/src/mocks/fixtures/staff.ts`。
-  **出廠資料庫會帶這份假名單，目前沒有可執行的清除路徑**——種子在客戶機器上第一次啟動時才跑、
-  有值班紀錄的人刪不掉、閘門只判空所以清空後會復活；正式交付前要依 #37 把 seed 關掉）、
+  參考名單是否種由 `ApiHostOptions.SeedReferenceRoster` 控制（開發期預設開），`Scheduler.Shell`
+  依 DEBUG/RELEASE 編譯期常數決定，發佈包（Release）關掉，其他出廠設定不受影響，見 #37）、
   `Migrations/`（進版控，啟動時自動套用）。`SchedulerDatabase.InitializeAsync`
   是啟動流程，`SchedulerDatabase.DefaultPath` 是程式旁的 `data/scheduler.db`。
   改了 `SchedulerDbContext` 要跑 `dotnet ef migrations add <Name> --project src/Scheduler.Persistence`，

@@ -23,7 +23,11 @@ public static class SchedulerDatabase
     /// 開 WAL → 設定表空的話從出廠值 seed → 把上次沒跑完的求解工作標成失敗。
     /// 每一步都可重複執行，第二次啟動不會重做。
     /// </summary>
-    public static async Task InitializeAsync(IServiceProvider services, CancellationToken cancellationToken = default)
+    /// <param name="seedReferenceRoster">
+    /// false 時完全不種參考名單 34 人；行事曆例外日、約束等其他出廠設定不受影響（#37）。
+    /// </param>
+    public static async Task InitializeAsync(
+        IServiceProvider services, bool seedReferenceRoster = true, CancellationToken cancellationToken = default)
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
@@ -43,7 +47,7 @@ public static class SchedulerDatabase
         // WAL 是資料庫檔案的持久屬性，設一次就留著；對 in-memory 資料庫沒有意義但也無害。
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = 'wal';", cancellationToken);
 
-        await DefaultDataSeeder.SeedIfEmptyAsync(db, cancellationToken);
+        await DefaultDataSeeder.SeedIfEmptyAsync(db, seedReferenceRoster, cancellationToken);
 
         await new SolverJobRepository(db).FailUnfinishedAsync("程式重啟中斷", DateTimeOffset.UtcNow, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);

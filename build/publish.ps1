@@ -67,6 +67,8 @@ if (-not (Test-Path $wwwroot)) {
 Write-Host '[2/6] dotnet publish …' -ForegroundColor Cyan
 if (Test-Path $OutputPath) { Remove-Item $OutputPath -Recurse -Force }
 
+# --configuration Release 不只是最佳化：Scheduler.Shell 的參考名單種子旗標（#37）是
+# #if DEBUG / #else 編譯期常數，Release 建置才會關掉，發佈包才不會帶 34 人的假名單。
 dotnet publish (Join-Path $repoRoot 'src/Scheduler.Shell/Scheduler.Shell.csproj') `
     --configuration Release `
     --output $OutputPath `
@@ -148,7 +150,8 @@ $size = [math]::Round((Get-ChildItem $OutputPath -Recurse -File | Measure-Object
 Write-Host ''
 Write-Host "發佈完成：$OutputPath（$size MB）" -ForegroundColor Green
 Write-Host ''
-Write-Host '交付前請跑過 docs/ARCHITECTURE.md §8 的驗收清單，尤其是：' -ForegroundColor Yellow
+Write-Host '交付前請跑過 docs/ARCHITECTURE.md §10 的驗收清單，尤其是：' -ForegroundColor Yellow
 Write-Host '  - 在一台沒有 .NET / WebView2 / VC++ Redist 的乾淨 Windows 上解壓執行' -ForegroundColor Yellow
 Write-Host '    （上面的 native 相依檢查是靜態分析，只能證明「沒有懸空的 import」，取代不了這一步）' -ForegroundColor Yellow
 Write-Host '  - 確認 %APPDATA% / %LOCALAPPDATA% / 登錄檔沒有任何寫入' -ForegroundColor Yellow
+Write-Host '  - 第一次啟動後 GET /api/staff 應為空（#37：參考名單種子只在 DEBUG 建置種）' -ForegroundColor Yellow
