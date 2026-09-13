@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
- * 頂列年月切換器。資料來自 `GET /schedules`（有值班表的月份與其狀態），是 `useResource`
- * 的示範用法（issue #26）。下拉選單列出目前年月前後各 12 個月，加上所有有值班表的月份。
+ * 標題列年月切換器，放在有 `:ym` 的頁面標題左側（issue #52，字級對齊
+ * `docs/design-ref/screen-01.html` 的 `ymLabelS` 大字樣式）。資料來自 `GET /schedules`
+ * （有值班表的月份與其狀態），是 `useResource` 的示範用法（issue #26）。下拉選單列出
+ * 目前年月前後各 12 個月，加上所有有值班表的月份。
  */
 import { computed, ref } from 'vue'
 import { listSchedules } from '@/api/schedules'
@@ -57,8 +59,8 @@ function onSelect(event: Event): void {
 }
 
 .ym-switcher__step {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   flex: none;
   display: flex;
   align-items: center;
@@ -66,7 +68,7 @@ function onSelect(event: Event): void {
   background: transparent;
   border: 1px solid var(--color-divider);
   color: var(--color-text);
-  font: 400 15px/1 var(--font-heading);
+  font: 400 17px/1 var(--font-heading);
   cursor: pointer;
 }
 
@@ -75,12 +77,17 @@ function onSelect(event: Event): void {
 }
 
 .ym-switcher__select {
-  height: 26px;
+  height: 30px;
   padding: 0 var(--space-2);
-  font: 600 13px var(--font-heading);
+  font: 600 20px/1.2 var(--font-heading);
   letter-spacing: 0.02em;
   color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.ym-switcher__select:hover {
+  border-color: var(--color-divider);
 }
 </style>

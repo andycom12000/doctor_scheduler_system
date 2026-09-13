@@ -1,14 +1,12 @@
 <script setup lang="ts">
 /**
- * 整個殼：左側導覽（六項＋「本機執行 · 免安裝」）＋頂列年月切換器＋主區（填滿視窗、內部捲動）。
- * 版面依 CLAUDE.md 交付的骨架而非 docs/design-ref（設計稿是上緣一列水平導覽），
- * 見 PR 說明的偏離記錄。
+ * 整個殼：頂部橫向導覽（品牌＋六項連結＋「本機執行 · 免安裝」）＋主區（全寬、內部捲動）。
+ * 版面依 docs/design-ref/screen-01.html 的 `.nv` 頂部導覽（issue #52）；
+ * 年月切換器不在這裡，改由有 `:ym` 的頁面各自透過 `PageLayout` 顯示在標題列左側。
  */
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { CalendarDays, CalendarOff, GitCompare, LayoutGrid, ShieldCheck, Users } from 'lucide-vue-next'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import YearMonthSwitcher from '@/components/YearMonthSwitcher.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
 
 const route = useRoute()
@@ -17,17 +15,16 @@ const { ym } = useYearMonth()
 interface NavItem {
   name: string
   label: string
-  icon: typeof CalendarDays
   to: () => { name: string; params?: Record<string, string> }
 }
 
 const navItems: NavItem[] = [
-  { name: 'schedule', label: '排班主表', icon: CalendarDays, to: () => ({ name: 'schedule', params: { ym: ym.value } }) },
-  { name: 'areas', label: '區域與點數', icon: LayoutGrid, to: () => ({ name: 'areas' }) },
-  { name: 'constraints', label: '資格與約束', icon: ShieldCheck, to: () => ({ name: 'constraints' }) },
-  { name: 'variants', label: '變體比較', icon: GitCompare, to: () => ({ name: 'variants', params: { ym: ym.value } }) },
-  { name: 'blockedDays', label: '不可排班日登記', icon: CalendarOff, to: () => ({ name: 'blockedDays', params: { ym: ym.value } }) },
-  { name: 'staff', label: '人員維護', icon: Users, to: () => ({ name: 'staff' }) },
+  { name: 'schedule', label: '排班主表', to: () => ({ name: 'schedule', params: { ym: ym.value } }) },
+  { name: 'areas', label: '區域與點數', to: () => ({ name: 'areas' }) },
+  { name: 'constraints', label: '資格與約束', to: () => ({ name: 'constraints' }) },
+  { name: 'variants', label: '變體比較', to: () => ({ name: 'variants', params: { ym: ym.value } }) },
+  { name: 'blockedDays', label: '不可排班日登記', to: () => ({ name: 'blockedDays', params: { ym: ym.value } }) },
+  { name: 'staff', label: '人員維護', to: () => ({ name: 'staff' }) },
 ]
 
 const currentName = computed(() => route.name?.toString())
@@ -35,7 +32,7 @@ const currentName = computed(() => route.name?.toString())
 
 <template>
   <div class="shell">
-    <aside class="shell__nav">
+    <header class="shell__topbar">
       <div class="shell__brand">
         <span class="shell__brand-mark" aria-hidden="true"></span>
         <span class="shell__brand-name">醫師值班排班系統</span>
@@ -48,23 +45,15 @@ const currentName = computed(() => route.name?.toString())
           class="shell__nav-item"
           :class="{ 'shell__nav-item--active': currentName === item.name }"
         >
-          <component :is="item.icon" class="shell__nav-icon" :size="16" :stroke-width="1.5" />
-          <span>{{ item.label }}</span>
+          {{ item.label }}
         </RouterLink>
       </nav>
-      <div class="shell__footer">
-        <span class="tag tag-neutral">本機執行 · 免安裝</span>
-      </div>
-    </aside>
+      <span class="tag tag-neutral shell__badge">本機執行 · 免安裝</span>
+    </header>
 
-    <div class="shell__main">
-      <header class="shell__topbar">
-        <YearMonthSwitcher />
-      </header>
-      <main class="shell__content">
-        <RouterView />
-      </main>
-    </div>
+    <main class="shell__content">
+      <RouterView />
+    </main>
 
     <ConfirmDialog />
   </div>
@@ -73,16 +62,19 @@ const currentName = computed(() => route.name?.toString())
 <style scoped>
 .shell {
   display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
 }
 
-.shell__nav {
+.shell__topbar {
   display: flex;
-  flex-direction: column;
-  width: 208px;
+  align-items: center;
+  gap: var(--space-6);
+  height: 48px;
   flex: none;
-  border-right: 1px solid var(--color-divider);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
   background: var(--color-surface);
 }
 
@@ -90,8 +82,7 @@ const currentName = computed(() => route.name?.toString())
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-3);
-  border-bottom: 1px solid var(--color-divider);
+  flex: none;
 }
 
 .shell__brand-mark {
@@ -106,66 +97,41 @@ const currentName = computed(() => route.name?.toString())
   font-weight: var(--font-heading-weight);
   font-size: 15px;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .shell__nav-list {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3) var(--space-2);
+  align-items: center;
+  gap: var(--space-4);
   flex: 1;
-  overflow-y: auto;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .shell__nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
   font-size: 13px;
-  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
   text-decoration: none;
-  border-radius: var(--radius-sm);
+  white-space: nowrap;
 }
 
 .shell__nav-item:hover {
-  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: var(--color-text);
 }
 
 .shell__nav-item--active {
   color: var(--color-accent);
-  background: var(--color-accent-100);
   font-weight: 500;
 }
 
-.shell__nav-icon {
-  flex: none;
-}
-
-.shell__footer {
-  padding: var(--space-3);
-  border-top: 1px solid var(--color-divider);
-}
-
-.shell__main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
-.shell__topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--color-divider);
+.shell__badge {
   flex: none;
 }
 
 .shell__content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
