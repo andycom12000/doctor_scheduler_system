@@ -125,7 +125,7 @@ public sealed class ApiFixture : IAsyncLifetime
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
 
         var json = JsonNode.Parse(text);
-        // 契約有定義該狀態碼就用它的 schema；沒列的（目前是 422）用 ErrorResponse 元件驗。
+        // 契約有定義該狀態碼就用它的 schema；沒列的（契約未列的狀態碼）用 ErrorResponse 元件驗。
         var errors = ContractSchema.Current.HasResponse(operationId, (int)expected)
             ? ContractSchema.Current.Validate(operationId, (int)expected, json)
             : (int)expected >= 400

@@ -1038,7 +1038,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
-          description: 請求本身無效（員編／姓名空白、身分不存在）（`INVALID_REQUEST`）
+          description: 請求本身無效：員編／姓名空白、身分不存在（INVALID_REQUEST）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1074,7 +1074,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
-          description: 請求本身無效（員編／姓名空白、身分不存在）（`INVALID_REQUEST`）
+          description: 請求本身無效：員編／姓名空白、身分不存在（INVALID_REQUEST）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
