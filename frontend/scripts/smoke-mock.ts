@@ -6,7 +6,7 @@
  *   npx tsx scripts/smoke-mock.ts --target http://host:port
  *
  * 兩邊都跑一次，mock 與後端的漂移直接看得到（docs/ARCHITECTURE.md §7）。
- * 依賴 mock 種子資料（34 人、2026-08／09 值班表）或尚未落地的寫入／求解端點的段落
+ * 依賴 mock 種子資料（2026-08／09 值班表）或尚未落地的寫入／求解端點的段落
  * 標為 mock-only，打真後端時略過；後端補上對應端點後把它們解鎖。
  *
  * 需要 `src/api/schema.d.ts` 存在，執行前請先 `npm run api:types` 或跑過一次 `npm run dev`/`typecheck`。
@@ -127,12 +127,13 @@ async function main() {
       assert(staff.status === 200, 'GET /staff → 200')
       const body = await staff.json()
       assert(body.items.length === body.counts.active + body.counts.inactive, 'items 數等於 counts.active + counts.inactive')
-      if (!isMock && body.items.length === 0) {
-        console.warn('  ! 真後端沒有人員資料：後面依資料量的斷言（byStaff、months）在空庫上恆真，鑑別力有限')
-      }
+      const rosterIntact = body.items.length === 34 && body.counts.active === 34
       if (isMock) {
-        assert(body.items.length === 34, 'staff.items.length === 34（33 醫師 + 1 NP）')
-        assert(body.counts.active === 34, 'counts.active === 34')
+        assert(rosterIntact, 'staff.items.length === 34（33 醫師 + 1 NP）且 counts.active === 34')
+      } else if (!rosterIntact) {
+        // 真後端的參考名單沒有可執行的清除路徑（#37），之後的 agent 一旦對真後端寫入人員，
+        // 這條硬斷就會誤報成後端壞掉，所以在真後端只警告、不判失敗。
+        console.warn('名冊已被改過，34 人斷言略過')
       }
     }
 
@@ -290,7 +291,6 @@ async function main() {
 
     console.log('9b. blocked-days PUT/DELETE（登記再清除，真後端不留痕）')
     {
-      // 挑一位在職人員與一個他尚未登記的日子；真後端沒有人員時這段沒東西可打
       const active = ((await (await fetch(`${BASE}/staff?status=active`)).json()) as { items: Array<{ id: string }> }).items
       const staffId = active[0]?.id
       if (!staffId) {
@@ -323,7 +323,7 @@ async function main() {
 
     let jobId = ''
     let variantId = ''
-    await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '會在真後端留下求解紀錄（依設計全部保留），且真後端沒有人員種子', async () => {
+    await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '會在真後端留下求解紀錄（依設計全部保留）', async () => {
       const res = await fetch(`${BASE}/solver-jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
