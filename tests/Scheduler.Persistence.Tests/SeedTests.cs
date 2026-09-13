@@ -84,6 +84,11 @@ public class SeedTests
             var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
             Assert.Equal(DefaultAreas.Areas, (await settings.GetAreasAsync()).Areas); // 區域空了才補回
             Assert.Equal(4, (await settings.GetRanksAsync()).Ranks.Single(r => r.Code == DefaultRanks.R6).QuotaCap); // 身分沒被動
+
+            // 人員名冊沒被清空過，判空閘門第二次啟動不會重種；但這也是 #37 要處理的洞：
+            // 就算名冊「被清空」了，同一個閘門會把它當「全新」，下次啟動照樣復活成 34 人。
+            var staff = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
+            Assert.Equal(34, (await staff.ListAsync()).Count);
         }
     }
 

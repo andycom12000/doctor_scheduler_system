@@ -8,7 +8,8 @@ namespace Scheduler.Persistence.Seed;
 /// 組成、順序與姓名照 <c>frontend/src/mocks/fixtures/staff.ts</c> 抄，兩邊的
 /// <c>npm run mock:smoke</c>／<c>npm run api:smoke</c> 才能共用同一份斷言。
 /// 人數組成照 <see cref="DefaultRanks.ReferenceHeadcount"/>（唯一來源）。
-/// 出廠資料庫會帶這份假名單，交付前要清掉。
+/// 出廠資料庫會帶這份假名單，**目前沒有可執行的清除路徑**（種子在客戶機器上第一次啟動時才跑、
+/// 有值班紀錄就刪不掉、判空閘門清空後會復活），正式交付前要依 #37 把 seed 關掉。
 /// </summary>
 public static class ReferenceRoster
 {

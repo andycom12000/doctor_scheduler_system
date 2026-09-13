@@ -9,7 +9,11 @@ namespace Scheduler.Persistence.Seed;
 /// <summary>
 /// 首次啟動的 seed。設定全部從 <c>Scheduler.Domain.Defaults</c> 抄（唯一來源是
 /// <c>docs/constraint-defaults.md</c>），行事曆從 <see cref="BuiltInCalendar"/>，
-/// 人員名冊從 <see cref="ReferenceRoster"/>（33 位醫師 + 1 位 NP 的假名單，交付前要清掉）。
+/// 人員名冊從 <see cref="ReferenceRoster"/>（33 位醫師 + 1 位 NP 的假名單）。
+/// 出廠資料庫會帶這份假名單，**目前沒有可執行的清除路徑**：種子在客戶機器上第一次啟動時才跑，
+/// 有值班紀錄的人 <c>StaffCommands</c> 會回 <c>STAFF_HAS_DUTIES</c> 刪不掉，
+/// 這裡的判空閘門也無法區分「被清空」與「全新」，清了下次啟動又會復活。
+/// 正式交付前要依 #37 把這段 seed 關掉。
 /// 每份設定文件各自判空、各自 seed：契約允許 PUT 空的區域清單，若共用一個閘門，
 /// 使用者清空區域後下次啟動會把身分、點數、約束全部蓋回出廠值。
 /// </summary>
