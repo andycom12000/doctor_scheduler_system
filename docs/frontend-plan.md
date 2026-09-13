@@ -182,6 +182,8 @@ TURN 3 與 TURN 4 已經是修訂後的版本：5 區、33 人、10 身分、4 �
 
 1. **基礎 PR（#26）擁有所有共用表面**：路由表（六條全註冊、指向佔位頁）、`PageLayout`、`styles.css` 的 token、
    `src/api/` 的 42 個操作函式、composables、`ConfirmDialog`、`smoke-mock.ts`。這些在第一波期間凍結。
+   凍結只約束第一波五張畫面 PR；第二波 #32 列印需要在 `styles.css` 加 `@media print`，允許
+   （目前 `body { overflow: hidden }` 會把 A4 列印裁成一螢幕，#32 要處理）。
 2. **畫面 PR 只在自己的目錄裡加檔**：`src/pages/<screen>/` 加自己的元件與測試；只 import `src/api/`，不新增；
    只寫 scoped CSS，不改 `styles.css`；不改路由表、不改 `smoke-mock.ts`。
 
