@@ -20,9 +20,7 @@ export function formatSeconds(value: number | null | undefined): string {
  *
  * 後端 `SolverJobService.GapOf` 回的是比例（`|obj-bound|/|obj|`，四捨五入到小數 4 位，
  * 例如 0.0287），不是百分比，所以這裡要 ×100 才是「gap 2.87%」。
- * MSW mock（`src/mocks/handlers.ts`）目前塞的是 `5 / i` 這種未除以 100 的假數字，
- * 只是拿來湊「會上下跳動」的觀感，跟真正的公式對不上——這裡照真後端的單位寫，
- * mock 顯示出來的百分比會偏大，見 PR 說明。
+ * MSW mock（`src/mocks/handlers.ts`）用同一份公式算假數字，兩邊單位一致（issue #46）。
  */
 export function formatGap(gap: number | null | undefined): string {
   if (gap == null) return '尚無可行解'
@@ -104,4 +102,13 @@ export function describeFailure(failureReason: string | null | undefined): strin
 
 export function isTerminalStatus(status: SolverJobStatus): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+}
+
+/**
+ * 看門狗輪詢（issue #46）與 SSE 進度可能交錯抵達：一支較舊的輪詢回應如果在
+ * 終態已經確立之後才落地，不可以把畫面退回非終態。**終態是單向門**——
+ * 目前已是終態就一律拒絕新快照，不比對時間戳（後端沒給、前端也不用管）。
+ */
+export function acceptPolledSnapshot(currentStatus: SolverJobStatus): boolean {
+  return !isTerminalStatus(currentStatus)
 }

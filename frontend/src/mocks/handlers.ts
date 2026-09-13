@@ -399,6 +399,16 @@ const blockedDayHandlers = [
 // 求解
 // ---------------------------------------------------------------------------
 
+/**
+ * 收斂間隙 `|obj − bound| / |obj|`，四捨五入到小數 4 位——與真後端
+ * `SolverJobService.GapOf` 同一份公式，回的是**比例（0–1），不是百分比**（issue #46）。
+ */
+function gapOf(objective: number | null, bound: number | null): number | null {
+  if (objective === null || bound === null) return null
+  if (objective === 0) return 0
+  return Number((Math.abs(objective - bound) / Math.abs(objective)).toFixed(4))
+}
+
 const jobTimers = new Map<string, ReturnType<typeof setTimeout>[]>()
 
 function clearJobTimers(jobId: string) {
@@ -450,6 +460,8 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
     const t = setTimeout(() => {
       const job = store.solverJobs.get(jobId)
       if (!job || job.status === 'cancelled') return
+      const bestObjective = 100 - i * 5
+      const bestBound = 95 - i * 5
       job.status = 'running'
       job.elapsedSec = (Date.now() - startMs) / 1000
       job.progress = {
@@ -460,9 +472,9 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
         elapsedSec: job.elapsedSec,
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: i + 1,
-        bestObjective: 100 - i * 5,
-        bestBound: 95 - i * 5,
-        gap: i === variantCount ? 0 : Number((5 / i).toFixed(2)),
+        bestObjective,
+        bestBound,
+        gap: gapOf(bestObjective, bestBound),
       }
     }, i * 2000)
     timers.push(t)
@@ -500,8 +512,8 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
 const solverHandlers = [
   http.post('/api/solver-jobs', async ({ request }) => {
     const body = (await request.json()) as CreateSolverJobRequest
-    const busy = [...store.solverJobs.values()].some((j) => j.status === 'queued' || j.status === 'running')
-    if (busy) return errorResponse(409, 'SOLVER_BUSY', '已有求解工作在執行中')
+    const busyJob = [...store.solverJobs.values()].find((j) => j.status === 'queued' || j.status === 'running')
+    if (busyJob) return errorResponse(409, 'SOLVER_BUSY', '已有求解工作在執行中', { jobId: busyJob.jobId })
 
     const ym = body.yearMonth
     const variantCount = Math.min(Math.max(body.variantCount ?? 3, 1), 3)
@@ -752,6 +764,22 @@ const settingsHandlers = [
 // 人員
 // ---------------------------------------------------------------------------
 
+/** 員編、姓名不得空白；身分必須存在於 `store.ranks`。與真後端 `StaffCommands.EnsureWriteValidAsync` 一致。 */
+function validateStaffWrite(write: StaffWrite) {
+  if (!write.employeeNo?.trim()) return errorResponse(422, 'INVALID_REQUEST', '員編不得空白')
+  if (!write.name?.trim()) return errorResponse(422, 'INVALID_REQUEST', '姓名不得空白')
+  if (!store.ranks.some((r) => r.code === write.rankCode)) {
+    return errorResponse(422, 'INVALID_REQUEST', `找不到身分 ${write.rankCode}`)
+  }
+  return null
+}
+
+/** 員編是否已被別人使用；`excludeId` 排除自己，PATCH 改回原值不算重複。 */
+function staffEmployeeNoTaken(employeeNo: string, excludeId: string | null) {
+  const trimmed = employeeNo.trim()
+  return store.staff.some((s) => s.employeeNo === trimmed && s.id !== excludeId)
+}
+
 const staffHandlers = [
   http.get('/api/staff', ({ request }) => {
     const status = new URL(request.url).searchParams.get('status') as StaffStatus | null
@@ -765,14 +793,16 @@ const staffHandlers = [
 
   http.post('/api/staff', async ({ request }) => {
     const body = (await request.json()) as StaffWrite
-    if (store.staff.some((s) => s.employeeNo === body.employeeNo)) {
-      return errorResponse(409, 'EMPLOYEE_NO_TAKEN', `員編 ${body.employeeNo} 已被使用`)
+    const invalid = validateStaffWrite(body)
+    if (invalid) return invalid
+    if (staffEmployeeNoTaken(body.employeeNo, null)) {
+      return errorResponse(409, 'EMPLOYEE_NO_TAKEN', `員編 ${body.employeeNo.trim()} 已被使用`)
     }
     const seq = store.nextStaffSeq++
     const staff: Staff = {
       id: `staff-${String(seq).padStart(3, '0')}`,
-      employeeNo: body.employeeNo,
-      name: body.name,
+      employeeNo: body.employeeNo.trim(),
+      name: body.name.trim(),
       rankCode: body.rankCode,
       status: 'active',
       eligibleAreaTypes: eligibleAreaTypesOf(store.eligibilityMatrix.matrix, body.rankCode),
@@ -787,8 +817,15 @@ const staffHandlers = [
     const staff = store.staff.find((s) => s.id === id)
     if (!staff) return errorResponse(404, 'NOT_FOUND', '找不到人員')
 
-    staff.employeeNo = body.employeeNo
-    staff.name = body.name
+    const invalid = validateStaffWrite(body)
+    if (invalid) return invalid
+    // 員編重複檢查排除自己——員編改回原值或維持不變都不算重複。
+    if (staffEmployeeNoTaken(body.employeeNo, id)) {
+      return errorResponse(409, 'EMPLOYEE_NO_TAKEN', `員編 ${body.employeeNo.trim()} 已被使用`)
+    }
+
+    staff.employeeNo = body.employeeNo.trim()
+    staff.name = body.name.trim()
     staff.rankCode = body.rankCode
     staff.eligibleAreaTypes = eligibleAreaTypesOf(store.eligibilityMatrix.matrix, body.rankCode)
     return HttpResponse.json(staff)

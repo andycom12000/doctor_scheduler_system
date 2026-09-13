@@ -151,6 +151,32 @@ async function main() {
       assert(dup.status === 409, '員編重複 → 409')
       assert(((await dup.json()) as { error: { code: string } }).error.code === 'EMPLOYEE_NO_TAKEN', '錯誤碼 EMPLOYEE_NO_TAKEN')
 
+      // issue #40：PATCH 改成別人的員編 → 409（排除自己，PATCH 保留原員編不算重複，見下方 updated 那次）
+      const buddyNo = `SMOKE-${Date.now()}-B`
+      const buddyCreated = await fetch(`${BASE}/staff`, { method: 'POST', ...json({ employeeNo: buddyNo, name: '陪測用', rankCode: 'R2' }) })
+      assert(buddyCreated.status === 201, '建立陪測人員 → 201')
+      const buddy = (await buddyCreated.json()) as { id: string }
+
+      const patchConflict = await fetch(`${BASE}/staff/${staff.id}`, { method: 'PATCH', ...json({ employeeNo: buddyNo, name: '改名', rankCode: 'R4' }) })
+      assert(patchConflict.status === 409, 'PATCH 改成別人的員編 → 409')
+      assert(
+        ((await patchConflict.json()) as { error: { code: string } }).error.code === 'EMPLOYEE_NO_TAKEN',
+        'PATCH 409 錯誤碼 EMPLOYEE_NO_TAKEN',
+      )
+
+      const patchBlankNo = await fetch(`${BASE}/staff/${staff.id}`, { method: 'PATCH', ...json({ employeeNo: '  ', name: '改名', rankCode: 'R4' }) })
+      assert(patchBlankNo.status === 422, 'PATCH 員編空白 → 422')
+      assert(
+        ((await patchBlankNo.json()) as { error: { code: string } }).error.code === 'INVALID_REQUEST',
+        'PATCH 員編空白 錯誤碼 INVALID_REQUEST',
+      )
+
+      const patchBadRank = await fetch(`${BASE}/staff/${staff.id}`, { method: 'PATCH', ...json({ employeeNo, name: '改名', rankCode: 'NOPE' }) })
+      assert(patchBadRank.status === 422, 'PATCH 不存在的身分 → 422')
+
+      const buddyDeleted = await fetch(`${BASE}/staff/${buddy.id}`, { method: 'DELETE' })
+      assert(buddyDeleted.status === 204, '清掉陪測人員 → 204')
+
       const updated = await fetch(`${BASE}/staff/${staff.id}`, { method: 'PATCH', ...json({ employeeNo, name: '改名', rankCode: 'R4' }) })
       assert(updated.status === 200, 'PATCH /staff/:id → 200')
       const updatedBody = (await updated.json()) as { name: string; eligibleAreaTypes: string[] }

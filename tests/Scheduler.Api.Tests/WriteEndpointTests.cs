@@ -410,4 +410,28 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
         await PatchAsync("/api/staff/s-nope", """{"employeeNo":"E1","name":"x","rankCode":"R2"}""", "updateStaff", HttpStatusCode.NotFound);
         await PostAsync("/api/staff", """{"employeeNo":"E901","rankCode":"R2"}""", "createStaff", HttpStatusCode.UnprocessableEntity);
     }
+
+    [Fact]
+    public async Task 人員_更新改成別人的員編_409_改回自己原員編不算重複()
+    {
+        // 建立的兩人測完就刪掉——留著會混進其他測試（例如發布時的月結轉）逐組人員清單。
+        var a = await PostAsync("/api/staff", """{"employeeNo":"E910","name":"甲","rankCode":"R2"}""", "createStaff", HttpStatusCode.Created);
+        var aId = a["id"]!.GetValue<string>();
+        var b = await PostAsync("/api/staff", """{"employeeNo":"E911","name":"乙","rankCode":"R2"}""", "createStaff", HttpStatusCode.Created);
+        var bId = b["id"]!.GetValue<string>();
+
+        try
+        {
+            var conflict = await PatchAsync($"/api/staff/{aId}", """{"employeeNo":"E911","name":"甲","rankCode":"R2"}""", "updateStaff", HttpStatusCode.Conflict);
+            Assert.Equal("EMPLOYEE_NO_TAKEN", conflict["error"]!["code"]!.GetValue<string>());
+
+            var unchanged = await PatchAsync($"/api/staff/{aId}", """{"employeeNo":"E910","name":"甲改名","rankCode":"R2"}""", "updateStaff");
+            Assert.Equal("甲改名", unchanged["name"]!.GetValue<string>());
+        }
+        finally
+        {
+            await _api.SendAsync(HttpMethod.Delete, $"/api/staff/{aId}", null, "deleteStaff", HttpStatusCode.NoContent);
+            await _api.SendAsync(HttpMethod.Delete, $"/api/staff/{bId}", null, "deleteStaff", HttpStatusCode.NoContent);
+        }
+    }
 }

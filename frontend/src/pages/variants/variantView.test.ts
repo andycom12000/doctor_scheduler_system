@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SoftConstraint } from '@/api/types'
 import {
+  acceptPolledSnapshot,
   buildMetricRows,
   describeFailure,
   formatGap,
@@ -143,5 +144,17 @@ describe('isTerminalStatus', () => {
   it('queued／running 不是終態', () => {
     expect(isTerminalStatus('queued')).toBe(false)
     expect(isTerminalStatus('running')).toBe(false)
+  })
+})
+
+describe('acceptPolledSnapshot', () => {
+  it('目前非終態時接受輪詢快照（不論快照本身的狀態）', () => {
+    expect(acceptPolledSnapshot('running')).toBe(true)
+    expect(acceptPolledSnapshot('queued')).toBe(true)
+  })
+  it('終態是單向門：目前已是終態就一律拒絕，避免較舊的輪詢把畫面退回去', () => {
+    expect(acceptPolledSnapshot('succeeded')).toBe(false)
+    expect(acceptPolledSnapshot('failed')).toBe(false)
+    expect(acceptPolledSnapshot('cancelled')).toBe(false)
   })
 })
