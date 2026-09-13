@@ -91,6 +91,58 @@ describe('useResource', () => {
     expect(month.data.value).toEqual({ status: 'published' })
   })
 
+  it('invalidate 不會把切走的舊 key 污染成現在 key 的資料（同一個 consumer 換 key 後 invalidate 再切回舊 key）', async () => {
+    // 重現回報的 bug：key=`schedules/${ym}`，09 → 10 → invalidate('schedules') → 回 09
+    // 應該拿到 09 自己的資料，不是被 10 的 fetcher 呼叫結果污染。
+    const responses: Record<string, { ym: string }> = {
+      'schedules/2026-09': { ym: '2026-09' },
+      'schedules/2026-10': { ym: '2026-10' },
+    }
+    const key = ref('schedules/2026-09')
+    const fetcher = vi.fn().mockImplementation(async () => responses[key.value])
+
+    const { data } = useResource(key, fetcher)
+    await flushPromises()
+    expect(data.value).toEqual({ ym: '2026-09' })
+
+    key.value = 'schedules/2026-10'
+    await flushPromises()
+    expect(data.value).toEqual({ ym: '2026-10' })
+
+    await invalidate('schedules')
+
+    key.value = 'schedules/2026-09'
+    await flushPromises()
+
+    expect(data.value).toEqual({ ym: '2026-09' })
+  })
+
+  it('invalidate(prefix) 只讓目前還有 consumer 掛著的 key 立即重抓；沒人掛著的 key 只標記待失效、不會被憑空重抓', async () => {
+    const monthFetcher = vi.fn().mockResolvedValue({ status: 'draft' })
+    const violationsFetcher = vi.fn().mockResolvedValue({ violations: [] })
+
+    const monthKey = ref('schedules/2026-09')
+    const violationsKey = ref('schedules/2026-09/violations')
+    useResource(monthKey, monthFetcher)
+    useResource(violationsKey, violationsFetcher)
+    await flushPromises()
+    expect(monthFetcher).toHaveBeenCalledTimes(1)
+    expect(violationsFetcher).toHaveBeenCalledTimes(1)
+
+    // violations 的 consumer 換去看別的月份，09 的 violations entry 變成沒人掛著；
+    // 09 本月的 consumer（monthKey）維持不變，還掛著。
+    violationsKey.value = 'schedules/2026-10/violations'
+    await flushPromises()
+    expect(violationsFetcher).toHaveBeenCalledTimes(2)
+
+    await invalidate('schedules/2026-09')
+
+    // 09 本月還有 consumer 掛著 → 立即重抓
+    expect(monthFetcher).toHaveBeenCalledTimes(2)
+    // 09 violations 沒人掛著了 → 不會被 invalidate 憑空重抓
+    expect(violationsFetcher).toHaveBeenCalledTimes(2)
+  })
+
   it('fetcher 失敗時 error 有值、loaded 標記不會卡在 true', async () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('boom'))
     const { data, error, reload } = useResource(ref('failing'), fetcher)

@@ -16,8 +16,21 @@ interface CacheEntry<T> {
   loaded: boolean
   /** 忽略過期（out-of-order）回應用。 */
   requestId: number
-  /** 最後一次呼叫這個 key 用的 fetcher，invalidate 立即重抓時要用。 */
-  fetcher: (() => Promise<T>) | null
+  /**
+   * 目前正盯著這個 key 的 consumer 各自登記的重抓 callback。
+   *
+   * 不能只存「最後一個 fetcher」——`fetcher` 通常是像
+   * `() => getSchedule(ym.value)` 這種讀外部 ref 目前值的閉包，key 換掉時
+   * （例如 09 月切到 10 月）舊 entry 跟新 entry 會拿到「同一個」閉包，之後
+   * invalidate 若直接呼叫 entry 存的 fetcher，讀到的永遠是外部 ref**現在**的
+   * 值，會把舊 entry 的資料污染成現在 key 的資料。改成每個 consumer 在
+   * `watch(keyRef, ...)` 命中某個 key 時，把「重抓自己」的 callback 登記到
+   * *那個 key 對應的 entry*，key 換走時（`onCleanup`）立刻從舊 entry 除籍。
+   * 這樣 invalidate 呼叫某個 entry 裡的 callback 時，登記當下的 key 保證還是
+   * 呼叫當下 consumer 正在看的 key，不會抓錯。沒有任何 callback 的 entry
+   * （沒人掛著）只標記 `loaded = false`，不會被憑空重抓。
+   */
+  watchers: Set<() => Promise<void>>
 }
 
 const cache = new Map<string, CacheEntry<unknown>>()
@@ -31,7 +44,7 @@ function getEntry<T>(key: string): CacheEntry<T> {
       loading: ref(false),
       loaded: false,
       requestId: 0,
-      fetcher: null,
+      watchers: new Set(),
     }
     cache.set(key, entry as CacheEntry<unknown>)
   }
@@ -40,7 +53,6 @@ function getEntry<T>(key: string): CacheEntry<T> {
 
 async function fetchInto<T>(key: string, fetcher: () => Promise<T>): Promise<void> {
   const entry = getEntry<T>(key)
-  entry.fetcher = fetcher
   const requestId = ++entry.requestId
   entry.loading.value = true
   entry.error.value = null
@@ -80,12 +92,14 @@ export function useResource<T>(
 ): UseResourceResult<T> {
   watch(
     keyRef,
-    (key) => {
+    (key, _oldKey, onCleanup) => {
       if (!key) return
       const entry = getEntry<T>(key)
-      entry.fetcher = fetcher
+      const refetch = () => fetchInto(key, fetcher)
+      entry.watchers.add(refetch)
+      onCleanup(() => entry.watchers.delete(refetch))
       if (!entry.loaded && !entry.loading.value) {
-        void fetchInto(key, fetcher)
+        void refetch()
       }
     },
     { immediate: true },
@@ -106,16 +120,20 @@ export function useResource<T>(
 }
 
 /**
- * 讓所有 `key === prefix` 或 `key` 以 `${prefix}/` 開頭的快取項目失效並立即重抓
- * （對已經被某個 `useResource` 用過的 key，用它最後一次的 fetcher；還沒被用過的 key
- * 只是撥掉 `loaded`，下次有人 `useResource` 它時會自然重抓）。
+ * 讓所有 `key === prefix` 或 `key` 以 `${prefix}/` 開頭的快取項目失效。
+ *
+ * 只有「目前還有 consumer 掛著」的 key 會立即重抓（用該 consumer 自己登記的
+ * callback，保證抓的是它現在真的在看的 key）；沒人掛著的 key 只標記
+ * `loaded = false`，下次有人 `useResource` 它時會自然重抓，不會在這裡憑空
+ * 把所有曾經快取過的月份重抓一次。
  */
 export async function invalidate(prefix: string): Promise<void> {
   const matched = [...cache.entries()].filter(([key]) => key === prefix || key.startsWith(`${prefix}/`))
   await Promise.all(
-    matched.map(([key, entry]) => {
+    matched.map(async ([, entry]) => {
       entry.loaded = false
-      return entry.fetcher ? fetchInto(key, entry.fetcher) : Promise.resolve()
+      if (entry.watchers.size === 0) return
+      await Promise.all([...entry.watchers].map((refetch) => refetch()))
     }),
   )
 }
