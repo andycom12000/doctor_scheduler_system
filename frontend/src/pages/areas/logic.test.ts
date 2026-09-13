@@ -7,6 +7,7 @@ import {
   isEqualJson,
   isNonNegativeInteger,
   isPositiveInteger,
+  monthlyOverrideKey,
   normalizeOverride,
   pointTypeDisplay,
   quotaCapDisplay,
@@ -116,5 +117,11 @@ describe('normalizeOverride', () => {
 
   it('null 回 null', () => {
     expect(normalizeOverride(null)).toBeNull()
+  })
+})
+
+describe('monthlyOverrideKey', () => {
+  it('組出 settings/monthly-overrides/{ym} 這個 useResource key', () => {
+    expect(monthlyOverrideKey('2026-09')).toBe('settings/monthly-overrides/2026-09')
   })
 })

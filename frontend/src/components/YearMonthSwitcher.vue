@@ -5,7 +5,7 @@
  */
 import { computed, ref } from 'vue'
 import { listSchedules } from '@/api/schedules'
-import { currentYearMonth, useYearMonth } from '@/composables/useYearMonth'
+import { shiftYearMonth, useYearMonth, yearMonthOptions } from '@/composables/useYearMonth'
 import { useResource } from '@/composables/useResource'
 
 const { ym, setYearMonth } = useYearMonth()
@@ -19,14 +19,8 @@ const monthStatus = computed(() => {
   return map
 })
 
-const options = computed(() => {
-  const [year, month] = ym.value.split('-').map(Number)
-  const set = new Set<string>(monthStatus.value.keys())
-  for (let offset = -12; offset <= 12; offset++) {
-    set.add(currentYearMonth(new Date(year, month - 1 + offset, 1)))
-  }
-  return [...set].sort()
-})
+// 候選清單與位移邏輯跟 SCREEN 02「指定月份覆寫」的獨立月份選擇器共用，見 useYearMonth.ts。
+const options = computed(() => yearMonthOptions(ym.value, [...monthStatus.value.keys()]))
 
 function labelOf(option: string): string {
   const status = monthStatus.value.get(option)
@@ -36,8 +30,7 @@ function labelOf(option: string): string {
 }
 
 function shift(delta: number): void {
-  const [year, month] = ym.value.split('-').map(Number)
-  setYearMonth(currentYearMonth(new Date(year, month - 1 + delta, 1)))
+  setYearMonth(shiftYearMonth(ym.value, delta))
 }
 
 function onSelect(event: Event): void {

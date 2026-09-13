@@ -1,7 +1,7 @@
 import { createApp, type App } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { currentYearMonth, resetLastYearMonthForTests, useYearMonth } from './useYearMonth'
+import { currentYearMonth, resetLastYearMonthForTests, shiftYearMonth, useYearMonth, yearMonthOptions } from './useYearMonth'
 
 /**
  * 不用真正的 `src/router/routes.ts`——那份路由表的 `component` 是
@@ -84,5 +84,54 @@ describe('useYearMonth', () => {
 
     expect(router.currentRoute.value.name).toBe('schedule')
     expect(router.currentRoute.value.params.ym).toBe('2026-11')
+  })
+})
+
+describe('shiftYearMonth', () => {
+  it('同年內加減', () => {
+    expect(shiftYearMonth('2026-09', 1)).toBe('2026-10')
+    expect(shiftYearMonth('2026-09', -1)).toBe('2026-08')
+  })
+
+  it('跨年進位／借位', () => {
+    expect(shiftYearMonth('2026-12', 1)).toBe('2027-01')
+    expect(shiftYearMonth('2026-01', -1)).toBe('2025-12')
+  })
+
+  it('delta 為 0 時原樣回傳', () => {
+    expect(shiftYearMonth('2026-09', 0)).toBe('2026-09')
+  })
+
+  it('不符合 YEAR_MONTH_PATTERN 的輸入原樣回傳，不拋錯', () => {
+    expect(shiftYearMonth('bogus', 1)).toBe('bogus')
+  })
+
+  it('三位數以下的年份不會被兩位數年份規則污染（new Date(50, 0, 1) 會變成 1950 年，這裡不能）', () => {
+    expect(shiftYearMonth('0050-03', 1)).toBe('0050-04')
+  })
+
+  it('年份小到跨年借位時，依然是原樣的低位數年份，不是被兩位數規則救回來的 4 位數年份', () => {
+    expect(shiftYearMonth('0001-01', -1)).toBe('0000-12')
+  })
+})
+
+describe('yearMonthOptions', () => {
+  it('以 baseYm 為中心，前後各 12 個月，含頭尾、依字串排序', () => {
+    const options = yearMonthOptions('2026-09')
+    expect(options).toHaveLength(25)
+    expect(options[0]).toBe('2025-09')
+    expect(options.at(-1)).toBe('2027-09')
+    expect(options).toContain('2026-09')
+  })
+
+  it('extra 落在範圍外時一併列入', () => {
+    const options = yearMonthOptions('2026-09', ['2020-01'])
+    expect(options).toContain('2020-01')
+    expect(options[0]).toBe('2020-01')
+  })
+
+  it('extra 落在範圍內時不會重複', () => {
+    const options = yearMonthOptions('2026-09', ['2026-10'])
+    expect(options.filter((option) => option === '2026-10')).toHaveLength(1)
   })
 })

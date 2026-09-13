@@ -80,3 +80,14 @@ export function normalizeOverride(
   if (!override) return null
   return { yearMonth: override.yearMonth, quotaCapByRank: override.quotaCapByRank ?? {} }
 }
+
+/**
+ * `settings/monthly-overrides/{ym}` 的 `useResource` key。讀取（`useResource` 的
+ * `keyRef`）與寫入後的 `invalidate` 要組出同一個字串，抽成函式避免兩處字面量漂移。
+ *
+ * 年月位移（`shiftYearMonth`）與候選清單（`yearMonthOptions`）跟 `YearMonthSwitcher.vue`
+ * 共用，定義在 `@/composables/useYearMonth`，不是這個檔案的職責（見審查意見 #48 S2）。
+ */
+export function monthlyOverrideKey(ym: string): string {
+  return `settings/monthly-overrides/${ym}`
+}
