@@ -11,6 +11,11 @@
  *
  * 真後端 GET 一律回 `{ yearMonth, quotaCapByRank: {} }`，MSW mock 未覆寫時省略整個
  * `quotaCapByRank`；比較 dirty 與清空覆寫時都要透過 `normalizeOverride` 正規化，見 './logic'。
+ *
+ * 本月覆寫的年月（`overrideYm`）跟全域 `useYearMonth` 是兩回事（issue #45）：這頁沒有
+ * `:ym` 路由參數，切全域年月會導到排班主表，逼使用者離開這頁才能編另一個月的 R6 覆寫。
+ * `overrideYm` 只是一個獨立的本地 ref，預設抄 `useYearMonth()` 的目前年月，之後只由「本月
+ * 覆寫」欄位旁的月份選擇器控制，不寫回路由、不影響 ranks／point-rules 這些跟月份無關的設定。
  */
 import { computed, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
@@ -38,11 +43,17 @@ import {
   isEqualJson,
   isNonNegativeInteger,
   isPositiveInteger,
+  isValidYearMonth,
+  monthlyOverrideKey,
   normalizeOverride,
+  shiftYearMonth,
 } from './logic'
 
 const { ym } = useYearMonth()
 const { confirm } = useConfirm()
+
+// 本月覆寫的年月，獨立於全域 useYearMonth（見上方檔案註解），預設抄目前年月。
+const overrideYm = ref(ym.value)
 
 const areasRes = useResource(computed(() => 'settings/areas'), () => getAreaSettings())
 const ranksRes = useResource(computed(() => 'settings/ranks'), () => getRankSettings())
@@ -50,8 +61,8 @@ const pointRulesRes = useResource(computed(() => 'settings/point-rules'), () => 
 // 可值類型只顯示、不編輯——由資格矩陣推，改矩陣要去「資格與約束」頁。
 const eligibilityRes = useResource(computed(() => 'settings/eligibility-matrix'), () => getEligibilityMatrix())
 const overrideRes = useResource(
-  computed(() => `settings/monthly-overrides/${ym.value}`),
-  () => getMonthlyOverride(ym.value),
+  computed(() => monthlyOverrideKey(overrideYm.value)),
+  () => getMonthlyOverride(overrideYm.value),
 )
 
 // 本地草稿：從各自的 useResource 深拷貝出來，成功儲存後只 invalidate 那一份文件重抓
@@ -150,9 +161,10 @@ async function save(): Promise<void> {
     }
     if (overrideDirty.value && overrideDraft.value) {
       const draft = overrideDraft.value
+      const targetYm = overrideYm.value
       jobs.push({
-        invalidateKey: `settings/monthly-overrides/${ym.value}`,
-        run: () => putMonthlyOverride(ym.value, { ...draft, yearMonth: ym.value }),
+        invalidateKey: monthlyOverrideKey(targetYm),
+        run: () => putMonthlyOverride(targetYm, { ...draft, yearMonth: targetYm }),
       })
     }
 
@@ -192,6 +204,45 @@ onBeforeRouteLeave(async () => {
 
 function groupName(groupCode: string): string {
   return ranksRes.data.value?.groups.find((group) => group.code === groupCode)?.name ?? groupCode
+}
+
+/**
+ * 切換「本月覆寫」的年月。未儲存的覆寫草稿（`overrideDirty`，只看覆寫本身，
+ * 不含 ranks／point-rules——那兩份跟月份無關）先問一次；取消時呼叫 `onCancelled`
+ * 讓呼叫端把畫面上已經變了的顯示值改回來（見 `onOverrideMonthChange`）。
+ */
+async function switchOverrideMonth(nextYm: string, onCancelled?: () => void): Promise<void> {
+  if (nextYm === overrideYm.value) return
+  if (overrideDirty.value) {
+    const proceed = await confirm({
+      title: '有未儲存的本月覆寫變更',
+      message: `切換月份會捨棄「本月覆寫（${overrideYm.value}）」尚未儲存的變更，確定要切換到 ${nextYm} 嗎？`,
+      confirmText: '切換',
+      cancelText: '留在此月',
+    })
+    if (!proceed) {
+      onCancelled?.()
+      return
+    }
+  }
+  overrideYm.value = nextYm
+}
+
+function shiftOverrideMonth(delta: number): void {
+  void switchOverrideMonth(shiftYearMonth(overrideYm.value, delta))
+}
+
+// <input type="month"> 的 DOM 值在 change 事件當下已經被瀏覽器改成使用者選的月份；
+// 若使用者在 confirm 對話框按取消，這裡要手動把 DOM 值改回 overrideYm，
+// 否則畫面會停在使用者選過但其實沒生效的月份（overrideYm 沒變，Vue 不會重繪這個 :value）。
+function onOverrideMonthChange(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const value = input.value
+  if (!isValidYearMonth(value)) {
+    input.value = overrideYm.value
+    return
+  }
+  void switchOverrideMonth(value, () => { input.value = overrideYm.value })
 }
 </script>
 
@@ -242,7 +293,23 @@ function groupName(groupCode: string): string {
               <th>可值類型 · 唯讀</th>
               <th>額度點數上限</th>
               <th>點數類型</th>
-              <th>本月覆寫（{{ ym }}）</th>
+              <th>
+                <div class="areas__override-head">
+                  <span>本月覆寫</span>
+                  <span class="areas__ym-picker">
+                    <button type="button" class="areas__ym-step" aria-label="覆寫月份：上一個月" :disabled="saving" @click="shiftOverrideMonth(-1)">‹</button>
+                    <input
+                      type="month"
+                      class="areas__ym-input"
+                      :value="overrideYm"
+                      aria-label="本月覆寫的年月"
+                      :disabled="saving"
+                      @change="onOverrideMonthChange"
+                    />
+                    <button type="button" class="areas__ym-step" aria-label="覆寫月份：下一個月" :disabled="saving" @click="shiftOverrideMonth(1)">›</button>
+                  </span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -530,6 +597,55 @@ function groupName(groupCode: string): string {
 .areas__override-readonly {
   font: 600 12.5px 'Barlow Condensed', sans-serif;
   margin-right: var(--space-2);
+}
+
+.areas__override-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.areas__ym-picker {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.areas__ym-step {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  color: var(--color-text);
+  font: 400 13px/1 var(--font-heading);
+  cursor: pointer;
+}
+
+.areas__ym-step:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.areas__ym-step:disabled,
+.areas__ym-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.areas__ym-input {
+  height: 22px;
+  padding: 0 4px;
+  font: 600 11px var(--font-body);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
 }
 
 .input {
