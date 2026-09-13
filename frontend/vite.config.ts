@@ -1,6 +1,28 @@
+import { existsSync, rmSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { join, isAbsolute, resolve } from 'node:path'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
+
+/**
+ * `public/mockServiceWorker.js` 只有 `dev:mock` 需要，不該原樣進 `wwwroot/`（issue #26）。
+ * 用 `closeBundle` 而非把它從 `public/` 移走，避免連 `dev:mock` 都要另外指定 `publicDir`。
+ */
+function excludeMockServiceWorker(): Plugin {
+  let outDir = ''
+  return {
+    name: 'exclude-mock-service-worker',
+    apply: 'build',
+    configResolved(config) {
+      outDir = config.build.outDir
+    },
+    closeBundle() {
+      const dir = isAbsolute(outDir) ? outDir : resolve(process.cwd(), outDir)
+      const file = join(dir, 'mockServiceWorker.js')
+      if (existsSync(file)) rmSync(file)
+    },
+  }
+}
 
 /**
  * 建置目標對齊隨附的 WebView2 Fixed Version runtime。
@@ -14,7 +36,7 @@ import vue from '@vitejs/plugin-vue'
 const WEBVIEW2_CHROMIUM_TARGET = 'chrome152' // build/webview2.json：152.0.4191.62
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), excludeMockServiceWorker()],
 
   resolve: {
     alias: {

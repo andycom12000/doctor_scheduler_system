@@ -321,6 +321,25 @@ async function main() {
       }
     }
 
+    console.log('9c. issue #20：不依賴種子、不落資料的錯誤碼檢查（mock 與真後端都跑）')
+    {
+      // 不存在的 jobId → 404 NOT_FOUND（不是 200 空陣列）。不需要真的建過求解工作。
+      const missing = await fetch(`${BASE}/solver-jobs/job-does-not-exist/variants`)
+      assert(missing.status === 404, 'GET /solver-jobs/job-does-not-exist/variants → 404')
+      const missingBody = await missing.json()
+      assert(missingBody.error?.code === 'NOT_FOUND', '錯誤碼 NOT_FOUND')
+
+      // 本體只給 jobId、缺 variantId → 422 INVALID_REQUEST。真後端的
+      // RequestMapper.Required(dto.VariantId) 在碰資料庫前就丟，jobId 是不是真的存在無所謂。
+      const missingField = await fetch(`${BASE}/schedules/${ym10}/apply-variant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: 'no-such-job' }),
+      })
+      assert(missingField.status === 422, 'POST apply-variant 本體缺 variantId → 422')
+      assert((await missingField.json()).error?.code === 'INVALID_REQUEST', '錯誤碼 INVALID_REQUEST（缺欄位）')
+    }
+
     let jobId = ''
     let variantId = ''
     await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '會在真後端留下求解紀錄（依設計全部保留）', async () => {
@@ -360,6 +379,7 @@ async function main() {
       variantId = body.variants[0].id
       const ids = body.variants.map((v: { id: string }) => v.id)
       assert(new Set(ids).size === 3, '三份變體 id 各不相同')
+      // 不存在的 jobId → 404 NOT_FOUND 已移到不依賴種子的 9c 段，兩邊都跑。
     })
 
     await mockOnly('12. POST /schedules/2026-10/apply-variant', '依賴第 11 段的變體', async () => {
@@ -372,6 +392,16 @@ async function main() {
       const body = await res.json()
       assert(body.status === 'draft', '套用後為草稿')
       assert(body.duties.length > 100, '套用後有完整值班清單')
+      // 本體缺 variantId → 422 已移到不依賴種子的 9c 段，兩邊都跑。
+
+      // issue #20：變體所屬月份（2026-10）與路徑 ym（2026-09）不同 → 422 INVALID_REQUEST
+      const wrongMonth = await fetch(`${BASE}/schedules/2026-09/apply-variant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, variantId }),
+      })
+      assert(wrongMonth.status === 422, '變體所屬月份與路徑 ym 不同 → 422')
+      assert((await wrongMonth.json()).error?.code === 'INVALID_REQUEST', '錯誤碼 INVALID_REQUEST（跨月套用）')
     })
 
     await mockOnly('13. POST /schedules/2026-10/publish', '依賴第 12 段套用的變體', async () => {

@@ -1,23 +1,294 @@
-:root {
-  color-scheme: light;
-  font-family: "Segoe UI", "Microsoft JhengHei UI", system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #1f2328;
-  background: #f6f7f9;
+/*
+  設計 token 移植自 docs/design-ref/industry.css 的 :root（Industry design system）。
+  這裡是唯一一份，畫面 PR 只寫 scoped CSS，不改這個檔案（frontend-plan.md §4 規則 2）。
+
+  字型自行隨附（Barlow／Barlow Condensed，Latin 子集 woff2，從 Google Fonts 抓下來放進
+  src/assets/fonts/，見下方 @font-face）。目標機器可能離線，絕對不能有對外的
+  @import／<link> 字型連結。中文一律用系統內建的 "Microsoft JhengHei UI"。
+*/
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/barlow-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-* {
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/barlow-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/barlow-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/barlow-condensed-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fonts/barlow-condensed-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light;
+
+  --color-bg: #f2f2f3;
+  --color-surface: #e9e9ea;
+  --color-text: #1d1f20;
+  --color-accent: #5980a6;
+  --color-accent-2: #728fab;
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+
+  /* Tonal ramps — 在 OKLCH 上以同一個亮度尺度產生，同一階不同角色的視覺份量一致。 */
+  --color-neutral-100: #f5f5f8;
+  --color-neutral-200: #e7e7ea;
+  --color-neutral-300: #d4d4d7;
+  --color-neutral-400: #b7b7ba;
+  --color-neutral-500: #98989b;
+  --color-neutral-600: #7a7a7d;
+  --color-neutral-700: #5d5d60;
+  --color-neutral-800: #424244;
+  --color-neutral-900: #2b2b2d;
+
+  --color-accent-100: #eef6ff;
+  --color-accent-200: #d6ebff;
+  --color-accent-300: #b5d9fd;
+  --color-accent-400: #94bce3;
+  --color-accent-500: #749dc4;
+  --color-accent-600: #597ea3;
+  --color-accent-700: #416180;
+  --color-accent-800: #2c455d;
+  --color-accent-900: #1d2d3d;
+
+  --color-accent-2-100: #eef6ff;
+  --color-accent-2-200: #d6ebff;
+  --color-accent-2-300: #bdd8f2;
+  --color-accent-2-400: #9ebbd8;
+  --color-accent-2-500: #7e9cb8;
+  --color-accent-2-600: #627d98;
+  --color-accent-2-700: #486077;
+  --color-accent-2-800: #314457;
+  --color-accent-2-900: #1f2d3a;
+
+  --font-heading: 'Barlow Condensed', 'Microsoft JhengHei UI', system-ui, sans-serif;
+  --font-heading-weight: 600;
+  --font-body: 'Barlow', 'Microsoft JhengHei UI', system-ui, sans-serif;
+
+  --space-1: 3.4px;
+  --space-2: 6.8px;
+  --space-3: 10.2px;
+  --space-4: 13.6px;
+  --space-6: 20.4px;
+  --space-8: 27.2px;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 7px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+
+  /*
+    排班格線專用 token（不在 Industry 原始 token 裡，這裡一次定好，
+    畫面 PR 直接用，不各自發明）。斜紋用 repeating-linear-gradient，
+    外框用 box-shadow inset 才不吃掉格子既有的 border。
+
+    跟 docs/design-ref/screen-01.html 圖例（L.122-127）與 canvas-data.js 的既有
+    用法對齊：
+      - --cell-duty-bg／--cell-duty-holiday-bg：平日／假日值班格底色
+        （screen-01.html:122-123），畫面 PR 疊其他 token 時要拉得開，不能
+        再借用同一階。
+      - --cell-vacancy-outline 是純色（給 border/outline 用），不是漸層——
+        對齊 canvas-data.js 的 vacS 用 `border:1.5px solid var(--color-accent)`。
+      - --cell-vacancy-bg 才是空缺格（H1）的斜紋底（screen-01.html:126、
+        canvas-data.js 都用 accent-300 疊斜紋）。
+      - --cell-violation-bg 選 accent-500，跟 --cell-duty-bg（accent-100）、
+        --cell-duty-holiday-bg（accent-300）都拉開一階，違規格才不會被誤讀
+        成假日格。
+      - --cell-violation-stripe／--cell-violation-outline 對齊 screen-01.html:127
+        的 H5（排到已登記的不可排班日）：斜紋 accent-800／accent-400，
+        外框 `inset 0 0 0 1.5px var(--color-accent-900)`。
+  */
+  --cell-duty-bg: var(--color-accent-100);
+  --cell-duty-holiday-bg: var(--color-accent-300);
+  --cell-holiday-bg: color-mix(in srgb, var(--color-text) 9%, transparent);
+  --cell-blocked-bg: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--color-text) 22%, transparent) 0 1px,
+    transparent 1px 4px
+  );
+  --cell-vacancy-outline: var(--color-accent);
+  --cell-vacancy-bg: repeating-linear-gradient(
+    45deg,
+    var(--color-accent-300) 0 3px,
+    transparent 3px 6px
+  );
+  --cell-violation-bg: var(--color-accent-500);
+  --cell-violation-stripe: repeating-linear-gradient(
+    45deg,
+    var(--color-accent-800) 0 2px,
+    var(--color-accent-400) 2px 5px
+  );
+  --cell-violation-outline: var(--color-accent-900);
+
+  /*
+    身分組 4 色，從 accent／neutral 色階挑深淺分明的四階，黑白列印時仍能靠深淺區分。
+    600／800 底色偏深，文字要用 --group-N-fg 而非固定的 --color-text。
+  */
+  --group-1: var(--color-accent-200);
+  --group-1-fg: var(--color-text);
+  --group-2: var(--color-accent-400);
+  --group-2-fg: var(--color-text);
+  --group-3: var(--color-accent-600);
+  --group-3-fg: var(--color-bg);
+  --group-4: var(--color-accent-800);
+  --group-4-fg: var(--color-bg);
+}
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+
+a {
+  color: var(--color-accent);
+  text-underline-offset: 3px;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 /*
   正式版在 WebView2 內執行，沒有瀏覽器分頁與網址列，
-  且核心 UI 是密集格線 —— 版面請以「填滿視窗、內部捲動」為前提設計，
-  不要用一般網頁的置中固定寬度容器。
+  且核心 UI 是密集格線 —— 版面以「填滿視窗、內部捲動」為前提設計，
+  不用一般網頁的置中固定寬度容器。#app 之下由 App.vue 自己切滾動容器。
 */
+
+/*
+  最小共用元件類別（Industry 的 .btn／.tag，畫面 PR 需要更完整的元件時
+  用 scoped CSS 疊加，不要整份搬 industry.css 進來）。
+*/
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: 0;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+
+.btn-primary:hover {
+  background: var(--color-accent-600);
+}
+
+.btn-secondary:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+}
+
+.tag-neutral {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-800);
+}
+
+.tag-accent {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}

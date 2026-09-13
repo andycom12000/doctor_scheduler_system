@@ -17,10 +17,13 @@
     "typecheck": "vue-tsc --build",
     "api:types": "openapi-typescript ../api-contract.yaml -o src/api/schema.d.ts",
     "mock:smoke": "tsx scripts/smoke-mock.ts",
-    "api:smoke": "tsx scripts/smoke-mock.ts --target http://localhost:5080"
+    "api:smoke": "tsx scripts/smoke-mock.ts --target http://localhost:5080",
+    "test": "vitest run"
   },
   "dependencies": {
-    "vue": "^3.5.42"
+    "lucide-vue-next": "^1.0.0",
+    "vue": "^3.5.42",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
@@ -29,6 +32,7 @@
     "tsx": "^4.23.13",
     "typescript": "~5.9.3",
     "vite": "^8.2.2",
+    "vitest": "^5.0.0",
     "vue-tsc": "^3.3.11"
   },
   "msw": {
