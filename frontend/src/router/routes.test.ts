@@ -24,10 +24,17 @@ describe('router routes', () => {
     expect(resolved.params.ym).toBe('2026-09')
   })
 
-  it('月份超過 12 的 :ym 不匹配任何路由', () => {
+  it('月份超過 12 的 :ym 不會被 schedule 路由吃到，落到 catch-all 導回 /', () => {
     const router = createTestRouter()
     const resolved = router.resolve('/schedules/2026-13')
-    expect(resolved.matched.length).toBe(0)
+    expect(resolved.name).toBeUndefined()
+    expect(resolved.matched[0]?.redirect).toBe('/')
+  })
+
+  it('對不到的路徑（打錯字、失效連結）落到 catch-all 導回 /', () => {
+    const router = createTestRouter()
+    const resolved = router.resolve('/no/such/path')
+    expect(resolved.matched[0]?.redirect).toBe('/')
   })
 
   it('/blocked-days/:ym 解析出 blockedDays 路由', () => {

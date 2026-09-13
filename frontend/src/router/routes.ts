@@ -55,4 +55,7 @@ export const routes: RouteRecordRaw[] = [
     name: 'staff',
     component: () => import('@/pages/staff/index.vue'),
   },
+  // 對不到任何路由（打錯字、舊書籤、外部連結失效）一律導回 `/`，
+  // 再由上面那條 `/` 的 redirect 落到本月的排班主表，不要留一片空白畫面。
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
