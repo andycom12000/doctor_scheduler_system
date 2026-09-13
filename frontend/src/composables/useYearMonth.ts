@@ -14,7 +14,7 @@ export function currentYearMonth(now: Date = new Date()): string {
 }
 
 /**
- * 年月位移 `delta` 個月。`YearMonthSwitcher.vue`（頂列全域年月）與 SCREEN 02「指定月份覆寫」
+ * 年月位移 `delta` 個月。`YearMonthSwitcher.vue`（標題列年月切換器）與 SCREEN 02「指定月份覆寫」
  * 獨立月份選擇器（issue #45）共用，避免兩處各自重寫一份月份進位／借位邏輯。
  *
  * 非法輸入（不符 `YEAR_MONTH_PATTERN`）原樣回傳、不拋錯——呼叫端本來就該只餵合法值

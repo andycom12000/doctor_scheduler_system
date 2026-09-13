@@ -81,7 +81,7 @@ TURN 3 與 TURN 4 已經是修訂後的版本：5 區、33 人、10 身分、4 �
 `src/api/` 的 42 個操作函式全部寫好；`smoke-mock.ts` 在第一波凍結。
 
 1. **修 issue #20**（mock 的 `listVariants` 404 與 `applyVariant` 422），順手在 `smoke-mock.ts` 第 11、12 段加斷言。mock 是開發床，這兩個狀態看不到，SCREEN 04 就會做錯。
-2. **路由與殼**：`vue-router`、六條路由、左側導覽（六個項目加「本機執行 · 免安裝」）、頂列年月切換器、「填滿視窗、內部捲動」的版面骨架。`index.html` 的 `<title>` 改成「醫師值班排班系統」。**Shell 的起始網址是 `https://app.local/index.html`**（`WebViewBridge.IndexUri`），router 要加一條 `/index.html → /` 的 redirect，否則正式版開起來對不到任何路由；Shell 不改。
+2. **路由與殼**：`vue-router`、六條路由、左側導覽（六個項目加「本機執行 · 免安裝」）、頂列年月切換器、「填滿視窗、內部捲動」的版面骨架（#52 後改為頂部橫列導覽、年月切換器移入 PageLayout 標題列）。`index.html` 的 `<title>` 改成「醫師值班排班系統」。**Shell 的起始網址是 `https://app.local/index.html`**（`WebViewBridge.IndexUri`），router 要加一條 `/index.html → /` 的 redirect，否則正式版開起來對不到任何路由；Shell 不改。
 3. **設計 token**：把 Industry 的 `:root` 變數（`--color-*` 100–900 色階、`--font-*`、`--space-*`、`--radius-*`、`--shadow-*`）移植進 `styles.css`；自行隨附 Barlow 字型；`:focus-visible` 用強調色外框；假日底色、值班格、不可排班日、空缺、違規三種渲染（底色／斜紋／外框）的 token 一次定好。
 4. **資料層**：`src/api/` 依契約 tag 拆檔（`schedules.ts`、`views.ts`、`blockedDays.ts`、`solver.ts`、`settings.ts`、`calendars.ts`、`staff.ts`），每個函式一個操作；`useResource` 快取 composable；`useYearMonth` 全域年月；`ApiError` 的 `ErrorCode → 使用者訊息` 對照表，契約的 `ErrorCode` 列舉 13 個全部列（`HARD_VIOLATIONS_PRESENT` 與 `SCHEDULE_ALREADY_PUBLISHED` 各有專屬流程，見 §3.1、§3.5）。
 5. **行事曆索引**：`useCalendar(year)` 把 `GET /calendars/{year}` 攤成 `Map<date, CalendarDay>`，所有畫面的表頭、假日底色、額度點數值都從這裡拿，不各自算。
@@ -121,7 +121,7 @@ TURN 3 與 TURN 4 已經是修訂後的版本：5 區、33 人、10 身分、4 �
 
 - 五份設定都是**整份取代**，畫面用「載入 → 本地草稿 → 儲存」三態，儲存後重抓。
 - R6 的額度上限走當月覆寫：那一列多一個「指定月份覆寫」輸入與「已覆寫」標記，寫的是 `monthly-overrides/{ym}`，不是 `ranks`。
-- 覆寫用的月份選擇器獨立於頂列全域年月（`useYearMonth`），只影響 `monthly-overrides/{ym}` 這個 key、不寫路由（issue #45 方案 B）。
+- 覆寫用的月份選擇器獨立於標題列年月切換器（`useYearMonth`），只影響 `monthly-overrides/{ym}` 這個 key、不寫路由（issue #45 方案 B）。
 - NP 的上限與點數類型顯示「不計」，對應 `quotaCap: null`。
 - 公平性點數兩張 4 列查表（當日 × 隔日是否假日）與連值週六加分（點數、天數視窗）依 `PointRules` schema 畫，不自己發明欄位。
 - 假日認定不在這頁，放一句說明指向行事曆。
