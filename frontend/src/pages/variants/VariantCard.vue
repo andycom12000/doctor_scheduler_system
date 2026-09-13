@@ -69,6 +69,7 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
       </template>
     </div>
 
+    <div class="variant-card__section-label">指標比較 · 跨這批變體同一指標互比，長條越短越好</div>
     <dl class="variant-card__metrics">
       <div v-for="row in metricRows" :key="row.key" class="variant-card__metric-row">
         <dt>{{ row.label }}</dt>

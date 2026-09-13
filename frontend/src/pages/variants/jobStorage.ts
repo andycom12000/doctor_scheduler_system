@@ -39,9 +39,14 @@ export function rememberJobId(ym: string, jobId: string, storage: KeyValueStore 
   }
 }
 
-/** 路由 query 的 `job` 優先；沒有的話退回 `localStorage` 記的那一個。 */
+/**
+ * 路由 query 的 `job` 優先；沒有的話退回 `localStorage` 記的那一個。
+ * 型別故意收 `string | null | (string | null)[] | undefined`——vue-router 的
+ * `route.query.job` 就是這個形狀（`LocationQueryValue = string | null`），
+ * 呼叫端可以直接把 `route.query.job` 傳進來，不用先攤平。
+ */
 export function resolveJobId(
-  queryJob: string | string[] | undefined,
+  queryJob: string | null | (string | null)[] | undefined,
   ym: string,
   storage: KeyValueStore | null = defaultStorage(),
 ): string | null {

@@ -65,4 +65,9 @@ describe('resolveJobId', () => {
   it('兩者都沒有時回 null', () => {
     expect(resolveJobId(undefined, '2026-09', fakeStorage())).toBeNull()
   })
+
+  it('query 是 null（vue-router 沒帶這個參數時的實際型別）時退回 localStorage', () => {
+    const storage = fakeStorage({ 'solver:lastJob:2026-09': 'job-old' })
+    expect(resolveJobId(null, '2026-09', storage)).toBe('job-old')
+  })
 })

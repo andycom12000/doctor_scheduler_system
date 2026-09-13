@@ -24,7 +24,7 @@ import type { SolverJob, SolverProgress, Variant } from '@/api/types'
 import { daysInMonth } from './dates'
 import { diffVariants } from './diff'
 import { staffGroupIndex } from './heatmap'
-import { readLastJobId, rememberJobId } from './jobStorage'
+import { readLastJobId, rememberJobId, resolveJobId } from './jobStorage'
 import ProgressOverlay from './ProgressOverlay.vue'
 import VariantCard from './VariantCard.vue'
 import {
@@ -151,17 +151,27 @@ function handleProgressEvent(id: string, targetYm: string, event: SolverProgress
   }
 }
 
+type AttachOutcome = 'attached' | 'mismatch' | 'not-found' | 'error'
+
 /**
  * GET 一次決定要不要訂閱：已經是終態的工作不 `subscribe`——正式版的
  * WebView2 host message 沒有「補送」，訂閱一個已經結束的工作只會空等。
+ *
+ * 只有真的接上（`attached`）才會 `rememberJobId`／清畫面狀態——呼叫端不該在
+ * 呼叫前先寫 localStorage 或改 URL query，否則 attach 失敗時（例如 409 給的
+ * busy jobId 屬於別的月份）localStorage 與網址會被寫成一個畫面上根本沒有顯示的
+ * jobId。
  */
-async function attachJob(id: string, targetYm: string): Promise<'attached' | 'mismatch' | 'not-found'> {
+async function attachJob(id: string, targetYm: string): Promise<AttachOutcome> {
   jobLoading.value = true
   try {
     const result = await getSolverJob(id)
     if (ym.value !== targetYm) return 'mismatch'
     if (result.yearMonth !== targetYm) return 'mismatch'
 
+    // 換一份工作：變體 id 固定是 v-a/v-b/v-c（ADR-0003），舊工作選的逐格差異／
+    // 套用錯誤／變體列表不清掉的話，會誤套到新工作同名的變體上。
+    if (jobId.value !== id) resetJobDisplayState()
     jobId.value = id
     job.value = result
     rememberJobId(targetYm, id)
@@ -172,8 +182,12 @@ async function attachJob(id: string, targetYm: string): Promise<'attached' | 'mi
       unsubscribe = subscribe(id, (event) => handleProgressEvent(id, targetYm, event))
     }
     return 'attached'
-  } catch {
-    return 'not-found'
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return 'not-found'
+    // 網路／伺服器錯誤不是「這個 jobId 不存在」，不該清掉 `?job=` 或改當作 not-found
+    // 去試 localStorage 的備援——只是把訊息顯示出來，讓使用者自己重新整理或重試。
+    jobNotice.value = describeError(err)
+    return 'error'
   } finally {
     if (ym.value === targetYm) jobLoading.value = false
   }
@@ -183,20 +197,20 @@ async function loadForYearMonth(targetYm: string): Promise<void> {
   teardownSubscription()
   jobId.value = null
   job.value = null
+  jobLoading.value = false // 上一次呼叫若中途被切月份中斷，finally 的守衛會讓它卡在 true
   jobNotice.value = null
   resetJobDisplayState()
 
-  const rawQueryJob = route.query.job
-  const fromQuery = Array.isArray(rawQueryJob) ? rawQueryJob[0] : rawQueryJob
-  const candidate = fromQuery ?? readLastJobId(targetYm)
+  const candidate = resolveJobId(route.query.job, targetYm)
   if (!candidate) return
 
   let outcome = await attachJob(candidate, targetYm)
   if (ym.value !== targetYm) return
 
-  if (outcome !== 'attached' && fromQuery) {
-    // query 帶的 jobId 是別月的、或已經找不到（例如重整前切過月份殘留的舊 query）——
-    // 清掉 query，退回 localStorage 記的那一個。
+  if ((outcome === 'not-found' || outcome === 'mismatch') && route.query.job) {
+    // query 帶的 jobId 查無此工作、或屬於別的月份（例如重整前切過月份殘留的舊 query）——
+    // 清掉 query，退回 localStorage 記的那一個。`error`（網路／伺服器錯誤）不屬於這裡，
+    // attachJob 已經把訊息寫進 jobNotice，不清 query、也不猜備援。
     clearQueryJob()
     const fallback = readLastJobId(targetYm)
     if (fallback && fallback !== candidate) {
@@ -205,7 +219,7 @@ async function loadForYearMonth(targetYm: string): Promise<void> {
     }
   }
 
-  if (outcome !== 'attached') {
+  if (outcome !== 'attached' && !jobNotice.value) {
     jobNotice.value = '找不到可顯示的求解工作，登記完成後可以直接求解。'
   }
 }
@@ -241,18 +255,25 @@ async function startSolve(): Promise<void> {
     // variantCount／timeLimitSecPerVariant 照 CreateSolverJobRequest 的契約預設值
     // （openapi-typescript 把有 `default` 的欄位生成成必填，這裡明寫預設值而非改生成設定）。
     const created = await createSolverJob({ yearMonth: ym.value, variantCount: 3, timeLimitSecPerVariant: 15 })
-    rememberJobId(ym.value, created.jobId)
-    resetJobDisplayState()
-    await router.replace({ query: { ...route.query, job: created.jobId } })
-    await attachJob(created.jobId, ym.value)
+    // 只有真的接上才改網址 query／記 localStorage（attachJob 內部處理），避免使用者在
+    // 等待建立回應時已經切換月份，這裡把新工作的 jobId 誤寫進另一個月份的網址。
+    const outcome = await attachJob(created.jobId, ym.value)
+    if (outcome === 'attached') {
+      await router.replace({ query: { ...route.query, job: created.jobId } })
+    }
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
+      // 單一 slot：全系統同時只有一份求解工作在跑，409 附的 busy jobId 可能屬於
+      // 別的月份。先 attach 再決定要不要改網址；attach 不成就用「已有求解工作
+      // 正在執行中」的訊息，不要在使用者看的畫面上偷偷換成別月的工作。
       const details = (err.body as { error?: { details?: { jobId?: string } } } | null)?.error?.details
       if (details?.jobId) {
-        rememberJobId(ym.value, details.jobId)
-        resetJobDisplayState()
-        await router.replace({ query: { ...route.query, job: details.jobId } })
-        await attachJob(details.jobId, ym.value)
+        const outcome = await attachJob(details.jobId, ym.value)
+        if (outcome === 'attached') {
+          await router.replace({ query: { ...route.query, job: details.jobId } })
+        } else {
+          createJobError.value = describeError(err)
+        }
         creatingJob.value = false
         return
       }
@@ -266,18 +287,35 @@ async function startSolve(): Promise<void> {
 // ---------------------------------------------------------------------------
 // 04b：中止——保留已完成的變體
 // ---------------------------------------------------------------------------
+const cancelling = ref(false)
+const cancelError = ref<string | null>(null)
+
+/**
+ * 後端 `SolverJobService.CancelAsync` 會等最多 10 秒讓求解器優雅停止才回應，
+ * 所以**不要**在送出 DELETE 前就 `teardownSubscription`——訂閱還留著，這段等待
+ * 期間如果有進度事件飄過來，畫面還能照樣更新，不會空白凍結。以 DELETE 的回應
+ * 為準；只有回應已經是終態才拆訂閱、抓 `/variants`（理論上 DELETE 回應必是終態，
+ * 這裡多一層防呆，不假設後端一定照約定回）。
+ */
 async function cancelJob(): Promise<void> {
-  if (!jobId.value) return
+  if (!jobId.value || cancelling.value) return
   const id = jobId.value
   const targetYm = ym.value
-  teardownSubscription()
+  cancelling.value = true
+  cancelError.value = null
   try {
     const result = await cancelSolverJob(id)
     if (ym.value !== targetYm || jobId.value !== id) return
     job.value = result
-    await loadVariants(id, targetYm)
+    if (isTerminalStatus(result.status)) {
+      teardownSubscription()
+      await loadVariants(id, targetYm)
+    }
   } catch (err) {
-    jobNotice.value = describeError(err)
+    if (ym.value !== targetYm || jobId.value !== id) return
+    cancelError.value = describeError(err)
+  } finally {
+    if (ym.value === targetYm && jobId.value === id) cancelling.value = false
   }
 }
 
@@ -447,7 +485,13 @@ const variantListEmptyNote = computed(() => {
       <p v-else class="notice">載入求解工作中…</p>
     </div>
 
-    <ProgressOverlay v-if="overlayVisible && job" :job="job" @cancel="cancelJob" />
+    <ProgressOverlay
+      v-if="overlayVisible && job"
+      :job="job"
+      :cancelling="cancelling"
+      :cancel-error="cancelError"
+      @cancel="cancelJob"
+    />
   </PageLayout>
 </template>
 

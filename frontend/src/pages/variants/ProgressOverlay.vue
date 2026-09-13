@@ -7,7 +7,7 @@ import { computed } from 'vue'
 import type { SolverJob } from '@/api/types'
 import { VARIANT_SLOT_IDS, formatGap, formatSeconds, progressHeadline, shortJobId, variantSlotStatuses } from './variantView'
 
-const props = defineProps<{ job: SolverJob }>()
+const props = defineProps<{ job: SolverJob; cancelling: boolean; cancelError: string | null }>()
 const emit = defineEmits<{ cancel: [] }>()
 
 const progress = computed(() => props.job.progress)
@@ -66,8 +66,11 @@ const slotLabel: Record<string, string> = { done: '完成', running: '求解中'
             {{ slot.id }} {{ slotLabel[slot.status] }}
           </span>
         </div>
-        <button type="button" class="btn btn-secondary" @click="emit('cancel')">中止</button>
+        <button type="button" class="btn btn-secondary" :disabled="cancelling" @click="emit('cancel')">
+          {{ cancelling ? '中止中…' : '中止' }}
+        </button>
       </div>
+      <p v-if="cancelError" class="progress-overlay__error">{{ cancelError }}</p>
     </div>
   </div>
 </template>
@@ -176,5 +179,14 @@ const slotLabel: Record<string, string> = { done: '完成', running: '求解中'
 .progress-overlay__slot--running {
   border-color: var(--color-accent);
   color: var(--color-accent-800);
+}
+
+.progress-overlay__error {
+  margin: var(--space-2) 0 0;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  border: 1px solid var(--color-accent-900);
+  color: var(--color-accent-900);
+  background: color-mix(in srgb, var(--color-accent-900) 8%, transparent);
 }
 </style>
