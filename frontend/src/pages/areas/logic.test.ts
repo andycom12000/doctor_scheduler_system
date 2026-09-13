@@ -7,12 +7,10 @@ import {
   isEqualJson,
   isNonNegativeInteger,
   isPositiveInteger,
-  isValidYearMonth,
   monthlyOverrideKey,
   normalizeOverride,
   pointTypeDisplay,
   quotaCapDisplay,
-  shiftYearMonth,
 } from './logic'
 import { areaTypes, areas } from '@/mocks/fixtures/areas'
 import { eligibilityMatrix } from '@/mocks/fixtures/ranks'
@@ -122,38 +120,8 @@ describe('normalizeOverride', () => {
   })
 })
 
-describe('shiftYearMonth', () => {
-  it('同年內加減', () => {
-    expect(shiftYearMonth('2026-09', 1)).toBe('2026-10')
-    expect(shiftYearMonth('2026-09', -1)).toBe('2026-08')
-  })
-
-  it('跨年進位／借位', () => {
-    expect(shiftYearMonth('2026-12', 1)).toBe('2027-01')
-    expect(shiftYearMonth('2026-01', -1)).toBe('2025-12')
-  })
-
-  it('delta 為 0 時原樣回傳', () => {
-    expect(shiftYearMonth('2026-09', 0)).toBe('2026-09')
-  })
-})
-
 describe('monthlyOverrideKey', () => {
   it('組出 settings/monthly-overrides/{ym} 這個 useResource key', () => {
     expect(monthlyOverrideKey('2026-09')).toBe('settings/monthly-overrides/2026-09')
-  })
-})
-
-describe('isValidYearMonth', () => {
-  it('接受 YYYY-MM', () => {
-    expect(isValidYearMonth('2026-09')).toBe(true)
-    expect(isValidYearMonth('2026-12')).toBe(true)
-  })
-
-  it('拒絕不符合格式的字串', () => {
-    expect(isValidYearMonth('')).toBe(false)
-    expect(isValidYearMonth('2026-9')).toBe(false)
-    expect(isValidYearMonth('2026-13')).toBe(false)
-    expect(isValidYearMonth('2026/09')).toBe(false)
   })
 })

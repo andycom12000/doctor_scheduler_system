@@ -120,7 +120,8 @@ TURN 3 與 TURN 4 已經是修訂後的版本：5 區、33 人、10 身分、4 �
 端點：`GET·PUT /settings/areas`、`GET·PUT /settings/ranks`、`GET /settings/eligibility-matrix`（唯讀，推「可值類型」欄）、`GET·PUT /settings/point-rules`、`GET·PUT /settings/monthly-overrides/{ym}`。
 
 - 五份設定都是**整份取代**，畫面用「載入 → 本地草稿 → 儲存」三態，儲存後重抓。
-- R6 的額度上限走當月覆寫：那一列多一個「本月覆寫」輸入與「已覆寫」標記，寫的是 `monthly-overrides/{ym}`，不是 `ranks`。
+- R6 的額度上限走當月覆寫：那一列多一個「指定月份覆寫」輸入與「已覆寫」標記，寫的是 `monthly-overrides/{ym}`，不是 `ranks`。
+- 覆寫用的月份選擇器獨立於頂列全域年月（`useYearMonth`），只影響 `monthly-overrides/{ym}` 這個 key、不寫路由（issue #45 方案 B）。
 - NP 的上限與點數類型顯示「不計」，對應 `quotaCap: null`。
 - 公平性點數兩張 4 列查表（當日 × 隔日是否假日）與連值週六加分（點數、天數視窗）依 `PointRules` schema 畫，不自己發明欄位。
 - 假日認定不在這頁，放一句說明指向行事曆。

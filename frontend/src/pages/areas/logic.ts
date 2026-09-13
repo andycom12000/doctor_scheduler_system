@@ -4,7 +4,6 @@
  *
  * 不掛 DOM，全部進 vitest。
  */
-import { currentYearMonth, YEAR_MONTH_PATTERN } from '@/composables/useYearMonth'
 import type { Area, AreaType, EligibilityMatrix, MonthlyOverride, Rank } from '@/api/types'
 
 /**
@@ -83,28 +82,12 @@ export function normalizeOverride(
 }
 
 /**
- * 「本月覆寫」獨立月份選擇器用（issue #45）：年月位移 `delta` 個月，複用
- * `currentYearMonth` 對 `Date` 建構子溢位的處理（月份 12 + 1 自動進位成隔年 1 月，
- * 1 - 1 自動借位成前一年 12 月），不用自己重寫進位邏輯。
- */
-export function shiftYearMonth(ym: string, delta: number): string {
-  const [year, month] = ym.split('-').map(Number)
-  return currentYearMonth(new Date(year, month - 1 + delta, 1))
-}
-
-/**
  * `settings/monthly-overrides/{ym}` 的 `useResource` key。讀取（`useResource` 的
  * `keyRef`）與寫入後的 `invalidate` 要組出同一個字串，抽成函式避免兩處字面量漂移。
+ *
+ * 年月位移（`shiftYearMonth`）與候選清單（`yearMonthOptions`）跟 `YearMonthSwitcher.vue`
+ * 共用，定義在 `@/composables/useYearMonth`，不是這個檔案的職責（見審查意見 #48 S2）。
  */
 export function monthlyOverrideKey(ym: string): string {
   return `settings/monthly-overrides/${ym}`
-}
-
-/**
- * 月份選擇器輸入驗證。`<input type="month">` 原生已經只能產生 `YYYY-MM` 或空字串，
- * 這裡再驗一次是防呆而非真的預期會擋到什麼——輸入元素非受控時（例如測試直接塞值）
- * 不能假設瀏覽器的格式保證仍然成立。
- */
-export function isValidYearMonth(value: string): boolean {
-  return YEAR_MONTH_PATTERN.test(value)
 }
