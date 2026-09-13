@@ -1,0 +1,235 @@
+<!doctype html><meta charset="utf-8">
+<!-- 由 Claude Design 專案 84f6e82e 的「排班系統 API 註解.dc.html」切出，供實作參考。
+     版面、互動、資訊架構以此為準；欄位與數字以 api-contract.yaml 為準。
+     {{ }} 與 <sc-for> 是 canvas 的資料綁定，對照 props="..." 裡的 default 看。
+     不要回寫到 Claude Design，那份 canvas 要在 canvas editor 裡改。 -->
+<link rel="stylesheet" href="industry.css">
+<style>
+body{margin:0;background:var(--color-bg);font-family:"Barlow","Noto Sans TC",system-ui,sans-serif}
+h1,h2,h3,h4,h5,h6{font-family:"Barlow Condensed","Noto Sans TC",system-ui,sans-serif}
+.dv-turn{padding:44px 48px 40px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);text-decoration:none}
+.dv-tname{font:600 14px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;letter-spacing:.02em}
+.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;margin-top:26px}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px}
+.anw{position:relative;padding:0 340px;width:calc(680px + var(--cw));box-sizing:border-box;align-self:flex-start}
+.an{position:absolute;display:flex;align-items:flex-start;width:334px}
+.anR{left:calc(340px + var(--cw))}
+.anL{right:calc(340px + var(--cw));flex-direction:row-reverse}
+.anl{flex:none;width:38px;height:1px;background:var(--color-accent);margin-top:10px;position:relative}
+.anl::before{content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--color-accent)}
+.anR .anl::before{left:-2px}
+.anL .anl::before{right:-2px}
+.anb{flex:1;min-width:0;border:1px solid var(--color-accent);padding:6px 9px;background:var(--color-bg)}
+.anL .anb{text-align:right}
+.ank{display:block;font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px}
+.anr{font:600 10.5px/1.55 ui-monospace,Menlo,monospace;letter-spacing:-.01em;color:var(--color-accent-900);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid color-mix(in srgb,var(--color-accent) 35%,transparent);word-break:break-word}
+.ant{margin:0;padding:0;list-style:none;font:400 11px/1.5 "Noto Sans TC",sans-serif}
+.ant li{position:relative;padding-left:9px}
+.ant li::before{content:"·";position:absolute;left:2px}
+.anL .ant li{padding-left:0;padding-right:9px}
+.anL .ant li::before{left:auto;right:2px}
+.anlg{display:flex;gap:18px;align-items:center;margin-top:14px;font:400 11.5px/1.5 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb,var(--color-text) 9%,transparent);color:var(--color-text);text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;font:400 12px/1.4 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-olabel b{font:600 16px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;color:var(--color-text)}
+.dv-card{background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-sm);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}
+.dv-next{margin:26px 0 0;font:12px/1.6 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.cap{font:400 11px/1.3 "Noto Sans TC",sans-serif;letter-spacing:.02em;color:color-mix(in srgb,var(--color-text) 50%,transparent);margin:0 0 7px}
+.cap b{font-weight:600;color:var(--color-text);letter-spacing:.06em;text-transform:uppercase;font-family:"Barlow Condensed",sans-serif;font-size:12px}
+.sq{width:100%;border-collapse:collapse}
+.sq th{padding:0;font:600 9px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em;color:color-mix(in srgb,var(--color-text) 55%,transparent);border-bottom:1px solid var(--color-divider)}
+.sq td{padding:0;border-bottom:1px solid color-mix(in srgb,var(--color-text) 7%,transparent);border-right:1px solid color-mix(in srgb,var(--color-text) 5%,transparent)}
+.k{font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.nv{display:flex;align-items:center;gap:20px;padding:0 16px;height:46px;border-bottom:1px solid var(--color-divider)}
+.nv a{font:400 13px/1 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 65%,transparent);text-decoration:none}
+.nv a.on{color:var(--color-accent);font-weight:500}
+.bd{font:600 17px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em;margin-right:auto;display:flex;align-items:center;gap:9px}
+</style>
+<div class="dv-opt" id="3a">
+<p class="cap"><b>SCREEN 01</b> · 排班主表 · 檢視分頁：區域 × 日 ／ 日 × 人 ／ 單日詳表（可點擊）</p>
+
+<div class="anw" style="--cw:1348px">
+<sc-for list="{{ anns }}" as="a" hint-placeholder-count="8">
+<div class="{{ a.cls }}" style="{{ a.pos }}"><span class="anl"></span><div class="anb"><span class="ank">{{ a.k }}</span><div class="anr"><sc-for list="{{ a.routes }}" as="r" hint-placeholder-count="1"><div>{{ r }}</div></sc-for></div><ul class="ant"><sc-for list="{{ a.items }}" as="it" hint-placeholder-count="2"><li>{{ it }}</li></sc-for></ul></div></div>
+</sc-for>
+<div class="dv-card" style="width:1348px">
+<div class="nv"><span class="bd"><span style="width:14px;height:14px;border:1px solid var(--color-accent);display:inline-block"></span>醫師值班排班系統</span>
+<a href="#3a" class="on">排班主表</a><a href="#2a">區域與點數</a><a href="#2a">資格與約束</a><a href="#2a">變體比較</a><a href="#3b">不可排班日登記</a><a href="#4a">人員維護</a>
+<span class="tag tag-neutral" style="margin-left:auto">本機執行 · 免安裝</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="position:relative;display:flex;align-items:center;gap:2px">
+<button style="width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer;font:400 15px/1 'Barlow Condensed',sans-serif" onClick="{{ ymPrev }}">‹</button>
+<div style="{{ ymLabelS }}" onClick="{{ ymToggle }}">{{ ymLabel }}<span style="font-size:10px;opacity:.45">▼</span></div>
+<button style="width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer;font:400 15px/1 'Barlow Condensed',sans-serif" onClick="{{ ymNext }}">›</button>
+<div style="{{ ymPanelS }}">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+<button style="width:24px;height:24px;flex:none;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer" onClick="{{ ymYearPrev }}">‹</button>
+<div style="flex:1;text-align:center;font:600 17px/1 'Barlow Condensed',sans-serif;letter-spacing:.06em">{{ ymYearLabel }}</div>
+<button style="width:24px;height:24px;flex:none;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer" onClick="{{ ymYearNext }}">›</button>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+<sc-for list="{{ ymMonths }}" as="mo" hint-placeholder-count="12"><div style="{{ mo.s }}" onClick="{{ mo.on }}">{{ mo.t }}</div></sc-for>
+</div>
+<button class="btn btn-ghost btn-block" style="margin-top:9px" onClick="{{ ymThisMonth }}">回到本月（2026 / 09）</button>
+</div>
+</div>
+<span class="tag tag-neutral">{{ areaCount }} 區 · {{ peopleCount }} 人 · 草稿 v2</span>
+<div style="display:flex;margin-left:10px">
+<div style="{{ tabMxS }}" onClick="{{ onMx }}">區域 × 日</div>
+<div style="{{ tabDpS }}" onClick="{{ onDp }}">日 × 人</div>
+<div style="{{ tabDdS }}" onClick="{{ onDd }}">單日詳表</div>
+</div>
+<div style="margin-left:auto;display:flex;gap:8px">
+<button class="btn btn-secondary">匯出 Excel</button><button class="btn btn-secondary">驗證約束</button><button class="btn btn-secondary">重新求解</button>
+<button class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>重新發布</button>
+</div>
+</div>
+<div id="nsp-dp" style="padding:12px 14px;overflow-x:auto;{{ showDp }}">
+<div style="display:flex;min-width:0">
+<div style="width:44px;flex:none"></div>
+<sc-for list="{{ dpGroups }}" as="g" hint-placeholder-count="4"><div style="{{ g.s }}">{{ g.label }}</div></sc-for>
+</div>
+<div style="display:flex">
+<div style="width:44px;flex:none;height:86px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 8%,transparent)"></div>
+<sc-for list="{{ dpHead }}" as="h" hint-placeholder-count="20"><div style="{{ h.s }}" onMouseEnter="{{ h.on }}" onMouseLeave="{{ h.off }}"><span style="{{ h.nS }}">{{ h.name }}</span></div></sc-for>
+<div class="k" style="width:56px;flex:none;height:86px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;border-left:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 8%,transparent)">空缺</div>
+</div>
+<div style="display:flex">
+<div class="k" style="width:44px;flex:none;height:46px;display:flex;align-items:center;justify-content:center;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">身分</div>
+<sc-for list="{{ dpHead }}" as="h" hint-placeholder-count="20"><div style="{{ h.eS }}">{{ h.rank }}</div></sc-for>
+<div style="width:56px;flex:none;height:46px;display:flex;align-items:center;justify-content:center;font:400 9px/1.3 'Noto Sans TC',sans-serif;text-align:center;color:color-mix(in srgb,var(--color-text) 45%,transparent);border-left:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">未填補<br>區域</div>
+</div>
+<sc-for list="{{ dpRows }}" as="dr" hint-placeholder-count="30">
+<div style="display:flex">
+<div style="{{ dr.labS }}">{{ dr.d }}<span style="{{ dr.wdS }}">{{ dr.wd }}</span></div>
+<sc-for list="{{ dr.cells }}" as="dc" hint-placeholder-count="20"><div style="{{ dc.s }}" data-nm="{{ dc.nm }}">{{ dc.t }}</div></sc-for>
+<div style="{{ dr.vacS }}">{{ dr.vac }}</div>
+</div>
+</sc-for>
+<div style="display:flex">
+<div class="k" style="width:44px;flex:none;height:19px;display:flex;align-items:center;padding-left:5px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-top:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">班數</div>
+<sc-for list="{{ dpFoot }}" as="f" hint-placeholder-count="20"><div style="{{ f.s }}">{{ f.n }}</div></sc-for>
+</div>
+<div style="display:flex">
+<div class="k" style="width:44px;flex:none;height:17px;display:flex;align-items:center;padding-left:5px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">額度</div>
+<sc-for list="{{ dpFoot }}" as="f" hint-placeholder-count="20"><div style="{{ f.pS }}">{{ f.pt }}</div></sc-for>
+</div>
+<div style="display:flex;gap:16px;margin-top:12px;align-items:center;flex-wrap:wrap">
+<span class="k">圖例</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:var(--color-accent-100);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>平日值班（格內為區域代號）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:var(--color-accent-300);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>假日值班（額度 {{ qHoN }} 點）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--color-text) 22%,transparent) 0 1px,transparent 1px 4px);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>不可排班日（求解輸入）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:color-mix(in srgb,var(--color-text) 9%,transparent);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>假日（整列底色）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>該日有區域空缺（H1）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:repeating-linear-gradient(45deg,var(--color-accent-800) 0 2px,var(--color-accent-400) 2px 5px);box-shadow:inset 0 0 0 1.5px var(--color-accent-900)"></span>排到已登記的不可排班日（H5）</span>
+<span style="font-size:11px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">滑過姓名可框出該人的班 · 空白＝未值班</span>
+</div>
+</div>
+
+<div style="{{ showMx }}">
+<div style="display:flex">
+<div id="nsp-mx" style="flex:1;padding:12px 14px;min-width:0">
+<div style="display:flex;align-items:flex-end;border-bottom:1px solid var(--color-divider);padding-bottom:2px">
+<div class="k" style="width:132px;flex:none">區域 / 日期</div>
+<sc-for list="{{ a2days }}" as="d" hint-placeholder-count="30"><div style="{{ d.th }}"><span style="{{ d.wdS }}">{{ d.wd }}</span><span style="{{ d.ddS }}">{{ d.dd }}</span><span style="{{ d.pS }}">{{ d.p }}</span></div></sc-for>
+<div class="k" style="width:44px;flex:none;text-align:right">填補</div>
+</div>
+<sc-for list="{{ a2groups }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:8px;padding:9px 0 4px">
+<span style="{{ g.badge }}">{{ g.code }}</span>
+<span style="font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif">{{ g.name }}</span>
+<span style="font-size:10.5px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">{{ g.meta }}</span>
+</div>
+<sc-for list="{{ g.rows }}" as="ar" hint-placeholder-count="3">
+<div style="display:flex;align-items:center">
+<div style="width:132px;flex:none;font:600 11.5px 'Barlow Condensed',sans-serif;letter-spacing:.06em">{{ ar.id }}</div>
+<sc-for list="{{ ar.cells }}" as="c" hint-placeholder-count="30"><div style="{{ c.s }}" data-nm="{{ c.nm }}">{{ c.t }}</div></sc-for>
+<div style="{{ ar.statS }}">{{ ar.stat }}</div>
+</div>
+</sc-for>
+</sc-for>
+<div style="display:flex;align-items:center;margin-top:10px">
+<div class="k" style="width:132px;flex:none">每日已填補</div>
+<sc-for list="{{ fill }}" as="f" hint-placeholder-count="30"><div style="{{ f.s }}">{{ f.t }}</div></sc-for>
+</div>
+<div style="display:flex;gap:14px;margin-top:12px;align-items:center;flex-wrap:wrap">
+<span class="k">身分組</span>
+<sc-for list="{{ a2legend }}" as="l" hint-placeholder-count="4"><span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="{{ l.s }}">{{ l.t }}</span>{{ l.label }}</span></sc-for>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px;margin-left:8px"><span style="width:20px;height:14px;background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);border:1px solid var(--color-accent)"></span>空缺（H1 · 登記過多時的正常結果）</span>
+<span style="font-size:11px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">格內為姓名簡稱 · 值休休值：值班後至少休兩天（間隔 ≥ {{ restGap }} 天，NP 豁免）</span>
+</div>
+<div style="margin-top:14px;border-top:1px solid var(--color-divider);padding-top:11px">
+<div style="display:flex;align-items:center;margin-bottom:8px"><span class="k">點數看板 · 額度點數（已排 / 上限 · 剩餘 · 假日班）</span><span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">依身分組分區 · 組內比較的是剩餘額度 · {{ capNote }}</span></div>
+<div id="nsp-bd" style="display:flex;gap:16px">
+<sc-for list="{{ boardCols }}" as="col" hint-placeholder-count="4">
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+<div style="{{ col.hdS }}">{{ col.label }}</div>
+<sc-for list="{{ col.rows }}" as="b" hint-placeholder-count="11">
+<div style="display:flex;align-items:center;gap:6px;padding:1px 3px;margin:0 -3px;cursor:default" data-row="{{ b.name }}" onMouseEnter="{{ b.on }}" onMouseLeave="{{ b.off }}">
+<span style="{{ b.rkS }}">{{ b.rank }}</span>
+<span style="font-size:11px;width:46px;flex:none">{{ b.name }}</span>
+<div style="flex:1;height:5px;background:color-mix(in srgb,var(--color-text) 9%,transparent)"><div style="{{ b.bar }}"></div></div>
+<span style="font:600 10.5px 'Barlow Condensed',sans-serif;width:38px;text-align:right;flex:none">{{ b.pts }}</span>
+<span style="{{ b.leftS }}">{{ b.left }}</span>
+<span style="font-size:9.5px;color:color-mix(in srgb,var(--color-text) 45%,transparent);width:24px;text-align:right;flex:none">假{{ b.hol }}</span>
+<sc-if value="{{ fairOn }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;color:color-mix(in srgb,var(--color-text) 38%,transparent);width:30px;text-align:right;flex:none">公{{ b.fair }}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<div style="{{ fairNoteS }}">{{ fairNote }}</div>
+</div>
+</div>
+<div style="width:306px;flex:none;border-left:1px solid var(--color-divider);padding:12px 14px;display:flex;flex-direction:column;gap:13px">
+<div>
+<div style="display:flex;align-items:center;margin-bottom:7px"><span class="k">身分組容量利用率</span><span class="tag tag-outline" style="margin-left:auto">可行性指標</span></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ util }}" as="u" hint-placeholder-count="4">
+<div><div style="display:flex;align-items:baseline;gap:6px;font-size:11px"><span style="font:600 11px 'Barlow Condensed',sans-serif">{{ u.lv }}</span><span style="color:color-mix(in srgb,var(--color-text) 50%,transparent)">{{ u.txt }}</span><span style="margin-left:auto;font:600 12px 'Barlow Condensed',sans-serif">{{ u.pct }}</span></div>
+<div style="height:4px;background:color-mix(in srgb,var(--color-text) 9%,transparent)"><div style="{{ u.s }}"></div></div></div>
+</sc-for>
+</div>
+</div>
+<div>
+<div style="display:flex;align-items:center;margin-bottom:6px"><span class="k">違規</span><span class="tag tag-outline" style="margin-left:auto">{{ alertTag }}</span></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ a2alerts }}" as="v" hint-placeholder-count="4">
+<div style="border:1px solid var(--color-divider);padding:7px 8px;display:flex;gap:7px;align-items:flex-start">
+<span style="{{ v.badge }}">{{ v.kind }}</span>
+<div style="min-width:0"><div style="font-size:11.5px;line-height:1.35">{{ v.title }}</div><div style="font:600 9px/1.5 ui-monospace,Menlo,monospace;color:color-mix(in srgb,var(--color-text) 46%,transparent)">{{ v.code }}</div><div style="font-size:10px;color:color-mix(in srgb,var(--color-text) 52%,transparent)">{{ v.who }}</div></div>
+</div>
+</sc-for>
+</div>
+<div style="font-size:10.5px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 52%,transparent);margin-top:7px">API 只帶 code 與 severity；底色／斜紋／外框由前端決定。公平性是身分組層級的分數、指不到格子，不出現在這裡。</div>
+</div>
+</div>
+</div>
+</div>
+
+<div style="padding:14px 16px;{{ showDd }}">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+<button class="btn btn-secondary" onClick="{{ dayPrev }}">前一日</button>
+<div><div style="font:600 22px/1.05 'Barlow Condensed',sans-serif;letter-spacing:.04em">{{ dd.label }}</div>
+<div style="font-size:11.5px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">{{ dd.sub }}</div></div>
+<button class="btn btn-secondary" onClick="{{ dayNext }}">次一日</button>
+<span style="{{ dd.statS }}">{{ dd.stat }}</span>
+<span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">月負載由 GET /api/schedules/{ym}/days/{date} 自帶，不需另打點數看板</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px;max-width:760px">
+<sc-for list="{{ dd.rows }}" as="dl" hint-placeholder-count="5">
+<div style="{{ dl.s }}">
+<span style="font:600 13px 'Barlow Condensed',sans-serif;letter-spacing:.06em;width:46px;flex:none">{{ dl.area }}</span>
+<span style="font-size:11.5px;width:96px;flex:none;color:color-mix(in srgb,var(--color-text) 62%,transparent)">{{ dl.type }}</span>
+<span style="{{ dl.rkS }}">{{ dl.rank }}</span>
+<span style="font-size:12.5px;width:70px;flex:none">{{ dl.name }}</span>
+<span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 52%,transparent);text-align:right">{{ dl.load }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</div>

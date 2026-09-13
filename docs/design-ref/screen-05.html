@@ -1,0 +1,163 @@
+<!doctype html><meta charset="utf-8">
+<!-- 由 Claude Design 專案 84f6e82e 的「排班系統 API 註解.dc.html」切出，供實作參考。
+     版面、互動、資訊架構以此為準；欄位與數字以 api-contract.yaml 為準。
+     {{ }} 與 <sc-for> 是 canvas 的資料綁定，對照 props="..." 裡的 default 看。
+     不要回寫到 Claude Design，那份 canvas 要在 canvas editor 裡改。 -->
+<link rel="stylesheet" href="industry.css">
+<style>
+body{margin:0;background:var(--color-bg);font-family:"Barlow","Noto Sans TC",system-ui,sans-serif}
+h1,h2,h3,h4,h5,h6{font-family:"Barlow Condensed","Noto Sans TC",system-ui,sans-serif}
+.dv-turn{padding:44px 48px 40px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);text-decoration:none}
+.dv-tname{font:600 14px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;letter-spacing:.02em}
+.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;margin-top:26px}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px}
+.anw{position:relative;padding:0 340px;width:calc(680px + var(--cw));box-sizing:border-box;align-self:flex-start}
+.an{position:absolute;display:flex;align-items:flex-start;width:334px}
+.anR{left:calc(340px + var(--cw))}
+.anL{right:calc(340px + var(--cw));flex-direction:row-reverse}
+.anl{flex:none;width:38px;height:1px;background:var(--color-accent);margin-top:10px;position:relative}
+.anl::before{content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--color-accent)}
+.anR .anl::before{left:-2px}
+.anL .anl::before{right:-2px}
+.anb{flex:1;min-width:0;border:1px solid var(--color-accent);padding:6px 9px;background:var(--color-bg)}
+.anL .anb{text-align:right}
+.ank{display:block;font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px}
+.anr{font:600 10.5px/1.55 ui-monospace,Menlo,monospace;letter-spacing:-.01em;color:var(--color-accent-900);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid color-mix(in srgb,var(--color-accent) 35%,transparent);word-break:break-word}
+.ant{margin:0;padding:0;list-style:none;font:400 11px/1.5 "Noto Sans TC",sans-serif}
+.ant li{position:relative;padding-left:9px}
+.ant li::before{content:"·";position:absolute;left:2px}
+.anL .ant li{padding-left:0;padding-right:9px}
+.anL .ant li::before{left:auto;right:2px}
+.anlg{display:flex;gap:18px;align-items:center;margin-top:14px;font:400 11.5px/1.5 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb,var(--color-text) 9%,transparent);color:var(--color-text);text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;font:400 12px/1.4 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-olabel b{font:600 16px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;color:var(--color-text)}
+.dv-card{background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-sm);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}
+.dv-next{margin:26px 0 0;font:12px/1.6 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.cap{font:400 11px/1.3 "Noto Sans TC",sans-serif;letter-spacing:.02em;color:color-mix(in srgb,var(--color-text) 50%,transparent);margin:0 0 7px}
+.cap b{font-weight:600;color:var(--color-text);letter-spacing:.06em;text-transform:uppercase;font-family:"Barlow Condensed",sans-serif;font-size:12px}
+.sq{width:100%;border-collapse:collapse}
+.sq th{padding:0;font:600 9px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em;color:color-mix(in srgb,var(--color-text) 55%,transparent);border-bottom:1px solid var(--color-divider)}
+.sq td{padding:0;border-bottom:1px solid color-mix(in srgb,var(--color-text) 7%,transparent);border-right:1px solid color-mix(in srgb,var(--color-text) 5%,transparent)}
+.k{font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.nv{display:flex;align-items:center;gap:20px;padding:0 16px;height:46px;border-bottom:1px solid var(--color-divider)}
+.nv a{font:400 13px/1 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 65%,transparent);text-decoration:none}
+.nv a.on{color:var(--color-accent);font-weight:500}
+.bd{font:600 17px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em;margin-right:auto;display:flex;align-items:center;gap:9px}
+</style>
+<div style="flex:1;display:flex;gap:4px;align-items:center">
+<span style="font:600 10px 'Barlow Condensed',sans-serif;padding:3px 6px;background:var(--color-accent);color:var(--color-bg)">v-a 完成</span>
+<span style="font:600 10px 'Barlow Condensed',sans-serif;padding:3px 6px;border:1px solid var(--color-accent);color:var(--color-accent-800)">v-b 求解中</span>
+<span style="font:600 10px 'Barlow Condensed',sans-serif;padding:3px 6px;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);color:color-mix(in srgb,var(--color-text) 45%,transparent)">v-c 等待</span>
+</div>
+<button class="btn btn-secondary" style="flex:none">中止</button>
+</div>
+</div>
+</div>
+</div>
+<p class="dv-next">求解工作只回 jobId，進度靠 SSE 推送；三份變體依序求解，中止會保留已完成的變體。空缺數 &gt; 0 是正常結果——登記過多時求解器回「空缺最少」的變體，而不是整份 INFEASIBLE。</p>
+</div>
+
+<p class="cap" style="margin-top:22px"><b>SCREEN 05</b> · 不可排班日登記 · 筆刷式矩陣 · 兩個筆刷（登記／清除）· 每人每月上限 {{ nbCap }} 天</p>
+
+<div class="anw" style="--cw:1348px">
+<div class="an anL" style="top:96px"><span class="anl"></span><div class="anb"><span class="ank">讀取</span><div class="anr">GET /api/blocked-days/{ym}</div><ul class="ant"><li>矩陣底稿：該月全員的不可排班日登記</li><li>每人已登記天數與剩餘額度</li><li>不掛在 /schedules 底下——登記獨立於值班表（ADR-0001）</li></ul></div></div>
+<div class="an anL" style="top:352px"><span class="anl"></span><div class="anb"><span class="ank">讀取</span><div class="anr">GET /api/blocked-days/{ym}/feasibility</div><ul class="ant"><li>① 逐日：哪一天哪個區域類型可用人數不足</li><li>② 整月：總值／總值＋ICU／全部三層巢狀供需</li><li>必要條件而非充分條件，不等於求解一定成功</li></ul></div></div>
+<div class="an anR" style="top:60px"><span class="anl"></span><div class="anb"><span class="ank">寫入</span><div class="anr">PUT /api/blocked-days/{ym}/{staffId}/{date}<br>DELETE /api/blocked-days/{ym}/{staffId}/{date}</div><ul class="ant"><li>點格切換：登記筆刷寫入、清除筆刷刪除</li><li>只有一層硬性的「絕對不可排班」，無軟性層級</li><li>超過每人月上限 {{ nbCap }} 天時回 409 並附剩餘額度</li></ul></div></div>
+<div class="an anR" style="top:300px"><span class="anl"></span><div class="anb"><span class="ank">讀取</span><div class="anr">GET /api/staff</div><ul class="ant"><li>矩陣左欄名冊：33 人一次全帶、無分頁</li><li>依身分組 4 組排列，組是公平性的比較單位</li></ul></div></div>
+<div class="an anR" style="top:420px"><span class="anl"></span><div class="anb"><span class="ank">讀取</span><div class="anr">GET /api/calendars/{year}</div><ul class="ant"><li>表頭星期與假日底色</li><li>補班日視為平日，不上假日底色</li></ul></div></div>
+<div class="an anR" style="top:520px"><span class="anl"></span><div class="anb"><span class="ank">寫入</span><div class="anr">POST /api/solver-jobs</div><ul class="ant"><li>「帶入求解」直接建立求解工作</li><li>沒有登記期與鎖定，求解前一次確認即可</li></ul></div></div>
+<div class="dv-card" style="width:1348px">
+<div class="nv"><span class="bd"><span style="width:14px;height:14px;border:1px solid var(--color-accent);display:inline-block"></span>醫師值班排班系統</span>
+<a href="#3a">排班主表</a><a href="#2a">區域與點數</a><a href="#2a">資格與約束</a><a href="#2a">變體比較</a><a href="#2a" class="on">不可排班日登記</a><a href="#4a">人員維護</a></div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="font:600 20px/1 'Barlow Condensed','Noto Sans TC',sans-serif">{{ nbTitle }}</div>
+<span class="tag tag-outline">值班表尚未產生</span>
+<div style="display:flex;margin-left:10px">
+<div style="{{ nbBrushOn }}" onClick="{{ onBrushOn }}">筆刷：登記</div>
+<div style="{{ nbBrushClear }}" onClick="{{ onBrushClear }}">清除</div>
+</div>
+<div style="margin-left:auto;display:flex;gap:8px">
+<button class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>帶入求解</button>
+</div>
+</div>
+<div style="display:flex">
+<div style="flex:1;min-width:0;padding:12px 14px;overflow-x:auto">
+<div style="display:flex">
+<div style="width:150px;flex:none"></div>
+<sc-for list="{{ nbHead }}" as="h" hint-placeholder-count="30"><div style="{{ h.s }}"><span style="{{ h.wdS }}">{{ h.wd }}</span><span style="{{ h.ddS }}">{{ h.dd }}</span></div></sc-for>
+<div class="k" style="width:34px;flex:none;text-align:center;border-left:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px">登</div>
+<div class="k" style="width:34px;flex:none;text-align:center;border-bottom:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px">餘</div>
+</div>
+<sc-for list="{{ nbGroups }}" as="g" hint-placeholder-count="4">
+<div style="{{ g.hdS }}"><span style="{{ g.labS }}">{{ g.label }}</span><span style="{{ g.subS }}">{{ g.sub }}</span><span style="{{ g.capS }}">{{ g.capNote }}</span></div>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="8">
+<div style="display:flex;align-items:center">
+<div style="width:150px;flex:none;display:flex;align-items:center;gap:6px;height:21px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 7%,transparent)">
+<span style="{{ r.rkS }}">{{ r.rank }}</span><span style="{{ r.nameS }}">{{ r.name }}</span><span style="{{ r.empS }}">{{ r.emp }}</span>
+</div>
+<sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="30"><div style="{{ c.s }}" onClick="{{ c.on }}">{{ c.t }}</div></sc-for>
+<div style="{{ r.nS }}">{{ r.n }}</div>
+<div style="{{ r.leftS }}">{{ r.left }}</div>
+</div>
+</sc-for>
+</sc-for>
+<div style="display:flex">
+<div class="k" style="width:150px;flex:none;height:19px;display:flex;align-items:center;padding-left:4px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-top:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">該日登記人數</div>
+<sc-for list="{{ nbFoot }}" as="f" hint-placeholder-count="30"><div style="{{ f.s }}">{{ f.n }}</div></sc-for>
+</div>
+<div style="display:flex">
+<div class="k" style="width:150px;flex:none;height:17px;display:flex;align-items:center;padding-left:4px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">總值可用人數</div>
+<sc-for list="{{ nbFoot }}" as="f" hint-placeholder-count="30"><div style="{{ f.cS }}">{{ f.chief }}</div></sc-for>
+</div>
+<div style="display:flex;gap:16px;margin-top:12px;align-items:center;flex-wrap:wrap">
+<span class="k">圖例</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:var(--color-accent);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>不可排班日（硬約束，計入 {{ nbCap }} 天上限）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:color-mix(in srgb,var(--color-text) 9%,transparent);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>假日（週六、週日與國定假日）</span>
+<span style="font-size:11px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">選好筆刷後點格即可登記／清除 · 底部兩列即時顯示該日登記人數與總值可用人數</span>
+</div>
+</div>
+<div style="width:300px;flex:none;border-left:1px solid var(--color-divider);padding:12px 14px;display:flex;flex-direction:column;gap:14px">
+<div>
+<div class="k" style="margin-bottom:6px">登記概況</div>
+<div style="font:600 34px/1 'Barlow Condensed',sans-serif;letter-spacing:.02em">{{ nbTotalN }} 筆</div>
+<div style="font-size:11px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 55%,transparent);margin-top:3px">{{ nbTotalNote }}</div>
+</div>
+<div>
+<div style="display:flex;align-items:center;margin-bottom:6px"><span class="k">超過上限</span><span style="{{ nbOverS }}">{{ nbOverN }} 人</span></div>
+<div style="font-size:11px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 58%,transparent)">{{ nbOverList }}</div>
+</div>
+<div>
+<div style="display:flex;align-items:center;margin-bottom:6px"><span class="k">尚未登記</span><span class="tag tag-outline" style="margin-left:auto">{{ nbNoneN }} 人</span></div>
+<div style="font-size:11px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 58%,transparent)">{{ nbNoneList }}</div>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">可行性預警 · 逐日</div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ nbRisk }}" as="d" hint-placeholder-count="3">
+<div style="{{ d.s }}"><span style="font:600 13px 'Barlow Condensed',sans-serif;letter-spacing:.04em">{{ d.date }}</span><span style="font-size:10.5px;color:color-mix(in srgb,var(--color-text) 52%,transparent)">{{ d.wd }}</span><span style="{{ d.tagS }}">{{ d.tag }}</span></div>
+<div style="font-size:10.5px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 55%,transparent);margin:-2px 0 2px 1px">{{ d.detail }}</div>
+</sc-for>
+</div>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">可行性預警 · 整月供需</div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<sc-for list="{{ nbLayers }}" as="l" hint-placeholder-count="3">
+<div>
+<div style="display:flex;align-items:baseline;gap:6px"><span style="font:600 12.5px 'Barlow Condensed','Noto Sans TC',sans-serif">{{ l.label }}</span><span style="font-size:10px;color:color-mix(in srgb,var(--color-text) 48%,transparent)">{{ l.sub }}</span><span style="{{ l.ratioS }}">{{ l.ratio }}</span></div>
+<div style="height:6px;margin-top:4px;background:color-mix(in srgb,var(--color-text) 8%,transparent)"><div style="{{ l.barS }}"></div></div>
+<div style="font-size:10.5px;margin-top:3px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">{{ l.note }}</div>
+</div>
+</sc-for>
+</div>
+<div style="{{ nbWardS }}">{{ nbWardNote }}</div>
+</div>
+<div class="field"><label>每人每月不可排班日上限</label><input class="input" value="{{ nbCap }}" readonly></div>
+</div>
+</div>
+</div>
+</div>

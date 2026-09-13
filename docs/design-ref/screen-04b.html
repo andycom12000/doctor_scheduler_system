@@ -1,0 +1,89 @@
+<!doctype html><meta charset="utf-8">
+<!-- 由 Claude Design 專案 84f6e82e 的「排班系統 API 註解.dc.html」切出，供實作參考。
+     版面、互動、資訊架構以此為準；欄位與數字以 api-contract.yaml 為準。
+     {{ }} 與 <sc-for> 是 canvas 的資料綁定，對照 props="..." 裡的 default 看。
+     不要回寫到 Claude Design，那份 canvas 要在 canvas editor 裡改。 -->
+<link rel="stylesheet" href="industry.css">
+<style>
+body{margin:0;background:var(--color-bg);font-family:"Barlow","Noto Sans TC",system-ui,sans-serif}
+h1,h2,h3,h4,h5,h6{font-family:"Barlow Condensed","Noto Sans TC",system-ui,sans-serif}
+.dv-turn{padding:44px 48px 40px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);text-decoration:none}
+.dv-tname{font:600 14px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;letter-spacing:.02em}
+.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;margin-top:26px}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px}
+.anw{position:relative;padding:0 340px;width:calc(680px + var(--cw));box-sizing:border-box;align-self:flex-start}
+.an{position:absolute;display:flex;align-items:flex-start;width:334px}
+.anR{left:calc(340px + var(--cw))}
+.anL{right:calc(340px + var(--cw));flex-direction:row-reverse}
+.anl{flex:none;width:38px;height:1px;background:var(--color-accent);margin-top:10px;position:relative}
+.anl::before{content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--color-accent)}
+.anR .anl::before{left:-2px}
+.anL .anl::before{right:-2px}
+.anb{flex:1;min-width:0;border:1px solid var(--color-accent);padding:6px 9px;background:var(--color-bg)}
+.anL .anb{text-align:right}
+.ank{display:block;font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px}
+.anr{font:600 10.5px/1.55 ui-monospace,Menlo,monospace;letter-spacing:-.01em;color:var(--color-accent-900);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid color-mix(in srgb,var(--color-accent) 35%,transparent);word-break:break-word}
+.ant{margin:0;padding:0;list-style:none;font:400 11px/1.5 "Noto Sans TC",sans-serif}
+.ant li{position:relative;padding-left:9px}
+.ant li::before{content:"·";position:absolute;left:2px}
+.anL .ant li{padding-left:0;padding-right:9px}
+.anL .ant li::before{left:auto;right:2px}
+.anlg{display:flex;gap:18px;align-items:center;margin-top:14px;font:400 11.5px/1.5 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb,var(--color-text) 9%,transparent);color:var(--color-text);text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;font:400 12px/1.4 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-olabel b{font:600 16px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;color:var(--color-text)}
+.dv-card{background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-sm);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}
+.dv-next{margin:26px 0 0;font:12px/1.6 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.cap{font:400 11px/1.3 "Noto Sans TC",sans-serif;letter-spacing:.02em;color:color-mix(in srgb,var(--color-text) 50%,transparent);margin:0 0 7px}
+.cap b{font-weight:600;color:var(--color-text);letter-spacing:.06em;text-transform:uppercase;font-family:"Barlow Condensed",sans-serif;font-size:12px}
+.sq{width:100%;border-collapse:collapse}
+.sq th{padding:0;font:600 9px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em;color:color-mix(in srgb,var(--color-text) 55%,transparent);border-bottom:1px solid var(--color-divider)}
+.sq td{padding:0;border-bottom:1px solid color-mix(in srgb,var(--color-text) 7%,transparent);border-right:1px solid color-mix(in srgb,var(--color-text) 5%,transparent)}
+.k{font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.nv{display:flex;align-items:center;gap:20px;padding:0 16px;height:46px;border-bottom:1px solid var(--color-divider)}
+.nv a{font:400 13px/1 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 65%,transparent);text-decoration:none}
+.nv a.on{color:var(--color-accent);font-weight:500}
+.bd{font:600 17px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em;margin-right:auto;display:flex;align-items:center;gap:9px}
+</style>
+<div style="display:flex;gap:6px;margin-top:11px"><button style="{{ v.btnS }}">{{ v.btn }}</button><button class="btn btn-secondary" style="flex:none">逐格差異</button></div>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<p class="cap" style="margin-top:22px"><b>SCREEN 04b</b> · 求解進度覆蓋層 · 求解 15–45 秒，期間不可有百分比進度條</p>
+
+<div class="anw" style="--cw:760px">
+<div class="an anR" style="top:36px"><span class="anl"></span><div class="anb"><span class="ank">讀取 · SSE</span><div class="anr">GET /api/solver-jobs/{jobId}/stream</div><ul class="ant"><li>推送：目前變體序號、已耗時、候選解數、收斂間隙</li><li>gap 會跳動、不單調——只能當數字讀，不可畫成進度條</li></ul></div></div>
+<div class="an anR" style="top:236px"><span class="anl"></span><div class="anb"><span class="ank">動作</span><div class="anr">DELETE /api/solver-jobs/{jobId}</div><ul class="ant"><li>「中止」：保留已完成的變體</li></ul></div></div>
+<div class="dv-card" style="width:760px;padding:0">
+<div style="position:relative;height:330px;background:color-mix(in srgb,var(--color-text) 6%,transparent);display:flex;align-items:center;justify-content:center">
+<div style="position:absolute;inset:0;background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--color-text) 5%,transparent) 0 6px,transparent 6px 12px)"></div>
+<div class="blueprint" style="position:relative;width:420px;background:var(--color-bg);border:1px solid var(--color-accent);box-shadow:var(--shadow-lg);padding:18px 20px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div class="k" style="margin-bottom:8px">求解中 · {{ jobShort }}</div>
+<div style="font:600 30px/1 'Barlow Condensed','Noto Sans TC',sans-serif;letter-spacing:.02em">正在求第 2 / 3 份變體</div>
+<div style="font-size:11.5px;color:color-mix(in srgb,var(--color-text) 55%,transparent);margin-top:4px">立場：重視延續性（S1 ×0.5 · S2 ×1.5）</div>
+<div style="display:flex;gap:10px;margin-top:14px">
+<div style="flex:1;border:1px solid var(--color-divider);padding:8px 9px"><div class="k" style="margin-bottom:3px">已耗時 / 上限</div><div style="font:600 19px/1 'Barlow Condensed',sans-serif">8.4s <span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 45%,transparent)">/ 15s</span></div></div>
+<div style="flex:1;border:1px solid var(--color-divider);padding:8px 9px"><div class="k" style="margin-bottom:3px">本份候選解</div><div style="font:600 19px/1 'Barlow Condensed',sans-serif">4 <span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 45%,transparent)">個</span></div></div>
+<div style="flex:1;border:1px solid var(--color-divider);padding:8px 9px"><div class="k" style="margin-bottom:3px">收斂間隙 gap</div><div style="font:600 19px/1 'Barlow Condensed',sans-serif">3.1%</div></div>
+</div>
+<div style="font-size:10.5px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 52%,transparent);margin-top:9px">gap 會上下跳動、不單調，0 代表已證明最佳。CP-SAT 給不出可信的完成度，所以這裡沒有百分比進度條。</div>
+<div style="display:flex;gap:7px;margin-top:14px">
+<div style="flex:1;display:flex;gap:4px;align-items:center">
+<span style="font:600 10px 'Barlow Condensed',sans-serif;padding:3px 6px;background:var(--color-accent);color:var(--color-bg)">v-a 完成</span>
+<span style="font:600 10px 'Barlow Condensed',sans-serif;padding:3px 6px;border:1px solid var(--color-accent);color:var(--color-accent-800)">v-b 求解中</span>
+<span style="font:600 10px 'Barlow Condensed',sans-serif;padding:3px 6px;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);color:color-mix(in srgb,var(--color-text) 45%,transparent)">v-c 等待</span>
+</div>
+<button class="btn btn-secondary" style="flex:none">中止</button>
+</div>
+</div>
+</div>
+</div>
+<p class="dv-next">求解工作只回 jobId，進度靠 SSE 推送；三份變體依序求解，中止會保留已完成的變體。空缺數 &gt; 0 是正常結果——登記過多時求解器回「空缺最少」的變體，而不是整份 INFEASIBLE。</p>
+</div>

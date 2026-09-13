@@ -1,0 +1,131 @@
+<!doctype html><meta charset="utf-8">
+<!-- 由 Claude Design 專案 84f6e82e 的「排班系統 API 註解.dc.html」切出，供實作參考。
+     版面、互動、資訊架構以此為準；欄位與數字以 api-contract.yaml 為準。
+     {{ }} 與 <sc-for> 是 canvas 的資料綁定，對照 props="..." 裡的 default 看。
+     不要回寫到 Claude Design，那份 canvas 要在 canvas editor 裡改。 -->
+<link rel="stylesheet" href="industry.css">
+<style>
+body{margin:0;background:var(--color-bg);font-family:"Barlow","Noto Sans TC",system-ui,sans-serif}
+h1,h2,h3,h4,h5,h6{font-family:"Barlow Condensed","Noto Sans TC",system-ui,sans-serif}
+.dv-turn{padding:44px 48px 40px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);text-decoration:none}
+.dv-tname{font:600 14px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;letter-spacing:.02em}
+.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;margin-top:26px}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px}
+.anw{position:relative;padding:0 340px;width:calc(680px + var(--cw));box-sizing:border-box;align-self:flex-start}
+.an{position:absolute;display:flex;align-items:flex-start;width:334px}
+.anR{left:calc(340px + var(--cw))}
+.anL{right:calc(340px + var(--cw));flex-direction:row-reverse}
+.anl{flex:none;width:38px;height:1px;background:var(--color-accent);margin-top:10px;position:relative}
+.anl::before{content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--color-accent)}
+.anR .anl::before{left:-2px}
+.anL .anl::before{right:-2px}
+.anb{flex:1;min-width:0;border:1px solid var(--color-accent);padding:6px 9px;background:var(--color-bg)}
+.anL .anb{text-align:right}
+.ank{display:block;font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px}
+.anr{font:600 10.5px/1.55 ui-monospace,Menlo,monospace;letter-spacing:-.01em;color:var(--color-accent-900);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid color-mix(in srgb,var(--color-accent) 35%,transparent);word-break:break-word}
+.ant{margin:0;padding:0;list-style:none;font:400 11px/1.5 "Noto Sans TC",sans-serif}
+.ant li{position:relative;padding-left:9px}
+.ant li::before{content:"·";position:absolute;left:2px}
+.anL .ant li{padding-left:0;padding-right:9px}
+.anL .ant li::before{left:auto;right:2px}
+.anlg{display:flex;gap:18px;align-items:center;margin-top:14px;font:400 11.5px/1.5 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb,var(--color-text) 9%,transparent);color:var(--color-text);text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;font:400 12px/1.4 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-olabel b{font:600 16px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;color:var(--color-text)}
+.dv-card{background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-sm);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}
+.dv-next{margin:26px 0 0;font:12px/1.6 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.cap{font:400 11px/1.3 "Noto Sans TC",sans-serif;letter-spacing:.02em;color:color-mix(in srgb,var(--color-text) 50%,transparent);margin:0 0 7px}
+.cap b{font-weight:600;color:var(--color-text);letter-spacing:.06em;text-transform:uppercase;font-family:"Barlow Condensed",sans-serif;font-size:12px}
+.sq{width:100%;border-collapse:collapse}
+.sq th{padding:0;font:600 9px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em;color:color-mix(in srgb,var(--color-text) 55%,transparent);border-bottom:1px solid var(--color-divider)}
+.sq td{padding:0;border-bottom:1px solid color-mix(in srgb,var(--color-text) 7%,transparent);border-right:1px solid color-mix(in srgb,var(--color-text) 5%,transparent)}
+.k{font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.nv{display:flex;align-items:center;gap:20px;padding:0 16px;height:46px;border-bottom:1px solid var(--color-divider)}
+.nv a{font:400 13px/1 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 65%,transparent);text-decoration:none}
+.nv a.on{color:var(--color-accent);font-weight:500}
+.bd{font:600 17px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em;margin-right:auto;display:flex;align-items:center;gap:9px}
+</style>
+
+<div class="anw" style="--cw:700px">
+<p class="cap"><b>SCREEN 02</b> · 設定：區域與區域類型 ＋ 兩套點數規則</p>
+<div class="an anR" style="top:64px"><span class="anl"></span><div class="anb"><span class="ank">讀取／寫入</span><div class="anr">GET · PUT /api/settings/areas</div><ul class="ant"><li>區域 5 個、區域類型 3 種，整份取代</li><li>每區每日需求固定 1 人（H1_AREA_COVERAGE 讀這裡）</li></ul></div></div>
+<div class="an anR" style="top:236px"><span class="anl"></span><div class="anb"><span class="ank">讀取／寫入</span><div class="anr">GET · PUT /api/settings/ranks</div><ul class="ant"><li>10 身分、4 身分組、額度點數上限、點數類型</li><li>「可值類型」欄唯讀——由資格矩陣推導，不在這裡寫</li></ul></div></div>
+<div class="an anR" style="top:470px"><span class="anl"></span><div class="anb"><span class="ank">讀取／寫入</span><div class="anr">GET · PUT /api/settings/monthly-overrides/{ym}</div><ul class="ant"><li>R6 的額度上限是當月設定，走覆寫而非改身分</li></ul></div></div>
+<div class="an anR" style="top:620px"><span class="anl"></span><div class="anb"><span class="ank">讀取／寫入</span><div class="anr">GET · PUT /api/settings/point-rules</div><ul class="ant"><li>額度點數：平日 1 ／ 假日 2</li><li>公平性點數：Type A ／ Type B 兩張 4 列查表</li><li>連值兩個週六的加分點數與天數視窗</li><li>假日認定不在這裡，在行事曆</li></ul></div></div>
+<div class="dv-card" style="width:700px;display:flex;flex-direction:column">
+<div class="nv"><span class="bd">區域與點數</span></div>
+<div style="padding:14px 16px;display:flex;flex-direction:column;gap:16px">
+<div>
+<div style="display:flex;align-items:baseline;margin-bottom:7px"><span class="k">區域類型 3 種 · 區域 5 個 · 每區每日恰好 1 人</span><button class="btn btn-ghost" style="margin-left:auto">＋ 新增類型</button></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ s2Areas }}" as="a" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:9px;border:1px solid var(--color-divider);padding:7px 9px">
+<span style="{{ a.badgeS }}">{{ a.code }}</span>
+<span style="font-size:12.5px;width:78px">{{ a.name }}</span>
+<div style="display:flex;gap:4px;flex:1">
+<sc-for list="{{ a.areas }}" as="id" hint-placeholder-count="3"><span style="font:600 10.5px 'Barlow Condensed',sans-serif;padding:2px 6px;border:1px solid var(--color-divider)">{{ id }}</span></sc-for>
+</div>
+<span style="font-size:10.5px;color:color-mix(in srgb,var(--color-text) 52%,transparent)">{{ a.note }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div>
+<div style="display:flex;align-items:baseline;margin-bottom:7px"><span class="k">身分 10 種 · 身分組 4 組</span><span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 52%,transparent)">身分組是公平性的比較單位，組內比剩餘額度</span></div>
+<table class="table">
+<thead><tr><th style="width:56px">身分</th><th style="width:48px">組</th><th style="width:150px">可值類型 · 唯讀</th><th style="width:96px">額度點數上限</th><th style="width:80px">點數類型</th><th>本月覆寫</th></tr></thead>
+<tbody>
+<sc-for list="{{ s2Ranks }}" as="r" hint-placeholder-count="10">
+<tr><td><span style="{{ r.badgeS }}">{{ r.code }}</span></td>
+<td style="font:600 12px 'Barlow Condensed',sans-serif;color:color-mix(in srgb,var(--color-text) 55%,transparent)">{{ r.grp }}</td>
+<td style="font-size:11.5px;color:var(--color-accent-700)">{{ r.able }}</td>
+<td><span style="{{ r.capS }}">{{ r.cap }}</span></td>
+<td style="font:600 12px 'Barlow Condensed',sans-serif;color:color-mix(in srgb,var(--color-text) 62%,transparent)">{{ r.ptType }}</td>
+<td><div style="{{ r.ovWrapS }}"><input class="input" value="{{ r.ov }}" readonly style="width:56px;min-height:26px;padding:2px 6px;text-align:center"><span style="{{ r.ovTagS }}">已覆寫</span></div><span style="{{ r.ovDashS }}">—</span></td></tr>
+</sc-for>
+</tbody>
+</table>
+<div style="font-size:10.5px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 52%,transparent);margin-top:6px">額度點數上限與點數類型（A／B）的實際數值待案主提供，此處以「待填」佔位。NP 兩者皆為「不計」。</div>
+</div>
+<div>
+<div class="k" style="margin-bottom:7px">① 額度點數 QUOTA POINT · 硬上限</div>
+<div style="display:flex;gap:10px">
+<div class="field" style="flex:1"><label>平日 1 班</label><input class="input" value="{{ qWd }}" readonly></div>
+<div class="field" style="flex:1"><label>假日 1 班</label><input class="input" value="{{ qHo }}" readonly></div>
+<div class="field" style="flex:2"><label>假日認定</label><input class="input" value="在行事曆設定 · 週六 週日 國定假日" readonly></div>
+</div>
+<div style="font-size:10.5px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 52%,transparent);margin-top:6px">「假日」＝週六、週日與國定假日；補班日視為平日、1 點。假日怎麼認定在行事曆逐日覆寫，不在這一頁。</div>
+</div>
+<div>
+<div style="display:flex;align-items:baseline;margin-bottom:7px"><span class="k">② 公平性點數 FAIRNESS POINT · 實驗性</span><span class="tag tag-outline" style="margin-left:auto">S7 預設權重 0 · 停用</span></div>
+<div style="display:flex;gap:12px">
+<sc-for list="{{ s2Fair }}" as="t" hint-placeholder-count="2">
+<div style="flex:1">
+<div style="font:600 12px 'Barlow Condensed',sans-serif;letter-spacing:.06em;margin-bottom:4px">{{ t.label }}</div>
+<table class="table">
+<thead><tr><th style="width:64px">當日</th><th style="width:64px">隔日</th><th>點數</th></tr></thead>
+<tbody>
+<sc-for list="{{ t.rows }}" as="r" hint-placeholder-count="4">
+<tr><td style="font-size:11.5px">{{ r.d0 }}</td><td style="font-size:11.5px">{{ r.d1 }}</td><td><input class="input" value="{{ r.v }}" readonly style="width:52px;min-height:26px;padding:2px 6px;text-align:center"></td></tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</sc-for>
+</div>
+</div>
+<div>
+<div class="k" style="margin-bottom:7px">③ 連值兩個週六 加分</div>
+<div style="display:flex;gap:10px">
+<div class="field" style="flex:1"><label>加分點數</label><input class="input" value="{{ satBonus }}" readonly></div>
+<div class="field" style="flex:1"><label>天數視窗</label><input class="input" value="{{ satWindow }}" readonly></div>
+<div class="field" style="flex:2"><label>喘息判定</label><input class="input" value="視窗內是否有國定假日" readonly></div>
+</div>
+<div style="font-size:10.5px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 52%,transparent);margin-top:6px">國定假日只用在這條規則：判斷連值的兩個週六之間有沒有喘息的機會。不含一般的週六與週日。</div>
+</div>
+</div>
+</div>
+</div>
