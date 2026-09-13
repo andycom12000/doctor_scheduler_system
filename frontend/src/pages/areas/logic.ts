@@ -4,7 +4,7 @@
  *
  * 不掛 DOM，全部進 vitest。
  */
-import type { Area, AreaType, EligibilityMatrix, MonthlyOverride, Rank } from '@/api/types'
+import type { Area, AreaType, ConstraintSettings, EligibilityMatrix, MonthlyOverride, Rank } from '@/api/types'
 
 /**
  * 某個身分依資格矩陣可值的區域類型名稱，依 `areaTypes` 給定的順序join（矩陣本身是
@@ -33,6 +33,38 @@ export function pointTypeDisplay(pointType: Rank['pointType']): string {
 /** 某個區域類型底下的區域，依 `areas` 給定的順序。 */
 export function areasOfType(areaTypeCode: string, areas: Area[]): Area[] {
   return areas.filter((area) => area.areaTypeCode === areaTypeCode)
+}
+
+/**
+ * 區域類型列右側的「每日 X 人 · 每區 Y 人」註記：X 是該類型底下所有區域
+ * `requiredPerDay` 的加總，Y 取單一區域的 `requiredPerDay`。目前 5 個區域皆為 1
+ * （`api-contract.yaml` 的說明），但欄位允許之後不同；若同一類型底下的區域
+ * `requiredPerDay` 不一致，不硬湊一個「每區」數字，只顯示「每日」。
+ */
+export function areaTypeCapacityNote(areaTypeCode: string, areas: Area[]): string {
+  const inType = areasOfType(areaTypeCode, areas)
+  if (inType.length === 0) return ''
+  const total = inType.reduce((sum, area) => sum + area.requiredPerDay, 0)
+  const perAreaValues = new Set(inType.map((area) => area.requiredPerDay))
+  if (perAreaValues.size === 1) return `每日 ${total} 人 · 每區 ${inType[0].requiredPerDay} 人`
+  return `每日 ${total} 人`
+}
+
+export interface S7Status {
+  label: string
+  enabled: boolean
+}
+
+/**
+ * 公平性點數段落的「S7 權重 X · 啟用／停用」標籤，狀態即時讀 `settings/constraints`
+ * 的 `S7_FAIRNESS_POINT`（不是「預設」——使用者改過權重後這裡也會跟著變）。
+ * 找不到那條軟約束（設定還沒載入）回 `null`。
+ */
+export function s7Status(constraints: ConstraintSettings | null): S7Status | null {
+  const s7 = constraints?.soft.find((soft) => soft.code === 'S7_FAIRNESS_POINT')
+  if (!s7) return null
+  const enabled = s7.weight > 0
+  return { label: `S7 權重 ${s7.weight} · ${enabled ? '啟用' : '停用'}`, enabled }
 }
 
 /**

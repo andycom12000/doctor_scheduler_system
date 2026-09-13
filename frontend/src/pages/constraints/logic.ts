@@ -74,6 +74,15 @@ export function describeDirection(params: Record<string, unknown> | null | undef
   return null
 }
 
+/**
+ * 約束代碼（如 `H1_AREA_COVERAGE`、`S7_FAIRNESS_POINT`）→ 編號徽章（`H1`、`S7`）。
+ * 代碼形狀不對（沒有底線）時原樣回傳，不讓畫面空白。
+ */
+export function constraintBadge(code: string): string {
+  const [badge] = code.split('_')
+  return badge || code
+}
+
 /** 軟約束權重：0–100 的整數，0 即停用。 */
 export function isValidWeight(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0 && value <= 100

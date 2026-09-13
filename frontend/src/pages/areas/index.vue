@@ -24,7 +24,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import { CircleAlert, RotateCcw, Save } from 'lucide-vue-next'
+import { CircleAlert, Plus, RotateCcw, Save } from 'lucide-vue-next'
 import PageLayout from '@/components/PageLayout.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { invalidate, useResource } from '@/composables/useResource'
@@ -32,6 +32,7 @@ import { shiftYearMonth, useYearMonth, yearMonthOptions } from '@/composables/us
 import { describeError } from '@/api/errors'
 import {
   getAreaSettings,
+  getConstraints,
   getEligibilityMatrix,
   getMonthlyOverride,
   getPointRules,
@@ -43,6 +44,7 @@ import {
 import type { MonthlyOverride, PointRules, RankSettings } from '@/api/types'
 import {
   areasOfType,
+  areaTypeCapacityNote,
   cloneJson,
   eligibleAreaTypeNames,
   isEqualJson,
@@ -50,10 +52,15 @@ import {
   isPositiveInteger,
   monthlyOverrideKey,
   normalizeOverride,
+  s7Status,
 } from './logic'
 
 const { ym } = useYearMonth()
 const { confirm } = useConfirm()
+
+// 同一把 key 給「資格與約束」頁（`src/pages/constraints/index.vue`），那頁存檔成功會
+// invalidate('settings/constraints')，這裡跟著失效重抓，S7 標籤不必自己另外處理。
+const constraintsRes = useResource(computed(() => 'settings/constraints'), () => getConstraints())
 
 // 「指定月份覆寫」的年月，獨立於全域 useYearMonth（見上方檔案註解），預設抄目前年月。
 const overrideYm = ref(ym.value)
@@ -222,6 +229,18 @@ function groupName(groupCode: string): string {
   return ranksRes.data.value?.groups.find((group) => group.code === groupCode)?.name ?? groupCode
 }
 
+const s7 = computed(() => s7Status(constraintsRes.data.value ?? null))
+
+/** 「＋ 新增類型」原型階段尚未開放完整流程（issue #55），只提示不落盤。 */
+async function onAddAreaType(): Promise<void> {
+  await confirm({
+    title: '新增區域類型',
+    message: '新增區域類型會影響資格矩陣與求解，原型階段尚未開放。',
+    confirmText: '知道了',
+    cancelText: '關閉',
+  })
+}
+
 /**
  * 切換「指定月份覆寫」的年月。未儲存的覆寫草稿（`overrideDirty`，只看覆寫本身，
  * 不含 ranks／point-rules——那兩份跟月份無關）先問一次；取消時呼叫 `onCancelled`
@@ -278,7 +297,13 @@ function onOverrideMonthSelect(event: Event): void {
 
     <div class="areas">
       <section class="areas__section">
-        <h2 class="areas__heading">區域類型與區域 <span class="areas__note">每區每日恰好 1 人，唯讀</span></h2>
+        <h2 class="areas__heading">
+          區域類型與區域
+          <span class="areas__note">每區每日恰好 1 人，唯讀</span>
+          <button type="button" class="btn btn-secondary areas__add-type" @click="onAddAreaType">
+            <Plus :size="14" :stroke-width="1.5" />新增類型
+          </button>
+        </h2>
         <div v-if="areasRes.data.value" class="areas__types">
           <div v-for="type in areasRes.data.value.areaTypes" :key="type.code" class="areas__type-row">
             <span class="tag tag-accent">{{ type.code }}</span>
@@ -288,6 +313,7 @@ function onOverrideMonthSelect(event: Event): void {
                 {{ area.code }}
               </span>
             </div>
+            <span class="areas__type-capacity">{{ areaTypeCapacityNote(type.code, areasRes.data.value.areas) }}</span>
           </div>
         </div>
         <p v-else-if="areasRes.loading.value">載入中…</p>
@@ -433,7 +459,10 @@ function onOverrideMonthSelect(event: Event): void {
       </section>
 
       <section class="areas__section">
-        <h2 class="areas__heading">② 公平性點數 FAIRNESS POINT · 實驗性</h2>
+        <h2 class="areas__heading">
+          ② 公平性點數 FAIRNESS POINT · 實驗性
+          <span v-if="s7" class="tag areas__s7-tag" :class="s7.enabled ? 'tag-accent' : 'tag-neutral'">{{ s7.label }}</span>
+        </h2>
         <div v-if="pointRulesDraft" class="areas__fair">
           <div v-for="type in ['A', 'B']" :key="type" class="areas__fair-table">
             <div class="areas__fair-label">Type {{ type }}</div>
@@ -565,6 +594,19 @@ function onOverrideMonthSelect(event: Event): void {
   font: 600 10.5px 'Barlow Condensed', sans-serif;
   padding: 2px 6px;
   border: 1px solid var(--color-divider);
+}
+
+.areas__type-capacity {
+  flex: none;
+  font-size: 11px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.areas__s7-tag {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .table {

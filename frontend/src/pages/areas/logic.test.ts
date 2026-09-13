@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { reactive } from 'vue'
 import {
   areasOfType,
+  areaTypeCapacityNote,
   cloneJson,
   eligibleAreaTypeNames,
   isEqualJson,
@@ -11,9 +12,12 @@ import {
   normalizeOverride,
   pointTypeDisplay,
   quotaCapDisplay,
+  s7Status,
 } from './logic'
 import { areaTypes, areas } from '@/mocks/fixtures/areas'
+import { constraintSettings } from '@/mocks/fixtures/constraints'
 import { eligibilityMatrix } from '@/mocks/fixtures/ranks'
+import type { ConstraintSettings } from '@/api/types'
 
 describe('eligibleAreaTypeNames', () => {
   it('依 areaTypes 給定的順序 join 可值的區域類型名稱', () => {
@@ -46,6 +50,45 @@ describe('areasOfType', () => {
   it('回傳屬於該區域類型的區域，維持原順序', () => {
     expect(areasOfType('WARD', areas).map((a) => a.code)).toEqual(['A', 'B', 'C'])
     expect(areasOfType('ICU', areas).map((a) => a.code)).toEqual(['ICU'])
+  })
+})
+
+describe('areaTypeCapacityNote', () => {
+  it('每區 requiredPerDay 一致時顯示每日與每區兩個數字', () => {
+    expect(areaTypeCapacityNote('WARD', areas)).toBe('每日 3 人 · 每區 1 人')
+    expect(areaTypeCapacityNote('ICU', areas)).toBe('每日 1 人 · 每區 1 人')
+  })
+
+  it('同類型底下 requiredPerDay 不一致時只顯示每日，不硬湊每區數字', () => {
+    const mixed = [
+      { id: 'x', code: 'X', name: 'X', areaTypeCode: 'MIXED', requiredPerDay: 1 },
+      { id: 'y', code: 'Y', name: 'Y', areaTypeCode: 'MIXED', requiredPerDay: 2 },
+    ]
+    expect(areaTypeCapacityNote('MIXED', mixed)).toBe('每日 3 人')
+  })
+
+  it('該類型底下沒有區域時回空字串', () => {
+    expect(areaTypeCapacityNote('GHOST', areas)).toBe('')
+  })
+})
+
+describe('s7Status', () => {
+  it('權重 0（出廠預設）視為停用', () => {
+    expect(s7Status(constraintSettings)).toEqual({ label: 'S7 權重 0 · 停用', enabled: false })
+  })
+
+  it('權重 > 0 視為啟用', () => {
+    const edited: ConstraintSettings = {
+      ...constraintSettings,
+      soft: constraintSettings.soft.map((soft) =>
+        soft.code === 'S7_FAIRNESS_POINT' ? { ...soft, weight: 40 } : soft,
+      ),
+    }
+    expect(s7Status(edited)).toEqual({ label: 'S7 權重 40 · 啟用', enabled: true })
+  })
+
+  it('設定還沒載入（null）回 null', () => {
+    expect(s7Status(null)).toBeNull()
   })
 })
 

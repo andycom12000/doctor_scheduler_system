@@ -3,7 +3,17 @@
  * 全部不碰 DOM，方便進 vitest（`vitest.config.ts` 的 `environment: 'node'`）。
  */
 import { ApiError } from '@/api/client'
-import type { AreaType, ErrorCode, Rank, RankGroup, Staff, StaffStatus } from '@/api/types'
+import type {
+  AreaType,
+  ErrorCode,
+  PointBoardGroup,
+  PointBoardRow,
+  Rank,
+  RankGroup,
+  Staff,
+  StaffCounts,
+  StaffStatus,
+} from '@/api/types'
 
 export type StatusFilter = StaffStatus | 'all'
 export type GroupFilter = string | 'all'
@@ -77,6 +87,55 @@ export function sortByRankGroup(staff: Staff[], ranks: Rank[], groups: RankGroup
 /** 篩選 + 排序一次做完，`index.vue` 的清單只需要呼叫這個。 */
 export function visibleStaff(staff: Staff[], ranks: Rank[], groups: RankGroup[], options: StaffFilterOptions): Staff[] {
   return sortByRankGroup(filterStaff(staff, ranks, options), ranks, groups)
+}
+
+/** 篩選列右側的「共 X 人 · 在職 Y · 停用 Z · 無分頁」摘要，`X` 是 `active + inactive`。 */
+export function staffCountsLabel(counts: StaffCounts): string {
+  const active = counts.active ?? 0
+  const inactive = counts.inactive ?? 0
+  return `共 ${active + inactive} 人 · 在職 ${active} · 停用 ${inactive} · 無分頁`
+}
+
+/**
+ * 點數看板依身分組分區，這裡攤平找某人那一列；人員不在看板上（例如月中才加入、
+ * 尚未出現在任何一組）回 `undefined`，呼叫端決定要顯示「—」還是別的訊息。
+ */
+export function findPointBoardRow(groups: PointBoardGroup[], staffId: string): PointBoardRow | undefined {
+  for (const group of groups) {
+    const row = group.rows.find((r) => r.staffId === staffId)
+    if (row) return row
+  }
+  return undefined
+}
+
+/**
+ * 右側表單姓名旁的「本月 X/Y · 餘 Z · 假日 W 班」，資料是**額度點數**
+ * （CONTEXT.md：不可與公平性點數混用）。`quotaCap` 為 `null` 只有 NP。
+ * 查不到列回 `null`，呼叫端決定顯示「—」還是「本月尚無值班表」。
+ */
+export function describeQuotaLoad(row: PointBoardRow | undefined): string | null {
+  if (!row) return null
+  if (row.quotaCap === null) return `本月 ${row.quotaPoints} · 不計 · 假日 ${row.holidayDuties} 班`
+  return `本月 ${row.quotaPoints}/${row.quotaCap} · 餘 ${row.quotaRemaining} · 假日 ${row.holidayDuties} 班`
+}
+
+/** 點數看板 404（該月尚無值班表）判讀，用 `status` 判斷、不字串比對訊息內容。 */
+export function isNotFoundError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404
+}
+
+export interface AreaTypeChip {
+  code: string
+  name: string
+  eligible: boolean
+}
+
+/**
+ * 可值區域類型三個晶片全部顯示（可值的亮、不可值的灰），順序依 `areaTypes` 給定的順序，
+ * 不因為某人不可值某類型就把它從清單裡拿掉。
+ */
+export function areaTypeChips(areaTypes: AreaType[], eligible: string[]): AreaTypeChip[] {
+  return areaTypes.map((type) => ({ code: type.code, name: type.name, eligible: eligible.includes(type.code) }))
 }
 
 /**

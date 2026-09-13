@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { constraintSettings } from '@/mocks/fixtures/constraints'
 import {
   cloneJson,
+  constraintBadge,
   describeDirection,
   describeHardConstraintParams,
   describeMetric,
@@ -113,6 +114,17 @@ describe('isValidWeight', () => {
     expect(isValidWeight(1.5)).toBe(false)
     expect(isValidWeight('')).toBe(false)
     expect(isValidWeight(NaN)).toBe(false)
+  })
+})
+
+describe('constraintBadge', () => {
+  it('取代碼底線前的編號（H1、S7）', () => {
+    expect(constraintBadge('H1_AREA_COVERAGE')).toBe('H1')
+    expect(constraintBadge('S7_FAIRNESS_POINT')).toBe('S7')
+  })
+
+  it('沒有底線的畸形代碼原樣回傳', () => {
+    expect(constraintBadge('GHOST')).toBe('GHOST')
   })
 })
 
