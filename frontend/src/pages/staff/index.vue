@@ -68,7 +68,6 @@ const draft = reactive<Draft>(blankDraft())
 const saving = ref(false)
 const employeeNoError = ref<string | null>(null)
 const formError = ref<string | null>(null)
-const statusNote = ref<string | null>(null)
 const deleteNote = ref<string | null>(null)
 const statusButtonEl = ref<HTMLButtonElement | null>(null)
 
@@ -105,7 +104,6 @@ function selectStaff(staff: Staff): void {
 function clearMessages(): void {
   employeeNoError.value = null
   formError.value = null
-  statusNote.value = null
   deleteNote.value = null
 }
 
@@ -158,7 +156,6 @@ async function toggleStatus(): Promise<void> {
   const next: StaffStatus = staff.status === 'active' ? 'inactive' : 'active'
   saving.value = true
   formError.value = null
-  statusNote.value = null
   try {
     await setStaffStatus(staff.id, { status: next })
     await invalidate('staff')
@@ -191,6 +188,7 @@ async function remove(): Promise<void> {
   } catch (err) {
     if (errorCodeOf(err) === 'STAFF_HAS_DUTIES') {
       deleteNote.value = describeError(err)
+      saving.value = false
       await nextTick()
       statusButtonEl.value?.focus()
     } else {
@@ -206,7 +204,7 @@ async function remove(): Promise<void> {
   <PageLayout title="人員維護" :subtitle="`在職 ${activeCount} 人`">
     <template #actions>
       <button type="button" class="btn btn-primary" @click="startCreate">
-        <Plus :size="16" :stroke-width="1.5" />＋ 新增人員
+        <Plus :size="16" :stroke-width="1.5" />新增人員
       </button>
     </template>
 
@@ -242,6 +240,9 @@ async function remove(): Promise<void> {
 
         <div v-if="staffResource.error.value" class="staff-list__message">
           {{ describeError(staffResource.error.value) }}
+        </div>
+        <div v-else-if="staffResource.loading.value && !staffResource.data.value" class="staff-list__message">
+          載入中…
         </div>
         <div v-else class="staff-list__table">
           <div class="staff-row staff-row--head">
@@ -279,7 +280,7 @@ async function remove(): Promise<void> {
 
       <section class="staff-form">
         <template v-if="mode === 'idle'">
-          <p class="staff-form__placeholder">選擇左側人員以編輯，或按「＋ 新增人員」建立新資料。</p>
+          <p class="staff-form__placeholder">選擇左側人員以編輯，或按「新增人員」建立新資料。</p>
         </template>
         <template v-else>
           <div>
@@ -330,7 +331,7 @@ async function remove(): Promise<void> {
                 >停用</span
               >
             </div>
-            <p v-if="statusNote" class="staff-form__hint">{{ statusNote }}</p>
+            <p class="staff-form__hint">停用不影響歷史值班表；已有值班紀錄者無法刪除。</p>
           </div>
 
           <div v-if="mode === 'edit' && selectedStaff">
@@ -379,6 +380,14 @@ async function remove(): Promise<void> {
 </template>
 
 <style scoped>
+/* Industry 的 .k（小標籤字樣），只存在於 docs/design-ref/industry.css，這裡用 token 補一份。 */
+.k {
+  font: 600 10px var(--font-heading);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .staff-page {
   display: flex;
   height: 100%;
