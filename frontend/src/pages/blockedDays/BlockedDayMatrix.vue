@@ -119,7 +119,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
             :class="{ 'cell--blocked': cellDay.blocked, 'cell--holiday': cellDay.isHoliday }"
             :data-paint-key="paintKey(row.staffId, cellDay.date)"
             @pointerdown="onCellPointerDown($event, row.staffId, cellDay.date)"
-          ></div>
+          >{{ cellDay.blocked ? '×' : '' }}</div>
           <div class="cell cell--count" :class="{ 'cell--over-cap': row.overCap }">{{ row.count }}</div>
           <div class="cell cell--count" :class="{ 'cell--over-cap': row.overCap }">{{ row.remaining }}</div>
         </template>
@@ -150,7 +150,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
     <div class="legend">
       <span class="legend__title">圖例</span>
       <span class="legend__item"
-        ><span class="legend__swatch legend__swatch--blocked"></span>不可排班日（硬約束，計入 {{ monthlyCap }}
+        ><span class="legend__swatch legend__swatch--blocked">×</span>不可排班日（硬約束，計入 {{ monthlyCap }}
         天上限）</span
       >
       <span class="legend__item"><span class="legend__swatch legend__swatch--holiday"></span>假日（週六、週日與國定假日）</span>
@@ -293,12 +293,15 @@ function onContainerPointerCancel(event: PointerEvent): void {
   outline-offset: -1px;
 }
 
+/* 設計稿（design-05.png）是實心 `--color-accent` 深藍方塊、中間白色 ×——跟排班主表
+   H5「排到已登記的不可排班日」共用的斜紋（`--cell-blocked-bg`）刻意分開，這裡兩碼事：
+   前者是「這格本來就登記了不可排班日」的登記狀態，後者是「明明登記了卻被排班」的違規。
+   假日直欄的淺灰底（`.cell--holiday`）只在未登記的格子上看得到，登記格整格蓋掉是預期行為。 */
 .cell--blocked {
-  background: var(--cell-blocked-bg);
-}
-
-.cell--blocked.cell--holiday {
-  background: var(--cell-blocked-bg), var(--cell-holiday-bg);
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-weight: 700;
+  font-size: 11px;
 }
 
 .cell--count {
@@ -349,13 +352,19 @@ function onContainerPointerCancel(event: PointerEvent): void {
 }
 
 .legend__swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 15px;
   border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
 .legend__swatch--blocked {
-  background: var(--cell-blocked-bg);
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-weight: 700;
+  font-size: 10px;
 }
 
 .legend__swatch--holiday {

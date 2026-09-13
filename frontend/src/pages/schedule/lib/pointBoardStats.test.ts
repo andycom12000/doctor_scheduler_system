@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeGroupUtilization } from './pointBoardStats'
+import { computeGroupUtilization, memberRankCodes } from './pointBoardStats'
 import type { PointBoardGroup, PointBoardRow } from '@/api/types'
 
 function row(overrides: Partial<PointBoardRow> & { staffId: string }): PointBoardRow {
@@ -59,5 +59,26 @@ describe('computeGroupUtilization', () => {
 
   it('空群組陣列回空陣列', () => {
     expect(computeGroupUtilization([])).toEqual([])
+  })
+})
+
+describe('memberRankCodes', () => {
+  it('依 rows 出現順序去重身分代碼，組成「PGY1 PGY2 R1 PTR」這種字串', () => {
+    const group: PointBoardGroup = {
+      groupCode: 'JUNIOR',
+      groupName: '低年級',
+      rows: [
+        row({ staffId: 's-1', rankCode: 'PGY1' }),
+        row({ staffId: 's-2', rankCode: 'PGY1' }),
+        row({ staffId: 's-3', rankCode: 'PGY2' }),
+        row({ staffId: 's-4', rankCode: 'R1' }),
+        row({ staffId: 's-5', rankCode: 'PTR' }),
+      ],
+    }
+    expect(memberRankCodes(group)).toBe('PGY1 PGY2 R1 PTR')
+  })
+
+  it('空組回空字串', () => {
+    expect(memberRankCodes({ rows: [] })).toBe('')
   })
 })

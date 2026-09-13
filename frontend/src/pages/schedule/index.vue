@@ -26,8 +26,8 @@ import UtilizationPanel from './UtilizationPanel.vue'
 import ViolationSidebar from './ViolationSidebar.vue'
 import CandidatePanel from './CandidatePanel.vue'
 import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancyCountMap } from './lib/scheduleGrid'
-import { buildCellRenderIndex, projectRenderIndexToStaffView } from './lib/violationStyle'
-import { domIdForCellKey, tabForCellKey } from './lib/cellNav'
+import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
+import { resolveJumpTarget } from './lib/cellNav'
 
 const { ym } = useYearMonth()
 const router = useRouter()
@@ -92,6 +92,9 @@ const cellRenderIndex = computed(() => buildCellRenderIndex(violationsRes.data.v
 // H1／H2／H5 這些「逐格」違規原始用 area:{areaId}:{date} 記位置；日 × 人是「人 × 日」的格線，
 // 轉成「當天在那個區值班的人」才畫得出來（PR #44 review：H5 在日 × 人畫不出來）。
 const dayByStaffRenderIndex = computed(() => projectRenderIndexToStaffView(cellRenderIndex.value, dutyMapByArea.value))
+// 反方向：H3／H4／H6／H7 是 staff:{staffId}:{date}，區域 × 日要反查「當天值哪一區」才上得了色
+// （PR #57 審查回饋 B1，右側欄限定區域 × 日之後這幾條違規原本完全不會被畫出來）。
+const areaByDayRenderIndex = computed(() => projectRenderIndexToAreaView(cellRenderIndex.value, dutyMapByStaff.value))
 const vacancyCounts = computed(() => vacancyCountMap(vacanciesRes.data.value?.byDate ?? []))
 
 // -- 單日詳表用：`GET days/{date}` 只帶 area.code（如 CHIEF），中文全名與區域類型
@@ -191,11 +194,11 @@ async function onAssigned(): Promise<void> {
 async function jumpToViolation(violation: Violation): Promise<void> {
   const cellKey = violation.cellKeys[0]
   if (!cellKey) return
-  const tab = tabForCellKey(cellKey)
-  if (tab) activeTab.value = tab
+  const target = resolveJumpTarget(cellKey, dutyMapByStaff.value)
+  if (!target) return
+  activeTab.value = target.tab
   await nextTick()
-  const domId = domIdForCellKey(cellKey)
-  if (domId) document.getElementById(domId)?.scrollIntoView({ block: 'center', inline: 'center' })
+  if (target.domId) document.getElementById(target.domId)?.scrollIntoView({ block: 'center', inline: 'center' })
 }
 
 // -- 工具列：只有「重新求解」有作用；其餘停用等 #34 -----------------------------------
@@ -212,6 +215,42 @@ function goToBlockedDays(): void {
 <template>
   <PageLayout title="排班主表" :subtitle="subtitle">
     <template #actions>
+      <nav
+        v-if="!isEmptyMonth && !scheduleErrorMessage && schedule.data.value"
+        class="schedule__tabs"
+        role="tablist"
+      >
+        <button
+          type="button"
+          role="tab"
+          class="schedule__tab"
+          :class="{ 'schedule__tab--active': activeTab === 'area-by-day' }"
+          :aria-selected="activeTab === 'area-by-day'"
+          @click="activeTab = 'area-by-day'"
+        >
+          區域 × 日
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="schedule__tab"
+          :class="{ 'schedule__tab--active': activeTab === 'day-by-staff' }"
+          :aria-selected="activeTab === 'day-by-staff'"
+          @click="activeTab = 'day-by-staff'"
+        >
+          日 × 人
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="schedule__tab"
+          :class="{ 'schedule__tab--active': activeTab === 'day-detail' }"
+          :aria-selected="activeTab === 'day-detail'"
+          @click="activeTab = 'day-detail'"
+        >
+          單日詳表
+        </button>
+      </nav>
       <button type="button" class="btn btn-secondary" disabled title="#34">匯出 Excel</button>
       <button type="button" class="btn btn-secondary" disabled title="#34">驗證約束</button>
       <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
@@ -234,33 +273,6 @@ function goToBlockedDays(): void {
     />
 
     <div v-else class="schedule">
-      <nav class="schedule__tabs">
-        <button
-          type="button"
-          class="schedule__tab"
-          :class="{ 'schedule__tab--active': activeTab === 'area-by-day' }"
-          @click="activeTab = 'area-by-day'"
-        >
-          區域 × 日
-        </button>
-        <button
-          type="button"
-          class="schedule__tab"
-          :class="{ 'schedule__tab--active': activeTab === 'day-by-staff' }"
-          @click="activeTab = 'day-by-staff'"
-        >
-          日 × 人
-        </button>
-        <button
-          type="button"
-          class="schedule__tab"
-          :class="{ 'schedule__tab--active': activeTab === 'day-detail' }"
-          @click="activeTab = 'day-detail'"
-        >
-          單日詳表
-        </button>
-      </nav>
-
       <div class="schedule__content">
         <div class="schedule__main">
           <AreaByDayGrid
@@ -270,7 +282,7 @@ function goToBlockedDays(): void {
             :days="days"
             :duty-map="dutyMapByArea"
             :staff-directory="staffDirectory"
-            :cell-render-index="cellRenderIndex"
+            :cell-render-index="areaByDayRenderIndex"
             :vacancy-counts="vacancyCounts"
             :point-board-groups="pointBoardGroups"
             @cell-click="openCell"
@@ -282,7 +294,7 @@ function goToBlockedDays(): void {
             :point-board-groups="pointBoardGroups"
             :duties-by-staff="dutyMapByStaff"
             :staff-render-index="dayByStaffRenderIndex"
-            :vacancy-by-date="vacanciesRes.data.value?.byDate ?? []"
+            :vacancy-counts="vacancyCounts"
             :staff-directory="staffDirectory"
             :blocked-set="blockedSet"
             @cell-click="openCell"
@@ -311,7 +323,7 @@ function goToBlockedDays(): void {
           />
         </div>
 
-        <aside class="schedule__aside">
+        <aside v-if="activeTab === 'area-by-day'" class="schedule__aside">
           <UtilizationPanel :groups="pointBoardGroups" />
           <ViolationSidebar :violations="violationsRes.data.value?.violations ?? []" @jump="jumpToViolation" />
         </aside>
@@ -346,10 +358,14 @@ function goToBlockedDays(): void {
   min-height: 0;
 }
 
+/* 分頁列移進工具列（PageLayout 的 actions slot）：#53 設計稿把它跟匯出／驗證／求解／發布
+   放在同一列、分頁在左、其餘按鈕在右。`page-layout__actions` 是內容自撐開的 flex row（不能改
+   PageLayout.vue），這裡用固定 margin-right 隔開兩組，不用 flex:1 撐開（撐不開，見 PR 說明）。 */
 .schedule__tabs {
   display: flex;
   gap: 2px;
   flex: none;
+  margin-right: var(--space-6);
 }
 
 .schedule__tab {
@@ -357,7 +373,6 @@ function goToBlockedDays(): void {
   font: 500 13px var(--font-heading);
   background: transparent;
   border: 1px solid var(--color-divider);
-  border-bottom: none;
   cursor: pointer;
   color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }

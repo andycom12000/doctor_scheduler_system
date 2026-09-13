@@ -133,3 +133,51 @@ export function filledCountByDate(
 export function vacancyCountMap(byDate: readonly { date: string; count: number }[]): Map<string, number> {
   return new Map(byDate.map((entry) => [entry.date, entry.count]))
 }
+
+/** 日 × 人「空缺」欄：0 顯示空白（issue #53），非 0 才印數字。 */
+export function vacancyCountLabel(count: number): string {
+  return count > 0 ? String(count) : ''
+}
+
+export interface StaffFooterColumn {
+  staffId: string
+  /** 當月班數（`PointBoardRow.duties`，或由值班表就地數出來的人——當月有班但已停用）。 */
+  duties: number
+  /** 額度點數已排／上限；`quotaCap` 為 null（NP 不計，或查不到資料的停用者）時是 `—`。 */
+  quotaLabel: string
+  /** `quotaLabel` 是 `—` 時，滑鼠停留可看到的原因；一般人（有額度上限）是 `undefined`（審查回饋 N7）。 */
+  quotaTitle?: string
+  /** 額度已排 ≥ 上限（打平即算，後端在超過前就擋下寫入，不會真的超出）；設計稿要求上色提醒（審查回饋 N7）。 */
+  quotaAtCap: boolean
+}
+
+/**
+ * 日 × 人底部「班數」「額度」兩列：依點數看板分組的順序攤平，
+ * 「當月有班但已停用」的人（不在點數看板裡）額度顯示 `—`、班數從值班表數。
+ */
+export function staffFooterColumns(
+  groups: readonly PointBoardGroup[],
+  extraStaff: readonly { staffId: string }[],
+  dutiesByStaff: ReadonlyMap<string, string>,
+): StaffFooterColumn[] {
+  const columns: StaffFooterColumn[] = []
+  for (const group of groups) {
+    for (const row of group.rows) {
+      columns.push({
+        staffId: row.staffId,
+        duties: row.duties,
+        quotaLabel: row.quotaCap === null ? '—' : `${row.quotaPoints}/${row.quotaCap}`,
+        quotaTitle: row.quotaCap === null ? 'NP 不計額度' : undefined,
+        quotaAtCap: row.quotaCap !== null && row.quotaPoints >= row.quotaCap,
+      })
+    }
+  }
+  for (const extra of extraStaff) {
+    let duties = 0
+    for (const key of dutiesByStaff.keys()) {
+      if (key.startsWith(`${extra.staffId}|`)) duties += 1
+    }
+    columns.push({ staffId: extra.staffId, duties, quotaLabel: '—', quotaTitle: '不在點數看板', quotaAtCap: false })
+  }
+  return columns
+}
