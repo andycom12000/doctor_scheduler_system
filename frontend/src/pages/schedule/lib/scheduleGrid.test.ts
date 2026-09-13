@@ -203,21 +203,50 @@ describe('staffFooterColumns', () => {
     },
   ]
 
-  it('在職人員印已排／上限，NP（quotaCap 為 null）印 —', () => {
+  it('在職人員印已排／上限，NP（quotaCap 為 null）印 —，帶「NP 不計額度」的 title', () => {
     const columns = staffFooterColumns(groups, [], new Map())
     expect(columns).toEqual([
-      { staffId: 'staff-001', duties: 8, quotaLabel: '6/10' },
-      { staffId: 'staff-np', duties: 3, quotaLabel: '—' },
+      { staffId: 'staff-001', duties: 8, quotaLabel: '6/10', quotaTitle: undefined, quotaAtCap: false },
+      { staffId: 'staff-np', duties: 3, quotaLabel: '—', quotaTitle: 'NP 不計額度', quotaAtCap: false },
     ])
   })
 
-  it('當月有班但已停用的人（extraStaff）額度印 —，班數由值班表數出來', () => {
+  it('額度已排 ≥ 上限時 quotaAtCap 為 true（設計稿要求上色提醒）', () => {
+    const atCapGroups: PointBoardGroup[] = [
+      {
+        groupCode: 'JUNIOR',
+        groupName: '低年級',
+        rows: [
+          {
+            staffId: 'staff-002',
+            name: '林小美',
+            rankCode: 'PGY2',
+            quotaPoints: 9,
+            quotaCap: 9,
+            quotaRemaining: 0,
+            duties: 9,
+            holidayDuties: 0,
+          },
+        ],
+      },
+    ]
+    const columns = staffFooterColumns(atCapGroups, [], new Map())
+    expect(columns[0].quotaAtCap).toBe(true)
+  })
+
+  it('當月有班但已停用的人（extraStaff）額度印 —、帶「不在點數看板」的 title，班數由值班表數出來', () => {
     const dutiesByStaffMap = new Map([
       ['staff-050|2026-09-01', 'area-a'],
       ['staff-050|2026-09-05', 'area-b'],
       ['staff-001|2026-09-02', 'area-a'],
     ])
     const columns = staffFooterColumns(groups, [{ staffId: 'staff-050' }], dutiesByStaffMap)
-    expect(columns.find((c) => c.staffId === 'staff-050')).toEqual({ staffId: 'staff-050', duties: 2, quotaLabel: '—' })
+    expect(columns.find((c) => c.staffId === 'staff-050')).toEqual({
+      staffId: 'staff-050',
+      duties: 2,
+      quotaLabel: '—',
+      quotaTitle: '不在點數看板',
+      quotaAtCap: false,
+    })
   })
 })

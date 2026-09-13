@@ -145,6 +145,10 @@ export interface StaffFooterColumn {
   duties: number
   /** 額度點數已排／上限；`quotaCap` 為 null（NP 不計，或查不到資料的停用者）時是 `—`。 */
   quotaLabel: string
+  /** `quotaLabel` 是 `—` 時，滑鼠停留可看到的原因；一般人（有額度上限）是 `undefined`（審查回饋 N7）。 */
+  quotaTitle?: string
+  /** 額度已排 ≥ 上限（打平即算，後端在超過前就擋下寫入，不會真的超出）；設計稿要求上色提醒（審查回饋 N7）。 */
+  quotaAtCap: boolean
 }
 
 /**
@@ -163,6 +167,8 @@ export function staffFooterColumns(
         staffId: row.staffId,
         duties: row.duties,
         quotaLabel: row.quotaCap === null ? '—' : `${row.quotaPoints}/${row.quotaCap}`,
+        quotaTitle: row.quotaCap === null ? 'NP 不計額度' : undefined,
+        quotaAtCap: row.quotaCap !== null && row.quotaPoints >= row.quotaCap,
       })
     }
   }
@@ -171,7 +177,7 @@ export function staffFooterColumns(
     for (const key of dutiesByStaff.keys()) {
       if (key.startsWith(`${extra.staffId}|`)) duties += 1
     }
-    columns.push({ staffId: extra.staffId, duties, quotaLabel: '—' })
+    columns.push({ staffId: extra.staffId, duties, quotaLabel: '—', quotaTitle: '不在點數看板', quotaAtCap: false })
   }
   return columns
 }

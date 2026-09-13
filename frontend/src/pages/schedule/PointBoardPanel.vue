@@ -34,7 +34,9 @@ function percentOf(points: number, cap: number | null): number {
     </div>
     <div class="point-board__cols">
       <div v-for="group in groups" :key="group.groupCode" class="point-board__col">
-        <div class="point-board__col-head">{{ group.groupName }} · {{ memberRankCodes(group) }}</div>
+        <div class="point-board__col-head" :title="`${group.groupName} · ${memberRankCodes(group)}`">
+          {{ group.groupName }} · {{ memberRankCodes(group) }}
+        </div>
         <div v-for="row in group.rows" :key="row.staffId" class="point-board__row">
           <span class="point-board__rank">{{ row.rankCode }}</span>
           <span class="point-board__name">{{ row.name }}</span>
@@ -128,6 +130,9 @@ function percentOf(points: number, cap: number | null): number {
   align-items: center;
   gap: 6px;
   padding: 1px 3px;
+  /* 欄很窄時（很多分組並排）允許換行——「由上月帶入」註記換到自己的整行，
+     不要擠進姓名欄逼它換行（審查回饋 V2）。 */
+  flex-wrap: wrap;
 }
 
 .point-board__rank {
@@ -196,7 +201,9 @@ function percentOf(points: number, cap: number | null): number {
 }
 
 .point-board__carry {
-  flex: none;
+  /* 獨佔一整行，跟姓名欄搶位置不會逼它換行（審查回饋 V2）；縮排對齊姓名欄起始位置。 */
+  flex: 0 0 100%;
+  padding-left: 40px;
   font-size: 9px;
   color: var(--color-accent-800);
 }

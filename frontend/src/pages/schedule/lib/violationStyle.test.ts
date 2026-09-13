@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCellRenderIndex, projectRenderIndexToStaffView, renderKindOf } from './violationStyle'
+import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView, renderKindOf } from './violationStyle'
 import type { Violation } from '@/api/types'
 
 function violation(overrides: Partial<Violation> & { code: string; cellKeys: string[] }): Violation {
@@ -108,5 +108,43 @@ describe('projectRenderIndexToStaffView', () => {
     const dutiesByArea = new Map([['area-a|2026-09-05', 'staff-003']])
     const projected = projectRenderIndexToStaffView(index, dutiesByArea)
     expect(projected.get('staff:staff-003:2026-09-05')).toBe('violation-stripe')
+  })
+})
+
+describe('projectRenderIndexToAreaView', () => {
+  it('把 staff: 的 H4 轉到當天值班的區域格（PR #57 審查回饋 B1：區域 × 日原本畫不出這幾條）', () => {
+    const index = buildCellRenderIndex([
+      violation({ code: 'H4_MIN_GAP', cellKeys: ['staff:staff-001:2026-09-14'] }),
+    ])
+    const dutiesByStaff = new Map([['staff-001|2026-09-14', 'area-icu']])
+    const projected = projectRenderIndexToAreaView(index, dutiesByStaff)
+    expect(projected.get('area:area-icu:2026-09-14')).toBe('violation-bg')
+    expect(projected.has('staff:staff-001:2026-09-14')).toBe(false)
+  })
+
+  it('查不到當天值班區域就跳過（理論上不該發生，防禦用）', () => {
+    const index = buildCellRenderIndex([
+      violation({ code: 'H4_MIN_GAP', cellKeys: ['staff:staff-001:2026-09-14'] }),
+    ])
+    const projected = projectRenderIndexToAreaView(index, new Map())
+    expect(projected.size).toBe(0)
+  })
+
+  it('area: 開頭的違規原樣併入', () => {
+    const index = buildCellRenderIndex([
+      violation({ code: 'H5_BLOCKED_DAY', cellKeys: ['area:area-a:2026-09-05'] }),
+    ])
+    const projected = projectRenderIndexToAreaView(index, new Map())
+    expect(projected.get('area:area-a:2026-09-05')).toBe('violation-stripe')
+  })
+
+  it('同一格 area: 與 staff: 兩邊都命中時，取優先度較高者', () => {
+    const index = buildCellRenderIndex([
+      violation({ code: 'H2_ELIGIBILITY', cellKeys: ['area:area-a:2026-09-05'] }),
+      violation({ code: 'H5_BLOCKED_DAY', cellKeys: ['staff:staff-003:2026-09-05'] }),
+    ])
+    const dutiesByStaff = new Map([['staff-003|2026-09-05', 'area-a']])
+    const projected = projectRenderIndexToAreaView(index, dutiesByStaff)
+    expect(projected.get('area:area-a:2026-09-05')).toBe('violation-stripe')
   })
 })

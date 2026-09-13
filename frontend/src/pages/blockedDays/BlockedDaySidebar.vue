@@ -85,15 +85,22 @@ function joinNames(list: StaffCountView[], limit = 6): string {
         <div v-for="{ layer, ratio } in supplyLayers" :key="layer.areaTypeCodes.join(',')" class="layer">
           <div class="layer__head">
             <span class="layer__label">{{ layerLabel(layer.areaTypeCodes, areaTypeNameByCode) }}</span>
-            <span class="layer__ratio" :class="{ 'layer__ratio--negative': (ratio.ratio ?? 1) < 1 }">
+            <span
+              class="layer__ratio"
+              :class="{ 'layer__ratio--negative': (ratio.ratio ?? 1) < 1 }"
+              :title="`供給 ${layer.supplyPoints} ÷ 需求 ${layer.demandPoints}（額度點數）`"
+            >
               {{ ratio.ratioLabel }}
             </span>
           </div>
           <div class="layer__track">
             <div class="layer__bar" :style="{ width: `${ratio.utilizationPercent}%` }" />
           </div>
-          <div class="layer__note">
-            需求 {{ layer.demandPoints }} · 供給 {{ layer.supplyPoints }}（額度點數）· 餘裕 {{ layer.headroom }}
+          <!-- 餘裕為負＝供給不足，是要立刻處理的警訊，不能用跟其他行一樣的灰階副文字蓋過去
+               （frontend-plan §3.4；審查回饋 N2）。 -->
+          <div class="layer__note" :class="{ 'layer__note--negative': layer.headroom < 0 }">
+            需求 {{ layer.demandPoints }} · 供給 {{ layer.supplyPoints }}（額度點數）·
+            {{ layer.headroom < 0 ? `供給不足 ${-layer.headroom} 點` : `餘裕 ${layer.headroom}` }}
           </div>
         </div>
       </div>
@@ -239,6 +246,11 @@ function joinNames(list: StaffCountView[], limit = 6): string {
   margin-top: 3px;
   font-size: 10.5px;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.layer__note--negative {
+  color: var(--color-accent-900);
+  font-weight: 600;
 }
 
 .ward-hint {

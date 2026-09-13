@@ -349,7 +349,11 @@ export interface SupplyRatioView {
   ratio: number | null
   /** 「9.1×」這種顯示字串；`ratio` 為 null 時是 `—`。 */
   ratioLabel: string
-  /** 進度條寬度（0–100）：`demandPoints / supplyPoints`，`supplyPoints` ≤ 0 時是 0。 */
+  /**
+   * 進度條寬度（0–100）：`demandPoints / supplyPoints`。`supplyPoints` ≤ 0 時，
+   * 只要還有需求（`demandPoints > 0`）就是滿條 100（供給掛零、需求全部落空，
+   * 是最嚴重的情況，不能顯示成空條）；`demandPoints` 也 ≤ 0（沒有需求也沒有供給）才是 0。
+   */
   utilizationPercent: number
   /** `supply − demand`，原樣帶出給副文字用（不重算）。 */
   headroom: number
@@ -369,7 +373,8 @@ export function computeSupplyRatio(layer: {
   const { demandPoints, supplyPoints, headroom } = layer
   const ratio = demandPoints > 0 ? supplyPoints / demandPoints : null
   const ratioLabel = ratio === null ? '—' : `${ratio.toFixed(1)}×`
-  const utilizationPercent = supplyPoints > 0 ? Math.min(100, Math.round((demandPoints / supplyPoints) * 100)) : 0
+  const utilizationPercent =
+    supplyPoints > 0 ? Math.min(100, Math.round((demandPoints / supplyPoints) * 100)) : demandPoints > 0 ? 100 : 0
   return { ratio, ratioLabel, utilizationPercent, headroom }
 }
 

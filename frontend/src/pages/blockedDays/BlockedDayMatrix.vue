@@ -299,7 +299,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
    假日直欄的淺灰底（`.cell--holiday`）只在未登記的格子上看得到，登記格整格蓋掉是預期行為。 */
 .cell--blocked {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-bg);
   font-weight: 700;
   font-size: 11px;
 }
@@ -362,7 +362,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
 
 .legend__swatch--blocked {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-bg);
   font-weight: 700;
   font-size: 10px;
 }

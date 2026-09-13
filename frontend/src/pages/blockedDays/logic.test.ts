@@ -371,8 +371,13 @@ describe('computeSupplyRatio', () => {
     expect(view.utilizationPercent).toBe(0)
   })
 
-  it('供給 ≤ 0 時利用率回 0，不除以零', () => {
+  it('供給 ≤ 0 但仍有需求時利用率回 100（滿條，不是 0；審查回饋 N1：供給掛零是最嚴重情況）', () => {
     const view = computeSupplyRatio({ demandPoints: 10, supplyPoints: 0, headroom: -10 })
+    expect(view.utilizationPercent).toBe(100)
+  })
+
+  it('供給與需求都 ≤ 0（沒有這一層的需求）時利用率回 0，不除以零', () => {
+    const view = computeSupplyRatio({ demandPoints: 0, supplyPoints: 0, headroom: 0 })
     expect(view.utilizationPercent).toBe(0)
   })
 

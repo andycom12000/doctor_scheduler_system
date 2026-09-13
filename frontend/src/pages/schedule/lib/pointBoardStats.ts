@@ -10,6 +10,8 @@ import type { PointBoardGroup } from '@/api/types'
  * 點數看板本來就列組內全部在職人員，第一次出現的身分順序即代表組內身分的排列順序。
  */
 export function memberRankCodes(group: Pick<PointBoardGroup, 'rows'>): string {
+  // 點數看板只列在職人員，這裡取到的一律是「本月在職名單」裡出現過的身分——已停用的人
+  // 不在 `group.rows` 裡，不會混進這個清單（審查回饋 N4）。
   const seen = new Set<string>()
   const codes: string[] = []
   for (const row of group.rows) {

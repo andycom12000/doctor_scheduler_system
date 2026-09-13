@@ -174,7 +174,9 @@ function cellClick(staffId: string, date: string): void {
 
       <div class="dp-grid__foot-label">額度</div>
       <template v-for="col in staffColumns" :key="`quota-${col.staffId}`">
-        <div class="dp-grid__foot">{{ col.quotaLabel }}</div>
+        <div class="dp-grid__foot" :class="{ 'dp-grid__foot--at-cap': col.quotaAtCap }" :title="col.quotaTitle">
+          {{ col.quotaLabel }}
+        </div>
       </template>
       <div class="dp-grid__foot"></div>
     </div>
@@ -375,6 +377,15 @@ function cellClick(staffId: string, date: string): void {
   color: var(--color-accent-900);
 }
 
+/* 「空缺」表頭是最後一欄，不是第一欄——`.dp-grid__corner` 的 `left: 0` 是給左上角那格
+   （日期欄）用的，這兩格繼承到同一個 `left: 0` 會讓它們橫向捲動時飄去黏在左邊、蓋住
+   當時剛好捲到左緣的身分組表頭（審查回饋 V1：曾跟「NP · 1 人」疊在一起）。只留 top 的
+   sticky，水平方向照 grid 正常排版跟著捲。 */
+.dp-grid__corner--vac-head,
+.dp-grid__corner--vac-sub {
+  left: auto;
+}
+
 .dp-grid__corner--vac-head {
   font: 600 10px var(--font-heading);
 }
@@ -403,6 +414,11 @@ function cellClick(staffId: string, date: string): void {
   font: 600 9.5px ui-monospace, Menlo, monospace;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
   border-top: 1px solid var(--color-divider);
+}
+
+/* 額度已排打平上限：上色提醒（設計稿 dpFoot 行為，審查回饋 N7）。 */
+.dp-grid__foot--at-cap {
+  color: var(--color-accent-800);
 }
 
 .ad-legend {
