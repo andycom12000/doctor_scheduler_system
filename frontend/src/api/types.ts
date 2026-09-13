@@ -79,7 +79,9 @@ export type ListCandidatesResponse = operations['listCandidates']['responses']['
 export type ListVariantsResponse = operations['listVariants']['responses']['200']['content']['application/json']
 export type ListStaffResponse = operations['listStaff']['responses']['200']['content']['application/json']
 
-export type ExportLayout = NonNullable<operations['exportSchedule']['parameters']['query']>['layout']
+export type ExportLayout = NonNullable<
+  NonNullable<operations['exportSchedule']['parameters']['query']>['layout']
+>
 export type PublishRequest = NonNullable<operations['publishSchedule']['requestBody']>['content']['application/json']
 export type ApplyVariantRequest = operations['applyVariant']['requestBody']['content']['application/json']
 export type SetStaffStatusRequest = operations['setStaffStatus']['requestBody']['content']['application/json']
