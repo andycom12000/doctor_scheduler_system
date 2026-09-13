@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
-import type { AreaType, Rank, RankGroup, Staff } from '@/api/types'
+import type { AreaType, PointBoardGroup, Rank, RankGroup, Staff } from '@/api/types'
 import {
+  areaTypeChips,
   areaTypeNames,
+  describeQuotaLoad,
   errorCodeOf,
   filterStaff,
+  findPointBoardRow,
   groupCodeOfRank,
   groupNameOf,
+  isNotFoundError,
   rankNameOf,
   sortByRankGroup,
+  staffCountsLabel,
   visibleStaff,
 } from './staffList'
 
@@ -155,6 +160,107 @@ describe('visibleStaff', () => {
   it('篩選再排序一次做完', () => {
     const result = visibleStaff(roster, ranks, groups, { search: '', group: 'JUNIOR', status: 'all' })
     expect(result.map((s) => s.id)).toEqual(['s-pgy1', 's-ptr'])
+  })
+})
+
+describe('staffCountsLabel', () => {
+  it('組出「共 X 人 · 在職 Y · 停用 Z · 無分頁」', () => {
+    expect(staffCountsLabel({ active: 34, inactive: 0 })).toBe('共 34 人 · 在職 34 · 停用 0 · 無分頁')
+  })
+
+  it('停用不是 0 時也算進共計', () => {
+    expect(staffCountsLabel({ active: 31, inactive: 2 })).toBe('共 33 人 · 在職 31 · 停用 2 · 無分頁')
+  })
+})
+
+const pointBoardGroups: PointBoardGroup[] = [
+  {
+    groupCode: 'JUNIOR',
+    groupName: '低年級',
+    rows: [
+      {
+        staffId: 's-pgy1',
+        name: 'Alpha',
+        rankCode: 'PGY1',
+        quotaPoints: 3,
+        quotaCap: 10,
+        quotaRemaining: 7,
+        carryOverApplied: 0,
+        fairnessPoints: null,
+        duties: 3,
+        holidayDuties: 1,
+      },
+    ],
+  },
+  {
+    groupCode: 'NP',
+    groupName: 'NP',
+    rows: [
+      {
+        staffId: 's-np',
+        name: 'NP1',
+        rankCode: 'NP',
+        quotaPoints: 5,
+        quotaCap: null,
+        quotaRemaining: null,
+        carryOverApplied: 0,
+        fairnessPoints: null,
+        duties: 5,
+        holidayDuties: 2,
+      },
+    ],
+  },
+]
+
+describe('findPointBoardRow', () => {
+  it('跨組找到對應人員的那一列', () => {
+    expect(findPointBoardRow(pointBoardGroups, 's-np')?.name).toBe('NP1')
+  })
+
+  it('查不到回 undefined（停用者不列入點數看板，也會落到這個分支）', () => {
+    expect(findPointBoardRow(pointBoardGroups, 's-ghost')).toBeUndefined()
+  })
+})
+
+describe('describeQuotaLoad', () => {
+  it('一般身分：年月 · 額度點數已排/上限 · 餘額 · 假日班數', () => {
+    expect(describeQuotaLoad(pointBoardGroups[0].rows[0], '2026-09')).toBe('2026-09 額度點數 3/10 · 餘 7 · 假日 1 班')
+  })
+
+  it('quotaCap 為 null（NP）改印值班天數，額度點數標「不計」而非印點數', () => {
+    expect(describeQuotaLoad(pointBoardGroups[1].rows[0], '2026-09')).toBe('2026-09 5 天 · 額度點數不計 · 假日 2 班')
+  })
+
+  it('查不到列回 null', () => {
+    expect(describeQuotaLoad(undefined, '2026-09')).toBeNull()
+  })
+})
+
+describe('isNotFoundError', () => {
+  it('404 的 ApiError 回 true', () => {
+    expect(isNotFoundError(new ApiError(404, { error: { code: 'SCHEDULE_NOT_FOUND', message: '無' } }, 'boom'))).toBe(true)
+  })
+
+  it('其他狀態碼回 false', () => {
+    expect(isNotFoundError(new ApiError(500, {}, 'boom'))).toBe(false)
+  })
+
+  it('非 ApiError 回 false', () => {
+    expect(isNotFoundError(new Error('boom'))).toBe(false)
+  })
+})
+
+describe('areaTypeChips', () => {
+  it('三個區域類型全部列出，依 eligible 標記亮暗', () => {
+    expect(areaTypeChips(areaTypes, ['ICU', 'CHIEF'])).toEqual([
+      { code: 'WARD', name: '一般病房', eligible: false },
+      { code: 'ICU', name: '加護病房', eligible: true },
+      { code: 'CHIEF', name: '總值', eligible: true },
+    ])
+  })
+
+  it('空的可值清單全部標暗，不是空陣列', () => {
+    expect(areaTypeChips(areaTypes, []).every((chip) => !chip.eligible)).toBe(true)
   })
 })
 

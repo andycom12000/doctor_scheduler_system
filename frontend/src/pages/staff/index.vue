@@ -9,34 +9,47 @@ import { Plus, Search } from 'lucide-vue-next'
 import PageLayout from '@/components/PageLayout.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { invalidate, useResource } from '@/composables/useResource'
+import { useYearMonth } from '@/composables/useYearMonth'
 import { createStaff, deleteStaff, listStaff, setStaffStatus, updateStaff } from '@/api/staff'
 import { getAreaSettings, getRankSettings } from '@/api/settings'
+import { getPointBoard } from '@/api/views'
 import { describeError } from '@/api/errors'
 import type { Staff, StaffStatus, StaffWrite } from '@/api/types'
 import {
+  areaTypeChips,
   areaTypeNames,
+  describeQuotaLoad,
   errorCodeOf,
+  findPointBoardRow,
   groupCodeOfRank,
   groupNameOf,
+  isNotFoundError,
   rankNameOf,
+  staffCountsLabel,
   type GroupFilter,
   type StatusFilter,
   visibleStaff,
 } from './staffList'
 
+const { ym } = useYearMonth()
+
 const staffKey = ref<string>('staff')
 const ranksKey = ref<string>('settings/ranks')
 const areasKey = ref<string>('settings/areas')
+// 跟 SCREEN 01（`src/pages/schedule/index.vue`）用同一把 key，寫入排班表後這裡也會跟著失效重抓。
+const pointBoardKey = computed(() => `schedules/${ym.value}/point-board`)
 
 const staffResource = useResource(staffKey, () => listStaff())
 const ranksResource = useResource(ranksKey, () => getRankSettings())
 const areasResource = useResource(areasKey, () => getAreaSettings())
+const pointBoardResource = useResource(pointBoardKey, () => getPointBoard(ym.value))
 
 const ranks = computed(() => ranksResource.data.value?.ranks ?? [])
 const groups = computed(() => ranksResource.data.value?.groups ?? [])
 const areaTypes = computed(() => areasResource.data.value?.areaTypes ?? [])
 const roster = computed(() => staffResource.data.value?.items ?? [])
 const activeCount = computed(() => staffResource.data.value?.counts.active ?? 0)
+const staffCounts = computed(() => staffResource.data.value?.counts ?? null)
 
 const search = ref('')
 const groupFilter = ref<GroupFilter>('all')
@@ -79,9 +92,26 @@ const selectedGroupCode = computed(() =>
   mode.value === 'idle' ? null : groupCodeOfRank(ranks.value, draft.rankCode),
 )
 const selectedGroupName = computed(() => groupNameOf(groups.value, selectedGroupCode.value))
-const selectedAreaTypeNames = computed(() =>
-  selectedStaff.value ? areaTypeNames(selectedStaff.value.eligibleAreaTypes, areaTypes.value) : '—'
+const selectedAreaTypeChips = computed(() =>
+  areaTypeChips(areaTypes.value, selectedStaff.value?.eligibleAreaTypes ?? []),
 )
+
+// 姓名旁的「{ym} 額度點數 3/12 · 餘 9 · 假日 1 班」，只在編輯既有人員時顯示——新增中的人員
+// 還沒有 staffId，點數看板查不到列。年月一律印進字串：`/staff` 沒有 `:ym` 路由參數，
+// `ym` 是 `useYearMonth` 模組層最後一次看到的年月，寫「本月」會誤導。查無值班表（404）
+// 與其他載入失敗分開講，避免使用者把「這個月還沒排」誤會成畫面壞了；其他錯誤照樣顯示
+// 訊息，不要靜默吞掉。
+const quotaLoadText = computed(() => {
+  if (mode.value !== 'edit' || !selectedStaff.value) return null
+  if (pointBoardResource.error.value) {
+    return isNotFoundError(pointBoardResource.error.value)
+      ? `${ym.value} 尚無值班表`
+      : describeError(pointBoardResource.error.value)
+  }
+  const groups = pointBoardResource.data.value?.groups
+  if (!groups) return null
+  return describeQuotaLoad(findPointBoardRow(groups, selectedStaff.value.id), ym.value) ?? '—'
+})
 
 function startCreate(): void {
   selectedId.value = null
@@ -236,6 +266,8 @@ async function remove(): Promise<void> {
               <input v-model="statusFilter" type="radio" name="status-filter" value="all" />全部
             </label>
           </div>
+
+          <span v-if="staffCounts" class="staff-list__counts">{{ staffCountsLabel(staffCounts) }}</span>
         </div>
 
         <div v-if="staffResource.error.value" class="staff-list__message">
@@ -262,7 +294,7 @@ async function remove(): Promise<void> {
               :class="{ 'staff-row--selected': staff.id === selectedId }"
               @click="selectStaff(staff)"
             >
-              <span class="staff-row__rank">{{ rankNameOf(ranks, staff.rankCode) }}</span>
+              <span class="staff-row__rank"><span class="tag tag-accent">{{ rankNameOf(ranks, staff.rankCode) }}</span></span>
               <span class="staff-row__group">{{ groupNameOf(groups, groupCodeOfRank(ranks, staff.rankCode)) }}</span>
               <span class="staff-row__name">{{ staff.name }}</span>
               <span class="staff-row__emp">{{ staff.employeeNo }}</span>
@@ -286,6 +318,7 @@ async function remove(): Promise<void> {
           <div>
             <div class="k">{{ mode === 'create' ? '新增人員' : '編輯人員' }}</div>
             <div class="staff-form__title">{{ mode === 'create' ? '未命名' : selectedStaff?.name }}</div>
+            <div v-if="quotaLoadText" class="staff-form__load">{{ quotaLoadText }}</div>
           </div>
 
           <p v-if="formError" class="staff-form__error">{{ formError }}</p>
@@ -340,10 +373,15 @@ async function remove(): Promise<void> {
               <span class="staff-form__hint-inline">依資格矩陣自動推導</span>
             </div>
             <div class="chip-row">
-              <span v-for="areaType in selectedStaff.eligibleAreaTypes" :key="areaType" class="tag tag-accent">
-                {{ areaTypeNames([areaType], areaTypes) }}
+              <span
+                v-for="chip in selectedAreaTypeChips"
+                :key="chip.code"
+                class="tag"
+                :class="chip.eligible ? 'tag-accent' : 'tag-neutral staff-form__area-chip--ineligible'"
+                :title="chip.eligible ? undefined : '依資格矩陣不可值'"
+              >
+                {{ chip.name }}
               </span>
-              <span v-if="selectedAreaTypeNames === '—'" class="staff-form__hint-inline">—</span>
             </div>
             <p class="staff-form__hint">額度點數上限屬於身分（SCREEN 02），當月的值在點數看板。</p>
           </div>
@@ -362,15 +400,12 @@ async function remove(): Promise<void> {
             >
               {{ selectedStaff.status === 'active' ? '停用' : '恢復在職' }}
             </button>
-            <button
-              v-if="mode === 'edit' && selectedStaff"
-              type="button"
-              class="btn btn-secondary btn-block staff-form__delete"
-              :disabled="saving"
-              @click="remove"
-            >
-              刪除人員
-            </button>
+            <div v-if="mode === 'edit' && selectedStaff" class="staff-form__delete-row">
+              <button type="button" class="staff-form__delete-link" :disabled="saving" @click="remove">
+                刪除人員
+              </button>
+              <p class="staff-form__hint">已有值班紀錄者只能停用，刪除會回 409</p>
+            </div>
             <p v-if="deleteNote" class="staff-form__error">{{ deleteNote }}</p>
           </div>
         </template>
@@ -424,6 +459,13 @@ async function remove(): Promise<void> {
   width: 190px;
 }
 
+.staff-list__counts {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
 .staff-list__table {
   flex: 1;
   min-height: 0;
@@ -445,7 +487,9 @@ async function remove(): Promise<void> {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-2);
+  /* 列高對齊設計稿約 33px：主要靠 .staff-row__group 不換行，這裡的直向 padding 只需要
+     很薄的一層（見下方 .staff-row__rank 的 .tag 已經有自己的內距）。 */
+  padding: var(--space-1) var(--space-2);
   border: none;
   border-bottom: 1px solid color-mix(in srgb, var(--color-text) 7%, transparent);
   background: transparent;
@@ -474,13 +518,14 @@ async function remove(): Promise<void> {
 }
 
 .staff-row__rank {
-  width: 44px;
+  width: 52px;
   flex: none;
 }
 
 .staff-row__group {
-  width: 40px;
+  width: 48px;
   flex: none;
+  white-space: nowrap;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
@@ -494,6 +539,7 @@ async function remove(): Promise<void> {
   width: 64px;
   flex: none;
   font-family: ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
@@ -541,6 +587,12 @@ async function remove(): Promise<void> {
   font-family: var(--font-heading);
   font-weight: var(--font-heading-weight);
   font-size: 19px;
+}
+
+.staff-form__load {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+  margin-top: 3px;
 }
 
 .staff-form__row {
@@ -623,6 +675,12 @@ async function remove(): Promise<void> {
   flex-wrap: wrap;
 }
 
+/* 可值／不可值的對比度要夠——單靠 .tag-accent／.tag-neutral 的顏色差在小晶片上太弱，
+   不可值再降低透明度並加 title，讓「這個人只能值一區」一眼看得出來。 */
+.staff-form__area-chip--ineligible {
+  opacity: 0.45;
+}
+
 .staff-form__hint {
   font-size: 10.5px;
   line-height: 1.5;
@@ -648,8 +706,27 @@ async function remove(): Promise<void> {
   width: 100%;
 }
 
-.staff-form__delete {
+.staff-form__delete-row {
+  text-align: center;
+}
+
+.staff-form__delete-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
   color: var(--color-accent-900);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.staff-form__delete-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.staff-form__delete-row .staff-form__hint {
+  margin-top: 3px;
 }
 
 .seg {

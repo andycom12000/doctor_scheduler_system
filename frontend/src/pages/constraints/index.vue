@@ -30,6 +30,7 @@ import {
 import type { ConstraintSettings, EligibilityMatrix } from '@/api/types'
 import {
   cloneJson,
+  constraintBadge,
   describeDirection,
   describeHardConstraintParams,
   describeMetric,
@@ -37,6 +38,20 @@ import {
   isEqualJson,
   isValidWeight,
 } from './logic'
+
+// 右上「資格／硬約束／軟約束」三段切換：不拆頁、不改路由，純粹捲到對應區塊
+// （PageLayout 的本體是捲動容器，`scrollIntoView` 不需要另外處理 offset）。
+// 三個都是靜態 `ref="xxxSectionEl"`（SFC 編譯器認得的字面量寫法），不能用物件包起來——
+// 動態 `:ref="expr"` 才能綁到巢狀路徑，這裡沒有必要多繞一手。
+const matrixSectionEl = ref<HTMLElement | null>(null)
+const hardSectionEl = ref<HTMLElement | null>(null)
+const softSectionEl = ref<HTMLElement | null>(null)
+
+type ConstraintSection = 'matrix' | 'hard' | 'soft'
+function scrollToSection(section: ConstraintSection): void {
+  const el = { matrix: matrixSectionEl, hard: hardSectionEl, soft: softSectionEl }[section].value
+  el?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
 
 const { confirm } = useConfirm()
 
@@ -128,6 +143,11 @@ onBeforeRouteLeave(async () => {
 <template>
   <PageLayout title="資格與約束" subtitle="10 身分 × 3 區域類型資格矩陣 · 硬約束 7 條 · 軟約束 7 條">
     <template #actions>
+      <div class="constraints__jump" role="group" aria-label="捲到對應區塊，不會切換畫面內容">
+        <button type="button" class="constraints__jump-link" @click="scrollToSection('matrix')">↓ 資格</button>
+        <button type="button" class="constraints__jump-link" @click="scrollToSection('hard')">↓ 硬約束</button>
+        <button type="button" class="constraints__jump-link" @click="scrollToSection('soft')">↓ 軟約束</button>
+      </div>
       <span v-if="saveError" class="constraints__error"><CircleAlert :size="14" :stroke-width="1.5" />{{ saveError }}</span>
       <span v-else-if="invalid && dirty" class="constraints__error">
         <CircleAlert :size="14" :stroke-width="1.5" />權重需為 0–100 的整數，請修正後再試
@@ -142,7 +162,7 @@ onBeforeRouteLeave(async () => {
     </template>
 
     <div class="constraints">
-      <section class="constraints__section">
+      <section ref="matrixSectionEl" class="constraints__section">
         <h2 class="constraints__heading">
           身分 × 區域類型 資格
           <span class="constraints__note">案主給定的表，無推導規則；改了這裡，SCREEN 02 的「可值類型」欄跟著變</span>
@@ -180,13 +200,14 @@ onBeforeRouteLeave(async () => {
         <p v-else-if="areasRes.error.value" class="constraints__error">{{ describeError(areasRes.error.value) }}</p>
       </section>
 
-      <section class="constraints__section">
+      <section ref="hardSectionEl" class="constraints__section">
         <h2 class="constraints__heading">
           硬約束 HARD · 7 條 · 違反即無解
           <span class="constraints__note">H4 · H7 跨月：讀上月末幾天為固定輸入</span>
         </h2>
         <div v-if="constraintsDraft" class="constraints__list">
           <div v-for="hard in constraintsDraft.hard" :key="hard.code" class="constraints__row">
+            <span class="constraints__badge">{{ constraintBadge(hard.code) }}</span>
             <div class="constraints__name">
               <div>{{ hard.name }}</div>
               <div class="constraints__code">{{ hard.code }}</div>
@@ -214,13 +235,14 @@ onBeforeRouteLeave(async () => {
         </p>
       </section>
 
-      <section class="constraints__section">
+      <section ref="softSectionEl" class="constraints__section">
         <h2 class="constraints__heading">
           軟約束 SOFT · 7 條 · 權重
           <span class="constraints__note">「避開」只顯示方向，不顯示負權重</span>
         </h2>
         <div v-if="constraintsDraft" class="constraints__list">
           <div v-for="soft in constraintsDraft.soft" :key="soft.code" class="constraints__row">
+            <span class="constraints__badge">{{ constraintBadge(soft.code) }}</span>
             <div class="constraints__name">
               <div>{{ soft.name }}</div>
               <div class="constraints__code">{{ soft.code }}</div>
@@ -259,6 +281,8 @@ onBeforeRouteLeave(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  /* 捲動目標貼齊視窗頂端會被固定的頁首擋住一截，留一點餘裕。 */
+  scroll-margin-top: var(--space-4);
 }
 
 .constraints__heading {
@@ -334,6 +358,14 @@ onBeforeRouteLeave(async () => {
   border-bottom: 1px solid color-mix(in srgb, var(--color-text) 7%, transparent);
 }
 
+.constraints__badge {
+  flex: none;
+  width: 28px;
+  font: 600 11px 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.04em;
+  color: var(--color-accent-700);
+}
+
 .constraints__name {
   flex: 1;
   min-width: 0;
@@ -406,5 +438,30 @@ onBeforeRouteLeave(async () => {
   gap: 6px;
   font-size: 12px;
   color: var(--color-accent-900);
+}
+
+/*
+  故意不用 .seg／.seg-opt 那種帶框線分格的樣式——這三顆是「跳到」不是「切換」，
+  頁面內容不會因為點了哪顆而改變，做成分格按鈕會讓人誤以為在切換分頁／篩選。
+  這裡改成一組底線連結＋↓ 箭頭，視覺上就是錨點捲動。
+*/
+.constraints__jump {
+  display: inline-flex;
+  gap: var(--space-3);
+}
+
+.constraints__jump-link {
+  padding: 0;
+  font-size: 12px;
+  background: transparent;
+  border: none;
+  color: var(--color-accent-900);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.constraints__jump-link:hover {
+  color: var(--color-accent);
 }
 </style>
