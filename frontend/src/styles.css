@@ -122,17 +122,24 @@
     畫面 PR 直接用，不各自發明）。斜紋用 repeating-linear-gradient，
     外框用 box-shadow inset 才不吃掉格子既有的 border。
 
-    跟 docs/design-ref/canvas-data.js 的既有用法對齊：一般值班格底色是
-    --color-accent-100、假日值班格是 --color-accent-300（見該檔 vacS／L.322
-    附近），所以這裡兩個 token 不能再借用同一階，否則畫面 PR 疊上去會跟
-    既有格子分不出來：
+    跟 docs/design-ref/screen-01.html 圖例（L.122-127）與 canvas-data.js 的既有
+    用法對齊：
+      - --cell-duty-bg／--cell-duty-holiday-bg：平日／假日值班格底色
+        （screen-01.html:122-123），畫面 PR 疊其他 token 時要拉得開，不能
+        再借用同一階。
       - --cell-vacancy-outline 是純色（給 border/outline 用），不是漸層——
         對齊 canvas-data.js 的 vacS 用 `border:1.5px solid var(--color-accent)`。
-      - --cell-vacancy-bg 才是空缺格的斜紋底（canvas-data.js 用
-        accent-300 疊斜紋，這裡沿用）。
-      - --cell-violation-bg 選 accent-500，跟 accent-100（一般格）、
-        accent-300（假日格）都拉開一階，違規格才不會被誤讀成假日格。
+      - --cell-vacancy-bg 才是空缺格（H1）的斜紋底（screen-01.html:126、
+        canvas-data.js 都用 accent-300 疊斜紋）。
+      - --cell-violation-bg 選 accent-500，跟 --cell-duty-bg（accent-100）、
+        --cell-duty-holiday-bg（accent-300）都拉開一階，違規格才不會被誤讀
+        成假日格。
+      - --cell-violation-stripe／--cell-violation-outline 對齊 screen-01.html:127
+        的 H5（排到已登記的不可排班日）：斜紋 accent-800／accent-400，
+        外框 `inset 0 0 0 1.5px var(--color-accent-900)`。
   */
+  --cell-duty-bg: var(--color-accent-100);
+  --cell-duty-holiday-bg: var(--color-accent-300);
   --cell-holiday-bg: color-mix(in srgb, var(--color-text) 9%, transparent);
   --cell-blocked-bg: repeating-linear-gradient(
     45deg,
@@ -149,8 +156,9 @@
   --cell-violation-stripe: repeating-linear-gradient(
     45deg,
     var(--color-accent-800) 0 2px,
-    var(--color-accent-300) 2px 5px
+    var(--color-accent-400) 2px 5px
   );
+  --cell-violation-outline: var(--color-accent-900);
 
   /*
     身分組 4 色，從 accent／neutral 色階挑深淺分明的四階，黑白列印時仍能靠深淺區分。
