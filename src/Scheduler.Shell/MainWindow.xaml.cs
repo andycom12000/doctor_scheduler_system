@@ -22,6 +22,18 @@ public partial class MainWindow : Window
     private static readonly string WwwRoot = Path.Combine(BaseDirectory, "wwwroot");
     private static readonly string BundledRuntime = Path.Combine(BaseDirectory, "webview2");
 
+    /// <summary>
+    /// 參考名單 34 人只在開發期種（前端與手動測試要有資料可看）。發佈包一律是 Release
+    /// build（<c>build/publish.ps1</c> 固定 <c>--configuration Release</c>），這裡用編譯期常數
+    /// 而不是設定檔：不必碰 data/ 以外的任何檔案，也不會被使用者的環境變數意外打開（#37）。
+    /// 動到這個常數要同時看 publish.ps1 是否還是 Release-only。
+    /// </summary>
+#if DEBUG
+    private const bool SeedReferenceRoster = true;
+#else
+    private const bool SeedReferenceRoster = false;
+#endif
+
     private readonly CancellationTokenSource _shutdown = new();
     private WebApplication? _app;
     private HttpClient? _api;
@@ -41,7 +53,8 @@ public partial class MainWindow : Window
         {
             EnsureDataDirectoryWritable();
 
-            _app = await ApiHost.BuildAsync(new ApiHostOptions(UseTestServer: true), _shutdown.Token);
+            _app = await ApiHost.BuildAsync(
+                new ApiHostOptions(UseTestServer: true, SeedReferenceRoster: SeedReferenceRoster), _shutdown.Token);
             await _app.StartAsync(_shutdown.Token);
             _api = _app.GetTestClient();
 

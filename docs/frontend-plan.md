@@ -18,7 +18,7 @@
 | Domain / Persistence / Application / Api | 契約 42 個操作全部落地，契約守法測試（`tests/Scheduler.Api.Tests`）每個端點都驗 |
 | Solver | CP-SAT 落地，漂移守門與目標值方向守門都在 CI 跑 |
 | Shell | WebView2 host 同一個 `ApiHost`；`/api/` 攔截、靜態檔、無副檔名路徑回 `index.html`（deep link 可用）、進度用 `PostWebMessageAsJson` 推 |
-| 種子 | 設定、行事曆與參考名單 34 人（#25）。名單目前沒有可執行的關閉方式，正式交付前要靠 #37 把它關掉 |
+| 種子 | 設定、行事曆與參考名單 34 人（#25）。名單是否種由 `ApiHostOptions.SeedReferenceRoster` 控制，發佈包關閉（#37）。開發期後端（`dotnet run`）預設仍種，前端可照舊依賴 |
 | WebView2 使用者資料夾 | 已導到 `data/wv2data`，前端用 `sessionStorage`／`localStorage` 不違反 portable 規則 |
 
 ### 0.2 前端：只有骨架與 mock
@@ -237,7 +237,7 @@ iterate 時發現的版面問題直接開 `[frontend]` issue 掛 `ready-for-agen
 
 | 事項 | 建議 |
 |---|---|
-| 真後端的人員種子 | #25 已種參考名單 34 人；#37 處理發佈包裡把它關掉 |
+| 真後端的人員種子 | #25 已種參考名單 34 人；#37 已用 `ApiHostOptions.SeedReferenceRoster` 關掉發佈包裡的種子，開發期後端不受影響 |
 | 契約沒有「列出／查詢求解工作」端點 | 前端用 `localStorage` 記每月最近一次 `jobId`，重開程式也能恢復（§3.5），**不必加端點**。只有「想看同一個月的歷史求解紀錄」才需要 `GET /solver-jobs?yearMonth=`，目前沒有這個需求，不開 issue |
 | 名冊人數 | mock 是 33 位醫師 ＋ 1 位 NP ＝ 34 列；標題列「33 人」指醫師。畫面上顯示 `GET /staff` 的 `counts.active`，不寫死 |
 | `mockServiceWorker.js` 進發佈包 | 基礎 PR 順手排除 |

@@ -14,8 +14,8 @@ namespace Scheduler.Api.Tests;
 /// <summary>
 /// 把 <see cref="ApiHost"/> 用 TestServer 跑起來（不開 socket，與正式版 Shell 同一條路），
 /// 資料庫是一顆 SQLite in-memory：壽命等於連線壽命，所以連線由 fixture 開著。
-/// 出廠 seed 含設定、行事曆與參考名單 34 人；<see cref="SeedAsync"/> 先清掉參考名單、
-/// 換成這顆固定情境的 8 位人員，值班表也由它造，讓既有測試的人數與 id 維持不變。
+/// 出廠 seed 只種設定與行事曆（<c>SeedReferenceRoster: false</c>，#37）；<see cref="SeedAsync"/>
+/// 灌入這顆固定情境的 8 位人員，值班表也由它造，讓既有測試的人數與 id 維持不變。
 /// </summary>
 public sealed class ApiFixture : IAsyncLifetime
 {
@@ -33,6 +33,7 @@ public sealed class ApiFixture : IAsyncLifetime
 
         _app = await ApiHost.BuildAsync(new ApiHostOptions(
             UseTestServer: true,
+            SeedReferenceRoster: false,
             ConfigurePersistence: services => services.AddSchedulerPersistence(_connection)));
         await _app.StartAsync();
         Client = _app.GetTestClient();
@@ -60,15 +61,6 @@ public sealed class ApiFixture : IAsyncLifetime
         var schedules = scope.ServiceProvider.GetRequiredService<IScheduleRepository>();
         var blockedDays = scope.ServiceProvider.GetRequiredService<IBlockedDayRepository>();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-        // 出廠 seed 帶參考名單 34 人；這顆情境要的是固定的 8 人，先清掉參考名單
-        // 才不會撞員編、也不會把既有測試的人數／規模斷言全部改掉。
-        foreach (var seeded in await staff.ListAsync())
-        {
-            await staff.RemoveAsync(seeded.Id);
-        }
-
-        await uow.CommitAsync();
 
         await staff.AddAsync(new Staff("s-r4", "E001", "王總值", "R4"));
         await staff.AddAsync(new Staff("s-r5", "E002", "李總值", "R5"));

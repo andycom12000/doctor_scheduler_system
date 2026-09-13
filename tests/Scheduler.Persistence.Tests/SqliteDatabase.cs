@@ -22,7 +22,7 @@ public sealed class SqliteDatabase : IAsyncDisposable
 
     public IServiceProvider Services => _services;
 
-    public static async Task<SqliteDatabase> CreateAsync(bool initialize = true)
+    public static async Task<SqliteDatabase> CreateAsync(bool initialize = true, bool seedReferenceRoster = true)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -34,7 +34,7 @@ public sealed class SqliteDatabase : IAsyncDisposable
         var db = new SqliteDatabase(connection, services);
         if (initialize)
         {
-            await SchedulerDatabase.InitializeAsync(services);
+            await SchedulerDatabase.InitializeAsync(services, seedReferenceRoster);
         }
 
         return db;
