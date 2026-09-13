@@ -596,21 +596,34 @@ const solverHandlers = [
   }),
 
   http.get('/api/solver-jobs/:jobId/variants', ({ params }) => {
-    const variants: Variant[] = store.variants.get(params.jobId as string) ?? []
+    const jobId = params.jobId as string
+    if (!store.solverJobs.has(jobId)) return errorResponse(404, 'NOT_FOUND', '找不到求解工作')
+    const variants: Variant[] = store.variants.get(jobId) ?? []
     return HttpResponse.json({ variants })
   }),
 
   http.post('/api/schedules/:ym/apply-variant', async ({ params, request }) => {
     const ym = params.ym as string
-    const body = (await request.json()) as { jobId: string; variantId: string }
+    const body = (await request.json().catch(() => null)) as { jobId?: string; variantId?: string } | null
+    if (!body?.jobId || !body?.variantId) {
+      return errorResponse(422, 'INVALID_REQUEST', '本體缺 jobId 或 variantId')
+    }
+
+    const job = store.solverJobs.get(body.jobId)
+    if (!job) return errorResponse(404, 'NOT_FOUND', '找不到求解工作')
+
+    const variant = (store.variants.get(body.jobId) ?? []).find((v) => v.id === body.variantId)
+    if (!variant) return errorResponse(404, 'NOT_FOUND', '找不到指定的變體')
+
+    // 變體屬於建立求解工作時的那個月，跟路徑上的 ym 不同就是誤套用
+    if (job.yearMonth !== ym) {
+      return errorResponse(422, 'INVALID_REQUEST', `變體 ${body.variantId} 是 ${job.yearMonth} 的，不能套用到 ${ym}`)
+    }
 
     const existing = store.schedules.get(ym)
     if (existing?.status === 'published') {
       return errorResponse(409, 'SCHEDULE_ALREADY_PUBLISHED', '該月值班表已發布，不可整份套用變體')
     }
-
-    const variant = (store.variants.get(body.jobId) ?? []).find((v) => v.id === body.variantId)
-    if (!variant) return errorResponse(404, 'NOT_FOUND', '找不到指定的變體')
 
     const schedule = ensureSchedule(store, ym)
     schedule.duties = new Map(variant.duties.map((d) => [dutyKey(d.areaId, d.date), d.staffId]))
