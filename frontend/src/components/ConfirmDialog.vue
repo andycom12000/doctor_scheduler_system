@@ -10,8 +10,15 @@ const pending = usePendingConfirm()
 const dialogEl = ref<HTMLDialogElement | null>(null)
 
 watch(pending, (value) => {
-  if (value) dialogEl.value?.showModal()
-  else if (dialogEl.value?.open) dialogEl.value.close()
+  // 連續兩次 confirm()：useConfirm() 那邊會先幫前一個 pending 回報「取消」再
+  // 覆蓋成新的，Vue 的 watch 是同一輪 microtask 才 flush，這裡看到的可能是
+  // 「舊 pending → 新 pending」而不會經過 null，dialog 其實從頭到尾沒關過，
+  // 對已經 open 的 `<dialog>` 再呼叫一次 showModal() 會丟 InvalidStateError。
+  if (value) {
+    if (!dialogEl.value?.open) dialogEl.value?.showModal()
+  } else if (dialogEl.value?.open) {
+    dialogEl.value.close()
+  }
 })
 
 function onConfirm(): void {

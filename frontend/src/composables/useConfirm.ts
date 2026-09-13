@@ -34,6 +34,11 @@ export interface UseConfirmResult {
 
 export function useConfirm(): UseConfirmResult {
   function confirm(options: ConfirmOptions): Promise<boolean> {
+    // 連續呼叫兩次 confirm()：不先把前一個 pending 結掉就直接覆蓋
+    // `pendingConfirm.value`，前一個呼叫端的 Promise 永遠不會 settle，
+    // 而且 ConfirmDialog.vue 對已經 open 的 `<dialog>` 再呼叫一次
+    // `showModal()` 會丟 `InvalidStateError`。覆蓋前先幫前一個回報「取消」。
+    settlePendingConfirm(false)
     return new Promise((resolve) => {
       pendingConfirm.value = { ...options, resolve }
     })
