@@ -37,7 +37,7 @@ const currentName = computed(() => route.name?.toString())
         <span class="shell__brand-mark" aria-hidden="true"></span>
         <span class="shell__brand-name">醫師值班排班系統</span>
       </div>
-      <nav class="shell__nav-list">
+      <nav class="shell__nav-list" aria-label="主導覽">
         <RouterLink
           v-for="item in navItems"
           :key="item.name"
@@ -83,6 +83,7 @@ const currentName = computed(() => route.name?.toString())
   align-items: center;
   gap: var(--space-2);
   flex: none;
+  margin-right: auto;
 }
 
 .shell__brand-mark {
@@ -103,10 +104,9 @@ const currentName = computed(() => route.name?.toString())
 .shell__nav-list {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  flex: 1;
+  gap: var(--space-6);
+  flex: 0 1 auto;
   min-width: 0;
-  overflow-x: auto;
 }
 
 .shell__nav-item {
@@ -127,6 +127,7 @@ const currentName = computed(() => route.name?.toString())
 
 .shell__badge {
   flex: none;
+  margin-left: auto;
 }
 
 .shell__content {

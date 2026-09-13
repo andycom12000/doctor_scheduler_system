@@ -90,4 +90,9 @@ function onSelect(event: Event): void {
 .ym-switcher__select:hover {
   border-color: var(--color-divider);
 }
+
+.ym-switcher__select option {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
 </style>
