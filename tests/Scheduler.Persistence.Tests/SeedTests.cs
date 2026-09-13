@@ -88,12 +88,45 @@ public class SeedTests
     }
 
     [Fact]
-    public async Task 人員名冊不_seed()
+    public async Task 人員名冊從參考名單_seed_34人_全在職_員編E001到E034()
     {
         await using var db = await SqliteDatabase.CreateAsync();
         using var scope = db.Scope();
         var staff = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
 
-        Assert.Empty(await staff.ListAsync());
+        var roster = await staff.ListAsync();
+        Assert.Equal(34, roster.Count);
+        Assert.All(roster, s => Assert.Equal(Domain.Model.StaffStatus.Active, s.Status));
+
+        // ListAsync 依員編遞增；出廠參考名單的員編就是 E001..E034。
+        Assert.Equal(
+            Enumerable.Range(1, 34).Select(n => $"E{n:D3}"),
+            roster.Select(s => s.EmployeeNo));
+    }
+
+    [Fact]
+    public async Task 人員名冊組成照參考人數表_各身分皆有資格()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        using var scope = db.Scope();
+        var staff = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
+        var settings = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
+
+        var roster = await staff.ListAsync();
+        var actualHeadcount = roster
+            .GroupBy(s => s.RankCode)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 人數組成的唯一來源是 DefaultRanks.ReferenceHeadcount，不在這裡另外寫一份數字。
+        Assert.Equal(
+            DefaultRanks.ReferenceHeadcount.OrderBy(kv => kv.Key),
+            actualHeadcount.OrderBy(kv => kv.Key));
+
+        // eligibleAreaTypes 由資格矩陣推導、不儲存：每個出現在名單裡的身分都查得到資格、且至少能值一種區域類型。
+        var eligibility = await settings.GetEligibilityAsync();
+        foreach (var rankCode in actualHeadcount.Keys)
+        {
+            Assert.NotEmpty(eligibility.EligibleAreaTypes(rankCode));
+        }
     }
 }

@@ -127,13 +127,9 @@ async function main() {
       assert(staff.status === 200, 'GET /staff → 200')
       const body = await staff.json()
       assert(body.items.length === body.counts.active + body.counts.inactive, 'items 數等於 counts.active + counts.inactive')
-      if (!isMock && body.items.length === 0) {
-        console.warn('  ! 真後端沒有人員資料：後面依資料量的斷言（byStaff、months）在空庫上恆真，鑑別力有限')
-      }
-      if (isMock) {
-        assert(body.items.length === 34, 'staff.items.length === 34（33 醫師 + 1 NP）')
-        assert(body.counts.active === 34, 'counts.active === 34')
-      }
+      // 真後端也帶出廠參考名單（34 人），前提是打的是一顆全新的 data/scheduler.db。
+      assert(body.items.length === 34, 'staff.items.length === 34（33 醫師 + 1 NP）')
+      assert(body.counts.active === 34, 'counts.active === 34')
     }
 
     console.log('3b. 人員新增 → 編輯 → 停用 → 刪除（往返一圈，不留痕）')
@@ -323,7 +319,7 @@ async function main() {
 
     let jobId = ''
     let variantId = ''
-    await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '會在真後端留下求解紀錄（依設計全部保留），且真後端沒有人員種子', async () => {
+    await mockOnly('10. POST /solver-jobs → 輪詢至 succeeded', '會在真後端留下求解紀錄（依設計全部保留）', async () => {
       const res = await fetch(`${BASE}/solver-jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -59,6 +59,18 @@ public class StaffRepositoryTests
 
         using (var scope = db.Scope())
         {
+            // 出廠 seed 帶參考名單 34 人（含 E001、E002）；這顆測試要的是自己建的兩人，先清掉。
+            var repo = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
+            foreach (var seeded in await repo.ListAsync())
+            {
+                await repo.RemoveAsync(seeded.Id);
+            }
+
+            await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
+        }
+
+        using (var scope = db.Scope())
+        {
             var repo = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
             await repo.AddAsync(s2);
             await repo.AddAsync(s1);
@@ -93,6 +105,14 @@ public class StaffRepositoryTests
         await using var db = await SqliteDatabase.CreateAsync();
         using var scope = db.Scope();
         var repo = scope.ServiceProvider.GetRequiredService<IStaffRepository>();
+        // 清掉出廠參考名單，讓這條測試失敗的原因單純是「兩筆新資料自己撞員編」，不是撞到 seed。
+        foreach (var seeded in await repo.ListAsync())
+        {
+            await repo.RemoveAsync(seeded.Id);
+        }
+
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
+
         await repo.AddAsync(new Staff("st-1", "E001", "王小明", "R2"));
         await repo.AddAsync(new Staff("st-2", "E001", "李小華", "R3"));
 
