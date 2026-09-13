@@ -5,7 +5,7 @@
  * 這裡把常用的 schema 型別攤平成好用的別名，畫面元件與 mock handler 都從這裡取，
  * 不手抄 interface、不直接戳 `components['schemas'][...]`。
  */
-import type { components } from './schema.d.ts'
+import type { components, operations } from './schema.d.ts'
 
 export type HealthStatus = components['schemas']['HealthStatus']
 
@@ -66,3 +66,20 @@ export type StaffStatus = components['schemas']['StaffStatus']
 export type StaffCounts = components['schemas']['StaffCounts']
 export type Staff = components['schemas']['Staff']
 export type StaffWrite = components['schemas']['StaffWrite']
+
+/**
+ * 以下是契約裡沒有具名 schema、內嵌在 operation 回應／請求本體裡的形狀。
+ * 從 `operations[...]` 攤平出來，避免手抄 interface 跟契約漂移。
+ */
+export type ListSchedulesResponse = operations['listSchedules']['responses']['200']['content']['application/json']
+export type ListViolationsResponse = operations['listViolations']['responses']['200']['content']['application/json']
+export type GetPointBoardResponse = operations['getPointBoard']['responses']['200']['content']['application/json']
+export type ListVacanciesResponse = operations['listVacancies']['responses']['200']['content']['application/json']
+export type ListCandidatesResponse = operations['listCandidates']['responses']['200']['content']['application/json']
+export type ListVariantsResponse = operations['listVariants']['responses']['200']['content']['application/json']
+export type ListStaffResponse = operations['listStaff']['responses']['200']['content']['application/json']
+
+export type ExportLayout = NonNullable<operations['exportSchedule']['parameters']['query']>['layout']
+export type PublishRequest = NonNullable<operations['publishSchedule']['requestBody']>['content']['application/json']
+export type ApplyVariantRequest = operations['applyVariant']['requestBody']['content']['application/json']
+export type SetStaffStatusRequest = operations['setStaffStatus']['requestBody']['content']['application/json']
