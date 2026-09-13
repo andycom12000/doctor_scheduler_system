@@ -399,6 +399,16 @@ const blockedDayHandlers = [
 // 求解
 // ---------------------------------------------------------------------------
 
+/**
+ * 收斂間隙 `|obj − bound| / |obj|`，四捨五入到小數 4 位——與真後端
+ * `SolverJobService.GapOf` 同一份公式，回的是**比例（0–1），不是百分比**（issue #46）。
+ */
+function gapOf(objective: number | null, bound: number | null): number | null {
+  if (objective === null || bound === null) return null
+  if (objective === 0) return 0
+  return Number((Math.abs(objective - bound) / Math.abs(objective)).toFixed(4))
+}
+
 const jobTimers = new Map<string, ReturnType<typeof setTimeout>[]>()
 
 function clearJobTimers(jobId: string) {
@@ -425,6 +435,10 @@ function toSolverJobResponse(job: SolverJobState): SolverJob {
 function scheduleSolverJob(jobId: string, ym: string, variantCount: number, timeLimitSecPerVariant: number) {
   const startMs = Date.now()
   const timers: ReturnType<typeof setTimeout>[] = []
+  // 終態快照沿用最後一份變體的 objective／bound，不是憑空的 100/100——
+  // 跟 running 時的最後一筆數字接得起來，gap 也照同一份 gapOf 算。
+  let lastObjective = 100
+  let lastBound = 95
 
   const startRunning = setTimeout(() => {
     const job = store.solverJobs.get(jobId)
@@ -450,6 +464,10 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
     const t = setTimeout(() => {
       const job = store.solverJobs.get(jobId)
       if (!job || job.status === 'cancelled') return
+      const bestObjective = 100 - i * 5
+      const bestBound = 95 - i * 5
+      lastObjective = bestObjective
+      lastBound = bestBound
       job.status = 'running'
       job.elapsedSec = (Date.now() - startMs) / 1000
       job.progress = {
@@ -460,9 +478,9 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
         elapsedSec: job.elapsedSec,
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: i + 1,
-        bestObjective: 100 - i * 5,
-        bestBound: 95 - i * 5,
-        gap: i === variantCount ? 0 : Number((5 / i).toFixed(2)),
+        bestObjective,
+        bestBound,
+        gap: gapOf(bestObjective, bestBound),
       }
     }, i * 2000)
     timers.push(t)
@@ -484,9 +502,9 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
         elapsedSec: job.elapsedSec,
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: variantCount,
-        bestObjective: 100,
-        bestBound: 100,
-        gap: 0,
+        bestObjective: lastObjective,
+        bestBound: lastBound,
+        gap: gapOf(lastObjective, lastBound),
       }
       clearJobTimers(jobId)
     },
@@ -500,8 +518,8 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
 const solverHandlers = [
   http.post('/api/solver-jobs', async ({ request }) => {
     const body = (await request.json()) as CreateSolverJobRequest
-    const busy = [...store.solverJobs.values()].some((j) => j.status === 'queued' || j.status === 'running')
-    if (busy) return errorResponse(409, 'SOLVER_BUSY', '已有求解工作在執行中')
+    const busyJob = [...store.solverJobs.values()].find((j) => j.status === 'queued' || j.status === 'running')
+    if (busyJob) return errorResponse(409, 'SOLVER_BUSY', '已有求解工作在執行中', { jobId: busyJob.jobId })
 
     const ym = body.yearMonth
     const variantCount = Math.min(Math.max(body.variantCount ?? 3, 1), 3)
@@ -556,6 +574,9 @@ const solverHandlers = [
     if (job.status === 'queued' || job.status === 'running') {
       clearJobTimers(job.jobId)
       job.status = 'cancelled'
+      // job.progress 是巢狀物件，頂層 status 改了它也要跟著改，否則回應裡外層
+      // status: 'cancelled' 但 progress.status 還留著 'running'，前端與 SSE 讀到的不一致。
+      job.progress = { ...job.progress, status: 'cancelled' }
     }
     return HttpResponse.json(toSolverJobResponse(job))
   }),
@@ -752,6 +773,36 @@ const settingsHandlers = [
 // 人員
 // ---------------------------------------------------------------------------
 
+/**
+ * 員編、姓名不得空白。真後端在 `RequestMapper.ToCommand`（`Required(dto.EmployeeNo, ...)`）
+ * 就丟這個 422，發生在 `StaffCommands.UpdateAsync` 的 `RequireAsync`（404）之前——
+ * PATCH 要先做這個檢查，順序才對得上。
+ */
+function validateBlankFields(write: StaffWrite) {
+  if (!write.employeeNo?.trim()) return errorResponse(422, 'INVALID_REQUEST', '員編不得空白')
+  if (!write.name?.trim()) return errorResponse(422, 'INVALID_REQUEST', '姓名不得空白')
+  return null
+}
+
+/** 身分必須存在於 `store.ranks`。真後端在 `EnsureWriteValidAsync`，PATCH 是 404 之後才跑。 */
+function validateRankExists(write: StaffWrite) {
+  if (!store.ranks.some((r) => r.code === write.rankCode)) {
+    return errorResponse(422, 'INVALID_REQUEST', `找不到身分 ${write.rankCode}`)
+  }
+  return null
+}
+
+/** POST 沒有先查存在性這件事，`EnsureWriteValidAsync` 從頭到尾一次跑完，兩段檢查合在一起即可。 */
+function validateStaffWrite(write: StaffWrite) {
+  return validateBlankFields(write) ?? validateRankExists(write)
+}
+
+/** 員編是否已被別人使用；`excludeId` 排除自己，PATCH 改回原值不算重複。 */
+function staffEmployeeNoTaken(employeeNo: string, excludeId: string | null) {
+  const trimmed = employeeNo.trim()
+  return store.staff.some((s) => s.employeeNo === trimmed && s.id !== excludeId)
+}
+
 const staffHandlers = [
   http.get('/api/staff', ({ request }) => {
     const status = new URL(request.url).searchParams.get('status') as StaffStatus | null
@@ -765,14 +816,16 @@ const staffHandlers = [
 
   http.post('/api/staff', async ({ request }) => {
     const body = (await request.json()) as StaffWrite
-    if (store.staff.some((s) => s.employeeNo === body.employeeNo)) {
-      return errorResponse(409, 'EMPLOYEE_NO_TAKEN', `員編 ${body.employeeNo} 已被使用`)
+    const invalid = validateStaffWrite(body)
+    if (invalid) return invalid
+    if (staffEmployeeNoTaken(body.employeeNo, null)) {
+      return errorResponse(409, 'EMPLOYEE_NO_TAKEN', `員編 ${body.employeeNo.trim()} 已被使用`)
     }
     const seq = store.nextStaffSeq++
     const staff: Staff = {
       id: `staff-${String(seq).padStart(3, '0')}`,
-      employeeNo: body.employeeNo,
-      name: body.name,
+      employeeNo: body.employeeNo.trim(),
+      name: body.name.trim(),
       rankCode: body.rankCode,
       status: 'active',
       eligibleAreaTypes: eligibleAreaTypesOf(store.eligibilityMatrix.matrix, body.rankCode),
@@ -784,11 +837,24 @@ const staffHandlers = [
   http.patch('/api/staff/:id', async ({ params, request }) => {
     const id = params.id as string
     const body = (await request.json()) as StaffWrite
+
+    // 順序對齊真後端：空白員編／姓名在 RequestMapper 就丟 422，比 UpdateAsync 的
+    // RequireAsync（404）早；身分不存在與員編重複在 EnsureWriteValidAsync，是 404 之後才跑。
+    const blank = validateBlankFields(body)
+    if (blank) return blank
+
     const staff = store.staff.find((s) => s.id === id)
     if (!staff) return errorResponse(404, 'NOT_FOUND', '找不到人員')
 
-    staff.employeeNo = body.employeeNo
-    staff.name = body.name
+    const rankInvalid = validateRankExists(body)
+    if (rankInvalid) return rankInvalid
+    // 員編重複檢查排除自己——員編改回原值或維持不變都不算重複。
+    if (staffEmployeeNoTaken(body.employeeNo, id)) {
+      return errorResponse(409, 'EMPLOYEE_NO_TAKEN', `員編 ${body.employeeNo.trim()} 已被使用`)
+    }
+
+    staff.employeeNo = body.employeeNo.trim()
+    staff.name = body.name.trim()
     staff.rankCode = body.rankCode
     staff.eligibleAreaTypes = eligibleAreaTypesOf(store.eligibilityMatrix.matrix, body.rankCode)
     return HttpResponse.json(staff)

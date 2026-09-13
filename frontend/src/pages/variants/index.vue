@@ -28,6 +28,7 @@ import { readLastJobId, rememberJobId, resolveJobId } from './jobStorage'
 import ProgressOverlay from './ProgressOverlay.vue'
 import VariantCard from './VariantCard.vue'
 import {
+  acceptPolledSnapshot,
   buildMetricRows,
   describeFailure,
   formatSeconds,
@@ -96,10 +97,47 @@ const applyError = ref<string | null>(null)
 const diffSelection = ref<string[]>([])
 
 let unsubscribe: Unsubscribe | null = null
+let watchdogTimer: ReturnType<typeof setInterval> | null = null
 
 function teardownSubscription(): void {
   unsubscribe?.()
   unsubscribe = null
+  stopWatchdog()
+}
+
+function stopWatchdog(): void {
+  if (watchdogTimer === null) return
+  clearInterval(watchdogTimer)
+  watchdogTimer = null
+}
+
+/**
+ * 覆蓋層可見時的補班：正式版 WebView2 host message 沒有「補送」機制，
+ * `GET /solver-jobs/{id}` 回 running 與 `subscribe` 之間工作剛好結束的話，
+ * 覆蓋層會停在最後一筆進度，靠 5 秒一次的輪詢把它撈回終態（issue #46）。
+ *
+ * **看門狗只補終態**，非終態的數字（`variantIndex`／`solutionCount`／`gap` 這些會跳動的
+ * 進度）一律交給 SSE——輪詢是每 5 秒一支獨立的請求，跟 SSE 事件流沒有先後保證，
+ * 拿較舊的輪詢回應覆蓋較新的 SSE 進度會讓畫面數字往回跳。
+ */
+async function pollJobOnce(id: string, targetYm: string): Promise<void> {
+  try {
+    const result = await getSolverJob(id)
+    if (ym.value !== targetYm || jobId.value !== id || !job.value) return
+    if (!isTerminalStatus(result.status)) return // 非終態不採用，交給 SSE
+    // 終態是單向門：目前已經是終態就不重複刷新——可能是 SSE 或 cancelJob 已經先處理過。
+    if (!acceptPolledSnapshot(job.value.status)) return
+    job.value = result
+    teardownSubscription()
+    await loadVariants(id, targetYm)
+  } catch {
+    // 看門狗容忍暫時性錯誤，等下一次 tick 再試，不覆蓋目前顯示的畫面。
+  }
+}
+
+function startWatchdog(id: string, targetYm: string): void {
+  stopWatchdog()
+  watchdogTimer = setInterval(() => void pollJobOnce(id, targetYm), 5000)
 }
 
 function clearQueryJob(): void {
@@ -180,6 +218,7 @@ async function attachJob(id: string, targetYm: string): Promise<AttachOutcome> {
       await loadVariants(id, targetYm)
     } else {
       unsubscribe = subscribe(id, (event) => handleProgressEvent(id, targetYm, event))
+      startWatchdog(id, targetYm)
     }
     return 'attached'
   } catch (err) {
@@ -296,6 +335,10 @@ const cancelError = ref<string | null>(null)
  * 期間如果有進度事件飄過來，畫面還能照樣更新，不會空白凍結。以 DELETE 的回應
  * 為準；只有回應已經是終態才拆訂閱、抓 `/variants`（理論上 DELETE 回應必是終態，
  * 這裡多一層防呆，不假設後端一定照約定回）。
+ *
+ * 這段等待期間看門狗（5 秒一次）可能先一步撈到終態、已經拆了訂閱並刷新過變體；
+ * DELETE 回應晚到的話套同一個「終態是單向門」守衛，不重複覆蓋 `job.value`
+ * 或再打一次 `/variants`。
  */
 async function cancelJob(): Promise<void> {
   if (!jobId.value || cancelling.value) return
@@ -305,7 +348,8 @@ async function cancelJob(): Promise<void> {
   cancelError.value = null
   try {
     const result = await cancelSolverJob(id)
-    if (ym.value !== targetYm || jobId.value !== id) return
+    if (ym.value !== targetYm || jobId.value !== id || !job.value) return
+    if (!acceptPolledSnapshot(job.value.status)) return
     job.value = result
     if (isTerminalStatus(result.status)) {
       teardownSubscription()
