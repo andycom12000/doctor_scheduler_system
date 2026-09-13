@@ -1,8 +1,24 @@
 /**
  * 點數看板衍生的純函式：身分組容量利用率（組內 Σ已排 ÷ Σ上限）就地算，
- * 進 vitest（issue #31 任務描述）。
+ * 進 vitest（issue #31 任務描述）；分組欄標題的「成員身分」清單（issue #53）。
  */
 import type { PointBoardGroup } from '@/api/types'
+
+/**
+ * 分組欄標題的「組名 · 成員身分」格式（issue #53：「低年級 · PGY1 PGY2 R1 PTR」，
+ * 不用 `groupCode` 的 G1／JUNIOR 這種內部代碼）。依 `group.rows` 出現順序去重—
+ * 點數看板本來就列組內全部在職人員，第一次出現的身分順序即代表組內身分的排列順序。
+ */
+export function memberRankCodes(group: Pick<PointBoardGroup, 'rows'>): string {
+  const seen = new Set<string>()
+  const codes: string[] = []
+  for (const row of group.rows) {
+    if (seen.has(row.rankCode)) continue
+    seen.add(row.rankCode)
+    codes.push(row.rankCode)
+  }
+  return codes.join(' ')
+}
 
 export interface GroupUtilization {
   groupCode: string

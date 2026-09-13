@@ -212,29 +212,7 @@ function goToBlockedDays(): void {
 <template>
   <PageLayout title="排班主表" :subtitle="subtitle">
     <template #actions>
-      <button type="button" class="btn btn-secondary" disabled title="#34">匯出 Excel</button>
-      <button type="button" class="btn btn-secondary" disabled title="#34">驗證約束</button>
-      <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
-      <button type="button" class="btn btn-primary" disabled title="#34">{{ publishLabel }}</button>
-    </template>
-
-    <div v-if="schedule.loading.value && !schedule.data.value && !isEmptyMonth" class="schedule-state">載入中…</div>
-    <div v-else-if="scheduleErrorMessage" class="schedule-state">{{ scheduleErrorMessage }}</div>
-
-    <EmptyState
-      v-else-if="isEmptyMonth"
-      :areas="areaSettings.data.value?.areas ?? []"
-      :days="days"
-      :ym="ym"
-      :priming="priming"
-      :prime-error="primeError"
-      @cell-click="openCell"
-      @register-blocked-days="goToBlockedDays"
-      @solve="goToVariants"
-    />
-
-    <div v-else class="schedule">
-      <nav class="schedule__tabs">
+      <nav v-if="!isEmptyMonth && !scheduleErrorMessage" class="schedule__tabs">
         <button
           type="button"
           class="schedule__tab"
@@ -260,7 +238,28 @@ function goToBlockedDays(): void {
           單日詳表
         </button>
       </nav>
+      <button type="button" class="btn btn-secondary" disabled title="#34">匯出 Excel</button>
+      <button type="button" class="btn btn-secondary" disabled title="#34">驗證約束</button>
+      <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
+      <button type="button" class="btn btn-primary" disabled title="#34">{{ publishLabel }}</button>
+    </template>
 
+    <div v-if="schedule.loading.value && !schedule.data.value && !isEmptyMonth" class="schedule-state">載入中…</div>
+    <div v-else-if="scheduleErrorMessage" class="schedule-state">{{ scheduleErrorMessage }}</div>
+
+    <EmptyState
+      v-else-if="isEmptyMonth"
+      :areas="areaSettings.data.value?.areas ?? []"
+      :days="days"
+      :ym="ym"
+      :priming="priming"
+      :prime-error="primeError"
+      @cell-click="openCell"
+      @register-blocked-days="goToBlockedDays"
+      @solve="goToVariants"
+    />
+
+    <div v-else class="schedule">
       <div class="schedule__content">
         <div class="schedule__main">
           <AreaByDayGrid
@@ -282,7 +281,7 @@ function goToBlockedDays(): void {
             :point-board-groups="pointBoardGroups"
             :duties-by-staff="dutyMapByStaff"
             :staff-render-index="dayByStaffRenderIndex"
-            :vacancy-by-date="vacanciesRes.data.value?.byDate ?? []"
+            :vacancy-counts="vacancyCounts"
             :staff-directory="staffDirectory"
             :blocked-set="blockedSet"
             @cell-click="openCell"
@@ -311,7 +310,7 @@ function goToBlockedDays(): void {
           />
         </div>
 
-        <aside class="schedule__aside">
+        <aside v-if="activeTab === 'area-by-day'" class="schedule__aside">
           <UtilizationPanel :groups="pointBoardGroups" />
           <ViolationSidebar :violations="violationsRes.data.value?.violations ?? []" @jump="jumpToViolation" />
         </aside>
@@ -346,10 +345,14 @@ function goToBlockedDays(): void {
   min-height: 0;
 }
 
+/* 分頁列移進工具列（PageLayout 的 actions slot）：#53 設計稿把它跟匯出／驗證／求解／發布
+   放在同一列、分頁在左、其餘按鈕在右。`page-layout__actions` 是內容自撐開的 flex row（不能改
+   PageLayout.vue），這裡用固定 margin-right 隔開兩組，不用 flex:1 撐開（撐不開，見 PR 說明）。 */
 .schedule__tabs {
   display: flex;
   gap: 2px;
   flex: none;
+  margin-right: var(--space-6);
 }
 
 .schedule__tab {
@@ -357,7 +360,6 @@ function goToBlockedDays(): void {
   font: 500 13px var(--font-heading);
   background: transparent;
   border: 1px solid var(--color-divider);
-  border-bottom: none;
   cursor: pointer;
   color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }

@@ -1,18 +1,26 @@
 <script setup lang="ts">
 /**
- * 日 × 人：列＝天、欄＝在職人員依 4 身分組分區，右側「未填補」欄。
- * 欄很多，欄寬窄、表頭旋轉；第一欄（日期）與表頭固定（`position: sticky`）。
+ * 日 × 人：列＝天、欄＝在職人員依 4 身分組分區，右側「空缺」欄（issue #53：印未填補
+ * 區域數，0 顯示空白，不再列區域代號清單）。欄很多，欄寬窄、表頭旋轉；第一欄（日期）與
+ * 表頭固定（`position: sticky`）——sticky 的容區是外層 `.schedule__main`（見 index.vue），
+ * 這裡不設 `overflow`／`max-height`，整月一次放完、不內捲（issue #53）。
  *
  * `staffRenderIndex` 是 index.vue 用 `projectRenderIndexToStaffView` 轉換過的結果——
  * 逐格違規（H1、H2、H5…）原始用 `area:{areaId}:{date}` 記位置，這裡已經轉成
  * 「當天在那個區值班的人」，不用也不該自己再解一次 cellKey。
  *
  * 「當月有班、但已停用」的人不在點數看板裡（點數看板只列在職），額外併一欄「停用」，
- * 不讓他的班憑空從畫面消失。
+ * 不讓他的班憑空從畫面消失；底部「班數」「額度」兩列一併補上他的班數（額度顯示 `—`）。
  */
 import { computed } from 'vue'
-import type { Area, PointBoardGroup, VacancyByDate } from '@/api/types'
-import { staffCellKey, type DayColumn, type StaffDirectoryEntry } from './lib/scheduleGrid'
+import type { Area, PointBoardGroup } from '@/api/types'
+import {
+  staffCellKey,
+  staffFooterColumns,
+  vacancyCountLabel,
+  type DayColumn,
+  type StaffDirectoryEntry,
+} from './lib/scheduleGrid'
 import { cellKindOf } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
@@ -23,7 +31,7 @@ const props = defineProps<{
   pointBoardGroups: PointBoardGroup[]
   dutiesByStaff: Map<string, string>
   staffRenderIndex: Map<string, CellRenderKind>
-  vacancyByDate: VacancyByDate[]
+  vacancyCounts: Map<string, number>
   staffDirectory: Map<string, StaffDirectoryEntry>
   blockedSet: ReadonlySet<string>
 }>()
@@ -31,7 +39,6 @@ const props = defineProps<{
 const emit = defineEmits<{ cellClick: [areaId: string, date: string] }>()
 
 const areaLabelById = computed(() => new Map(props.areas.map((area) => [area.id, area.name])))
-const vacancyByDateMap = computed(() => new Map(props.vacancyByDate.map((entry) => [entry.date, entry])))
 
 /** 當月有班、但不在點數看板（已停用）的人；點數看板只列在職，這裡補一欄不讓班消失。 */
 const extraStaffRows = computed<StaffDirectoryEntry[]>(() => {
@@ -53,6 +60,11 @@ const extraStaffRows = computed<StaffDirectoryEntry[]>(() => {
 
 const totalColumns = computed(
   () => props.pointBoardGroups.reduce((n, g) => n + g.rows.length, 0) + extraStaffRows.value.length,
+)
+
+/** 底部「班數」「額度」兩列：依表頭同一個順序（分組欄位 → 停用欄位）攤平。 */
+const staffColumns = computed(() =>
+  staffFooterColumns(props.pointBoardGroups, extraStaffRows.value, props.dutiesByStaff),
 )
 
 function areaAt(staffId: string, date: string): string | undefined {
@@ -101,7 +113,7 @@ function cellClick(staffId: string, date: string): void {
       >
         停用 · {{ extraStaffRows.length }} 人
       </div>
-      <div class="dp-grid__corner"></div>
+      <div class="dp-grid__corner dp-grid__corner--vac-head">空缺</div>
 
       <div class="dp-grid__corner dp-grid__corner--label">日期</div>
       <template v-for="group in pointBoardGroups" :key="`${group.groupCode}-head`">
@@ -119,7 +131,7 @@ function cellClick(staffId: string, date: string): void {
         <span class="dp-grid__head-name">{{ row.name }}</span>
         <span class="dp-grid__head-rank">{{ row.rankCode }}停</span>
       </div>
-      <div class="dp-grid__corner dp-grid__corner--label">未填補</div>
+      <div class="dp-grid__corner dp-grid__corner--label dp-grid__corner--vac-sub">未填補<br />區域</div>
 
       <template v-for="day in days" :key="day.date">
         <div class="dp-grid__label" :class="{ 'dp-grid__label--holiday': day.isHoliday }">
@@ -149,10 +161,22 @@ function cellClick(staffId: string, date: string): void {
         >
           {{ cellText(row.staffId, day.date) }}
         </button>
-        <div class="dp-grid__vac" :class="{ 'dp-grid__vac--some': (vacancyByDateMap.get(day.date)?.count ?? 0) > 0 }">
-          {{ vacancyByDateMap.get(day.date)?.areaIds.map((id) => areaLabelById.get(id)).join(' ') ?? '' }}
+        <div class="dp-grid__vac" :class="{ 'dp-grid__vac--some': (vacancyCounts.get(day.date) ?? 0) > 0 }">
+          {{ vacancyCountLabel(vacancyCounts.get(day.date) ?? 0) }}
         </div>
       </template>
+
+      <div class="dp-grid__foot-label">班數</div>
+      <template v-for="col in staffColumns" :key="`duties-${col.staffId}`">
+        <div class="dp-grid__foot">{{ col.duties }}</div>
+      </template>
+      <div class="dp-grid__foot"></div>
+
+      <div class="dp-grid__foot-label">額度</div>
+      <template v-for="col in staffColumns" :key="`quota-${col.staffId}`">
+        <div class="dp-grid__foot">{{ col.quotaLabel }}</div>
+      </template>
+      <div class="dp-grid__foot"></div>
     </div>
 
     <div class="ad-legend">
@@ -191,10 +215,10 @@ function cellClick(staffId: string, date: string): void {
 .dp-grid {
   display: grid;
   align-content: start;
-  overflow: auto;
+  /* 不設 overflow／max-height：整月一次放完，不再內捲（issue #53）。sticky 表頭改吃外層
+     `.schedule__main`（見 index.vue）的 `overflow: auto` 當捲動容器，同一份 top 偏移量繼續有效。 */
   border-top: 1px solid var(--color-divider);
   border-left: 1px solid var(--color-divider);
-  max-height: 480px;
 }
 
 .dp-grid__corner,
@@ -202,7 +226,9 @@ function cellClick(staffId: string, date: string): void {
 .dp-grid__head,
 .dp-grid__label,
 .dp-grid__cell,
-.dp-grid__vac {
+.dp-grid__vac,
+.dp-grid__foot-label,
+.dp-grid__foot {
   border-right: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
 }
@@ -347,6 +373,36 @@ function cellClick(staffId: string, date: string): void {
 .dp-grid__vac--some {
   background: var(--cell-vacancy-bg);
   color: var(--color-accent-900);
+}
+
+.dp-grid__corner--vac-head {
+  font: 600 10px var(--font-heading);
+}
+
+.dp-grid__corner--vac-sub {
+  line-height: 1.3;
+}
+
+.dp-grid__foot-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+  font: 600 10px var(--font-heading);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  border-top: 1px solid var(--color-divider);
+}
+
+.dp-grid__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 9.5px ui-monospace, Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  border-top: 1px solid var(--color-divider);
 }
 
 .ad-legend {

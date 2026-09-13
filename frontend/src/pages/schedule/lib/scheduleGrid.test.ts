@@ -8,7 +8,9 @@ import {
   filledCountByDate,
   shortStaffCode,
   staffCellKey,
+  staffFooterColumns,
   toDayColumns,
+  vacancyCountLabel,
   vacancyCountMap,
   weekdayLabel,
 } from './scheduleGrid'
@@ -155,5 +157,67 @@ describe('vacancyCountMap／filledCountByDate', () => {
     const counts = vacancyCountMap(byDate)
     expect(filledCountByDate(5, counts, '2026-09-10')).toBe(4)
     expect(filledCountByDate(5, counts, '2026-09-01')).toBe(5)
+  })
+})
+
+describe('vacancyCountLabel', () => {
+  it('0 顯示空白，非 0 印數字', () => {
+    expect(vacancyCountLabel(0)).toBe('')
+    expect(vacancyCountLabel(2)).toBe('2')
+  })
+})
+
+describe('staffFooterColumns', () => {
+  const groups: PointBoardGroup[] = [
+    {
+      groupCode: 'JUNIOR',
+      groupName: '低年級',
+      rows: [
+        {
+          staffId: 'staff-001',
+          name: '陳建宏',
+          rankCode: 'PGY1',
+          quotaPoints: 6,
+          quotaCap: 10,
+          quotaRemaining: 4,
+          duties: 8,
+          holidayDuties: 1,
+        },
+      ],
+    },
+    {
+      groupCode: 'NP',
+      groupName: 'NP',
+      rows: [
+        {
+          staffId: 'staff-np',
+          name: '游芷若',
+          rankCode: 'NP',
+          quotaPoints: 0,
+          quotaCap: null,
+          quotaRemaining: null,
+          duties: 3,
+          holidayDuties: 0,
+        },
+      ],
+    },
+  ]
+
+  it('在職人員印已排／上限，NP（quotaCap 為 null）印 —', () => {
+    const columns = staffFooterColumns(groups, [], new Map())
+    expect(columns).toEqual([
+      { staffId: 'staff-001', duties: 8, quotaLabel: '6/10' },
+      { staffId: 'staff-np', duties: 3, quotaLabel: '—' },
+    ])
+  })
+
+  it('當月有班但已停用的人（extraStaff）額度印 —，班數由值班表數出來', () => {
+    const dutiesByStaffMap = new Map([
+      ['staff-050|2026-09-01', 'area-a'],
+      ['staff-050|2026-09-05', 'area-b'],
+      ['staff-001|2026-09-02', 'area-a'],
+    ])
+    const columns = staffFooterColumns(groups, [{ staffId: 'staff-050' }], dutiesByStaffMap)
+    expect(columns.find((c) => c.staffId === 'staff-050')).toEqual({ staffId: 'staff-050', duties: 2, quotaLabel: '—' })
   })
 })

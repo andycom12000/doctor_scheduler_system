@@ -7,6 +7,7 @@
  * NP 的 `quotaCap` 是 null（不計額度），改印 H6（`H6_NP_MONTHLY_DAYS`）的天數上限。
  */
 import type { PointBoardGroup } from '@/api/types'
+import { memberRankCodes } from './lib/pointBoardStats'
 
 defineProps<{
   groups: PointBoardGroup[]
@@ -33,7 +34,7 @@ function percentOf(points: number, cap: number | null): number {
     </div>
     <div class="point-board__cols">
       <div v-for="group in groups" :key="group.groupCode" class="point-board__col">
-        <div class="point-board__col-head">{{ group.groupName }}</div>
+        <div class="point-board__col-head">{{ group.groupName }} · {{ memberRankCodes(group) }}</div>
         <div v-for="row in group.rows" :key="row.staffId" class="point-board__row">
           <span class="point-board__rank">{{ row.rankCode }}</span>
           <span class="point-board__name">{{ row.name }}</span>
@@ -117,6 +118,9 @@ function percentOf(points: number, cap: number | null): number {
   padding: 3px 5px;
   background: var(--color-accent-100);
   color: var(--color-accent-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .point-board__row {

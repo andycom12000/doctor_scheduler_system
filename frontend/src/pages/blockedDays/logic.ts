@@ -340,6 +340,40 @@ export function evaluateWardSqueezeHint(bySupply: FeasibilityReport['bySupply'])
 }
 
 // ---------------------------------------------------------------------------
+// 可行性預警 · 整月供需的「倍率」＋進度條（issue #53：改成設計稿的 9.1× 樣式，
+// 「餘裕 N」降級為副文字，不再是主要視覺）
+// ---------------------------------------------------------------------------
+
+export interface SupplyRatioView {
+  /** `supplyPoints / demandPoints`；`demandPoints` 為 0 時無意義，回 null。 */
+  ratio: number | null
+  /** 「9.1×」這種顯示字串；`ratio` 為 null 時是 `—`。 */
+  ratioLabel: string
+  /** 進度條寬度（0–100）：`demandPoints / supplyPoints`，`supplyPoints` ≤ 0 時是 0。 */
+  utilizationPercent: number
+  /** `supply − demand`，原樣帶出給副文字用（不重算）。 */
+  headroom: number
+}
+
+/**
+ * 額度點數（`FeasibilityReport.bySupply` 的 `demandPoints`／`supplyPoints`，見
+ * api-contract.yaml：`supplyPoints` 由「額度上限」與「未登記日的額度點數」推得）供需的
+ * 倍率與進度條。倍率是「供給是需求的幾倍」，進度條是反過來的「需求吃掉多少供給」，
+ * 兩個方向不一樣、不要互相除導出。
+ */
+export function computeSupplyRatio(layer: {
+  demandPoints: number
+  supplyPoints: number
+  headroom: number
+}): SupplyRatioView {
+  const { demandPoints, supplyPoints, headroom } = layer
+  const ratio = demandPoints > 0 ? supplyPoints / demandPoints : null
+  const ratioLabel = ratio === null ? '—' : `${ratio.toFixed(1)}×`
+  const utilizationPercent = supplyPoints > 0 ? Math.min(100, Math.round((demandPoints / supplyPoints) * 100)) : 0
+  return { ratio, ratioLabel, utilizationPercent, headroom }
+}
+
+// ---------------------------------------------------------------------------
 // 帶入求解：409 SOLVER_BUSY 解析正在跑的 jobId
 // ---------------------------------------------------------------------------
 

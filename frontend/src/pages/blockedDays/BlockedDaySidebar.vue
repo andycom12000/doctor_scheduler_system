@@ -4,10 +4,11 @@
  * （逐日 shortages、整月 bySupply 三層供需，`bySupply` 恰好三層時附「R2/R3 優先 ICU
  * 會被犧牲」提示，判斷邏輯全在 `logic.ts` 的純函式，這裡只負責顯示）。
  */
+import { computed } from 'vue'
 import type { FeasibilityReport } from '@/api/types'
-import type { ShortageDayView, StaffCountView, WardSqueezeHint } from './logic'
+import { computeSupplyRatio, type ShortageDayView, type StaffCountView, type WardSqueezeHint } from './logic'
 
-defineProps<{
+const props = defineProps<{
   totalCount: number
   activeStaffCount: number
   monthlyCap: number
@@ -18,6 +19,9 @@ defineProps<{
   areaTypeNameByCode: Record<string, string>
   wardSqueezeHint: WardSqueezeHint | null
 }>()
+
+/** 每層供需疊上 `computeSupplyRatio` 的倍率／進度條/％，模板不重複呼叫純函式。 */
+const supplyLayers = computed(() => props.bySupply.map((layer) => ({ layer, ratio: computeSupplyRatio(layer) })))
 
 function layerLabel(codes: string[], areaTypeNameByCode: Record<string, string>): string {
   return codes.map((code) => areaTypeNameByCode[code] ?? code).join('＋')
@@ -78,14 +82,19 @@ function joinNames(list: StaffCountView[], limit = 6): string {
     <section>
       <div class="sidebar__label">可行性預警 · 整月供需</div>
       <div class="layer-list">
-        <div v-for="layer in bySupply" :key="layer.areaTypeCodes.join(',')" class="layer">
+        <div v-for="{ layer, ratio } in supplyLayers" :key="layer.areaTypeCodes.join(',')" class="layer">
           <div class="layer__head">
             <span class="layer__label">{{ layerLabel(layer.areaTypeCodes, areaTypeNameByCode) }}</span>
-            <span class="layer__ratio" :class="{ 'layer__ratio--negative': layer.headroom < 0 }">
-              餘裕 {{ layer.headroom }}
+            <span class="layer__ratio" :class="{ 'layer__ratio--negative': (ratio.ratio ?? 1) < 1 }">
+              {{ ratio.ratioLabel }}
             </span>
           </div>
-          <div class="layer__note">需求 {{ layer.demandPoints }} 點 · 可用供給 {{ layer.supplyPoints }} 點</div>
+          <div class="layer__track">
+            <div class="layer__bar" :style="{ width: `${ratio.utilizationPercent}%` }" />
+          </div>
+          <div class="layer__note">
+            需求 {{ layer.demandPoints }} · 供給 {{ layer.supplyPoints }}（額度點數）· 餘裕 {{ layer.headroom }}
+          </div>
         </div>
       </div>
       <!-- 判斷依據見 logic.ts 的 evaluateWardSqueezeHint（ARCHITECTURE §9.1）；這裡只顯示結論，
@@ -200,11 +209,13 @@ function joinNames(list: StaffCountView[], limit = 6): string {
   font-size: 12.5px;
 }
 
+/* 倍率（供給是需求的幾倍）是主要視覺，「餘裕 N」降級到 `.layer__note` 當副文字（issue #53）。 */
 .layer__ratio {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
   font-family: ui-monospace, Menlo, monospace;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: var(--color-accent-800);
 }
 
 .layer__ratio--negative {
@@ -213,8 +224,19 @@ function joinNames(list: StaffCountView[], limit = 6): string {
   padding: 1px 5px;
 }
 
+.layer__track {
+  margin-top: 4px;
+  height: 4px;
+  background: color-mix(in srgb, var(--color-text) 9%, transparent);
+}
+
+.layer__bar {
+  height: 4px;
+  background: var(--color-accent);
+}
+
 .layer__note {
-  margin-top: 2px;
+  margin-top: 3px;
   font-size: 10.5px;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }

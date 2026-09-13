@@ -16,6 +16,7 @@ import {
   buildShortageDays,
   chiefAreaTypeCode,
   chiefAvailabilityByDate,
+  computeSupplyRatio,
   dateCountMap,
   evaluateWardSqueezeHint,
   extractBusyJobId,
@@ -347,6 +348,38 @@ describe('evaluateWardSqueezeHint', () => {
     const hint = evaluateWardSqueezeHint(bySupply)
     expect(hint?.show).toBe(false)
     expect(hint?.ratio).toBeNull()
+  })
+})
+
+describe('computeSupplyRatio', () => {
+  it('倍率是供給/需求，格式化成一位小數的 ×', () => {
+    const view = computeSupplyRatio({ demandPoints: 31, supplyPoints: 281, headroom: 250 })
+    expect(view.ratio).toBeCloseTo(281 / 31, 5)
+    expect(view.ratioLabel).toBe('9.1×')
+    expect(view.headroom).toBe(250)
+  })
+
+  it('進度條是需求/供給的百分比（利用率），跟倍率方向相反', () => {
+    const view = computeSupplyRatio({ demandPoints: 31, supplyPoints: 281, headroom: 250 })
+    expect(view.utilizationPercent).toBe(Math.round((31 / 281) * 100))
+  })
+
+  it('需求為 0 時倍率無意義，回 null／—，利用率為 0', () => {
+    const view = computeSupplyRatio({ demandPoints: 0, supplyPoints: 100, headroom: 100 })
+    expect(view.ratio).toBeNull()
+    expect(view.ratioLabel).toBe('—')
+    expect(view.utilizationPercent).toBe(0)
+  })
+
+  it('供給 ≤ 0 時利用率回 0，不除以零', () => {
+    const view = computeSupplyRatio({ demandPoints: 10, supplyPoints: 0, headroom: -10 })
+    expect(view.utilizationPercent).toBe(0)
+  })
+
+  it('利用率上限封頂在 100（需求超過供給時，例如登記過量）', () => {
+    const view = computeSupplyRatio({ demandPoints: 150, supplyPoints: 100, headroom: -50 })
+    expect(view.utilizationPercent).toBe(100)
+    expect(view.ratio).toBeCloseTo(100 / 150, 5)
   })
 })
 
