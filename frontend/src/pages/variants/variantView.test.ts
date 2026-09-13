@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { SoftConstraint } from '@/api/types'
 import {
   accumulateElapsed,
+  assignmentCount,
   acceptPolledSnapshot,
   averagePerVariantSeconds,
   buildMetricRows,
@@ -174,6 +175,15 @@ describe('acceptPolledSnapshot', () => {
     expect(acceptPolledSnapshot('succeeded')).toBe(false)
     expect(acceptPolledSnapshot('failed')).toBe(false)
     expect(acceptPolledSnapshot('cancelled')).toBe(false)
+  })
+})
+
+describe('assignmentCount', () => {
+  it('指派格數是區 × 日，不是契約的 variables', () => {
+    expect(assignmentCount({ areas: 5, days: 30 })).toBe(150)
+    expect(assignmentCount(null)).toBeNull()
+    expect(assignmentCount(undefined)).toBeNull()
+    expect(assignmentCount({ areas: 5 })).toBeNull()
   })
 })
 

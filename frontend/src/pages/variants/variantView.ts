@@ -40,6 +40,15 @@ export function formatMultipliers(weightProfile: Record<string, number> | undefi
 }
 
 /**
+ * 橫幅「N 區 × M 日 = K 個指派」的 K：指派格數 = 區 × 日。
+ * 契約的 `scale.variables` 是 CP-SAT 的變數數（合格的（人, 區）對 × 日），不是格數，不能拿來當指派數。
+ */
+export function assignmentCount(scale: { areas?: number; days?: number } | null | undefined): number | null {
+  if (scale?.areas === undefined || scale.days === undefined) return null
+  return scale.areas * scale.days
+}
+
+/**
  * 卡片標題「變體 A／B／C」，由 `variant.id`（ADR-0003 固定的 `v-a`/`v-b`/`v-c`）推出。
  * `variant.label` 是立場名稱（「重視公平」），設計稿把它另外放進晶片，不當標題用。
  */

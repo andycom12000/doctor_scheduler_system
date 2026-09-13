@@ -30,6 +30,7 @@ import VariantCard from './VariantCard.vue'
 import {
   acceptPolledSnapshot,
   accumulateElapsed,
+  assignmentCount,
   averagePerVariantSeconds,
   buildMetricRows,
   describeFailure,
@@ -515,7 +516,7 @@ const variantListEmptyNote = computed(() => {
           <div class="job-header__title">SOLVER · 變體比較</div>
           <div class="job-header__meta">
             求解 #{{ shortJobId(job.jobId) }} · {{ job.variantCount }} 份變體 · 共 {{ formatSeconds(displayElapsedSec) }} ·
-            {{ job.scale?.areas ?? '—' }} 區 × {{ job.scale?.days ?? '—' }} 日 = {{ job.scale?.variables ?? '—' }}
+            {{ job.scale?.areas ?? '—' }} 區 × {{ job.scale?.days ?? '—' }} 日 = {{ assignmentCount(job.scale) ?? '—' }}
             個指派
           </div>
           <div class="job-header__constraints">
