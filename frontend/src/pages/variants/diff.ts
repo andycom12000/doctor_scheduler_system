@@ -50,3 +50,15 @@ export function diffVariants(a: Duty[], b: Duty[]): CellDiff[] {
 
   return diffs.sort((x, y) => (x.date === y.date ? x.areaId.localeCompare(y.areaId) : x.date.localeCompare(y.date)))
 }
+
+/**
+ * 這份變體是不是目前草稿值班表已選定套用的那一份：逐格比對完全相同才算
+ * （issue #54）。不看 `jobId`／`variantId` 之類的中繼資料——套用之後值班表
+ * 可能又被逐格改過，比對值班內容本身才不會顯示「已選定」卻其實跟草稿不同。
+ */
+export function isVariantSelected(variantDuties: Duty[], scheduleDuties: Duty[]): boolean {
+  // 變體理論上不會是空陣列，但守一下：兩邊都空時不算「已選定」，避免尚未載入完成的
+  // 草稿誤判成套用過。
+  if (variantDuties.length === 0) return false
+  return diffVariants(variantDuties, scheduleDuties).length === 0
+}
