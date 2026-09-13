@@ -43,11 +43,11 @@ function joinNames(list: StaffCountView[], limit = 6): string {
 
     <section>
       <div class="sidebar__row">
-        <span class="sidebar__label">超過上限</span>
+        <span class="sidebar__label">已達上限</span>
         <span class="tag" :class="overList.length ? 'tag-accent' : 'tag-neutral'">{{ overList.length }} 人</span>
       </div>
       <p class="sidebar__note">
-        {{ overList.length ? `${joinNames(overList, 4)}（登記時 PUT 回 409，須先清除）` : '無人超過上限' }}
+        {{ overList.length ? `${joinNames(overList, 4)}（已達上限，須先清除其他天）` : '尚無人達到上限' }}
       </p>
     </section>
 
@@ -88,9 +88,11 @@ function joinNames(list: StaffCountView[], limit = 6): string {
           <div class="layer__note">需求 {{ layer.demandPoints }} 點 · 可用供給 {{ layer.supplyPoints }} 點</div>
         </div>
       </div>
+      <!-- 判斷依據見 logic.ts 的 evaluateWardSqueezeHint（ARCHITECTURE §9.1）；這裡只顯示結論，
+           不在畫面文字裡帶內部文件章節號。 -->
       <div v-if="wardSqueezeHint?.show" class="ward-hint">
-        一般病房 vs 低年級剩餘供給吃緊（邊際供需比約 {{ wardSqueezeHint.ratio?.toFixed(2) }} 倍）：資深恐被拉進一般病房，
-        「R2/R3 優先 ICU」這條偏好可能被犧牲。
+        低年級可值一般病房的剩餘供給吃緊（邊際供需比約 {{ wardSqueezeHint.ratio?.toFixed(2) }} 倍）：低年級登記越多，
+        資深越被拉進 ICU 擠掉 R2/R3，「R2/R3 優先 ICU」這條偏好可能被犧牲。
       </div>
     </section>
 

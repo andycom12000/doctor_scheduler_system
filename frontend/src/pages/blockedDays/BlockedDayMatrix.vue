@@ -32,8 +32,12 @@ const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']
  * 直接算出完整的 `grid-template-columns` 字串，不靠 `repeat(var(--n), …)`——
  * 用 CSS 變數當 `repeat()` 的重複次數在部分 Chromium 版本上不可靠，
  * 字串內插保證 WebView2 152 一定吃得到正確的欄數。
+ *
+ * 行事曆還沒載入時 `props.days` 是空陣列，`repeat(0, 23px)` 會讓整個
+ * `grid-template-columns` 判定為無效值（不是只有那一段被忽略），版面整個垮掉；
+ * 這種情況交給樣板的 `v-if="days.length > 0"` 顯示載入中訊息，不渲染格線。
  */
-const gridTemplateColumns = computed(() => `148px repeat(${props.days.length}, 23px) 34px 34px`)
+const gridTemplateColumns = computed(() => `148px 48px repeat(${props.days.length}, 23px) 34px 34px`)
 
 function weekdayLabel(day: CalendarDay): string {
   return WEEKDAY_LABELS[day.weekday] ?? ''
@@ -60,19 +64,21 @@ function onCellPointerDown(event: PointerEvent, staffId: string, date: string): 
 }
 
 function onContainerPointerUp(event: PointerEvent): void {
-  pointerPaint.onPointerUp(event)
-  emit('strokeEnd')
+  // 只有這一筆畫真的塗過格子才 emit strokeEnd——否則點姓名欄、員編欄這些不會觸發
+  // pointerdown 起筆的地方也會在放開手指時白白多打兩個 GET（登記表＋可行性）。
+  if (pointerPaint.onPointerUp(event)) emit('strokeEnd')
 }
 
 function onContainerPointerCancel(event: PointerEvent): void {
-  pointerPaint.onPointerCancel(event)
-  emit('strokeEnd')
+  if (pointerPaint.onPointerCancel(event)) emit('strokeEnd')
 }
 </script>
 
 <template>
   <div class="matrix-wrap">
+    <p v-if="days.length === 0" class="matrix-loading">行事曆載入中…</p>
     <div
+      v-else
       class="matrix-grid"
       :style="{ gridTemplateColumns }"
       @pointermove="pointerPaint.onPointerMove"
@@ -80,6 +86,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
       @pointercancel="onContainerPointerCancel"
     >
       <div class="cell cell--label cell--corner"></div>
+      <div class="cell cell--corner"></div>
       <div v-for="day in days" :key="day.date" class="cell cell--head" :class="{ 'cell--holiday': day.isHoliday }">
         <span class="cell-head__wd">{{ weekdayLabel(day) }}</span>
         <span class="cell-head__dd">{{ dayNumber(day) }}</span>
@@ -87,8 +94,14 @@ function onContainerPointerCancel(event: PointerEvent): void {
       <div class="cell cell--label cell--foot-head">登</div>
       <div class="cell cell--label cell--foot-head">餘</div>
 
-      <template v-for="(group, groupIndex) in groups" :key="group.groupCode">
-        <div class="cell cell--group-head" :style="{ '--group-tint': `var(--group-${Math.min(groupIndex + 1, 4)})` }">
+      <template v-for="group in groups" :key="group.groupCode">
+        <div
+          class="cell cell--group-head"
+          :style="{
+            '--group-tint': `var(--group-${Math.min(group.groupIndex + 1, 4)})`,
+            '--group-tint-fg': `var(--group-${Math.min(group.groupIndex + 1, 4)}-fg)`,
+          }"
+        >
           <span class="group-head__label">{{ group.groupName }}</span>
           <span class="group-head__note">{{ group.capNote }}</span>
         </div>
@@ -98,11 +111,12 @@ function onContainerPointerCancel(event: PointerEvent): void {
             <span class="row-name__rank">{{ row.rankCode }}</span>
             <span class="row-name__text">{{ row.name }}</span>
           </div>
+          <div class="cell cell--empno">{{ row.employeeNo }}</div>
           <div
             v-for="cellDay in row.cells"
             :key="cellDay.date"
             class="cell cell--day"
-            :class="{ 'cell--blocked': cellDay.blocked, 'cell--holiday': cellDay.isHoliday && !cellDay.blocked }"
+            :class="{ 'cell--blocked': cellDay.blocked, 'cell--holiday': cellDay.isHoliday }"
             :data-paint-key="paintKey(row.staffId, cellDay.date)"
             @pointerdown="onCellPointerDown($event, row.staffId, cellDay.date)"
           ></div>
@@ -112,6 +126,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
       </template>
 
       <div class="cell cell--label cell--foot-label">該日登記人數</div>
+      <div class="cell"></div>
       <div v-for="day in days" :key="`count-${day.date}`" class="cell cell--foot">
         {{ footerCounts.get(day.date) ?? 0 }}
       </div>
@@ -119,6 +134,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
       <div class="cell cell--foot"></div>
 
       <div class="cell cell--label cell--foot-label">總值可用人數</div>
+      <div class="cell"></div>
       <div
         v-for="day in days"
         :key="`chief-${day.date}`"
@@ -152,6 +168,11 @@ function onContainerPointerCancel(event: PointerEvent): void {
   gap: var(--space-3);
 }
 
+.matrix-loading {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .matrix-grid {
   display: grid;
   grid-auto-rows: 21px;
@@ -160,7 +181,6 @@ function onContainerPointerCancel(event: PointerEvent): void {
   border-left: 1px solid var(--color-divider);
   width: fit-content;
   max-width: 100%;
-  touch-action: none;
   user-select: none;
 }
 
@@ -227,7 +247,9 @@ function onContainerPointerCancel(event: PointerEvent): void {
   font-weight: 600;
   padding: 2px 6px;
   background: var(--group-tint, var(--color-accent-200));
-  color: var(--color-text);
+  /* group 3／4 底色是深色（--group-3/-4），文字要跟著換成 --group-N-fg，
+     不能固定用 --color-text，不然深字疊深底看不清楚。 */
+  color: var(--group-tint-fg, var(--color-text));
 }
 
 .group-head__note {
@@ -252,8 +274,18 @@ function onContainerPointerCancel(event: PointerEvent): void {
   white-space: nowrap;
 }
 
+.cell--empno {
+  font-size: 9px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  justify-content: center;
+  padding: 0 2px;
+}
+
 .cell--day {
   cursor: pointer;
+  /* 只鎖住格子本身的觸控手勢，讓拖曳塗格不被系統的捲動／縮放搶走；
+     鎖在整個 `.matrix-grid` 上會連帶擋掉矩陣的水平捲動（`overflow: auto`）。 */
+  touch-action: none;
 }
 
 .cell--day:hover {

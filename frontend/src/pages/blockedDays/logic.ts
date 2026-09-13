@@ -44,6 +44,12 @@ export interface BlockedDayGroupView {
   groupName: string
   capNote: string
   rows: BlockedDayRowView[]
+  /**
+   * 這個組在 `RankSettings.groups` 原始陣列裡的位置（過濾掉空組**之前**）。
+   * 身分組色階（`--group-1`…`--group-4`）要對齊這個原始位置，不能用畫面上過濾空組後
+   * 的 `v-for` 索引——不然空組被拿掉後，後面的組會集體往前跳一階顏色。
+   */
+  groupIndex: number
 }
 
 /** 由資格矩陣推導某個身分組「可值哪些區域類型」與「額度是否不計」的說明文字，不寫死區域類型代碼。 */
@@ -97,6 +103,7 @@ export function buildGroupViews(params: {
     const totals = totalsByStaff.get(person.id)
     const blockedDates = blockedByStaff.get(person.id) ?? new Set<string>()
     const count = totals?.count ?? 0
+    const remaining = totals?.remaining ?? Math.max(0, params.monthlyCap - count)
     const row: BlockedDayRowView = {
       staffId: person.id,
       name: person.name,
@@ -109,8 +116,11 @@ export function buildGroupViews(params: {
         isHoliday: day.isHoliday,
       })),
       count,
-      remaining: totals?.remaining ?? Math.max(0, params.monthlyCap - count),
-      overCap: count > params.monthlyCap,
+      remaining,
+      // 後端在 `count >= cap` 時 PUT 就回 409，不可能真的寫進一筆「超過上限」的登記，
+      // `count > monthlyCap` 這種本地重算在真實資料下永遠是 false。真正該標紅的是
+      // 「已經打平上限、沒有餘額」，也就是 remaining === 0。
+      overCap: remaining === 0,
     }
     const list = rowsByGroup.get(groupCode) ?? []
     list.push(row)
@@ -118,7 +128,7 @@ export function buildGroupViews(params: {
   }
 
   return params.groups
-    .map((group) => ({
+    .map((group, groupIndex) => ({
       groupCode: group.code,
       groupName: group.name,
       capNote: groupCapNote({
@@ -128,6 +138,7 @@ export function buildGroupViews(params: {
         areaTypeNameByCode: params.areaTypeNameByCode,
       }),
       rows: rowsByGroup.get(group.code) ?? [],
+      groupIndex,
     }))
     .filter((group) => group.rows.length > 0)
 }
@@ -145,9 +156,37 @@ export function dateCountMap(byDate: BlockedDayRegistration['byDate'], days: str
   return map
 }
 
-/** 找出「總值」這個區域類型的代碼，以 `GET /settings/areas` 的 `AreaType.name` 為準，不寫死代碼字串。 */
-export function chiefAreaTypeCode(areaTypes: AreaType[]): string | null {
-  return areaTypes.find((t) => t.name === '總值')?.code ?? null
+/**
+ * 找出「總值」這個區域類型的代碼，不比對顯示名稱字串（`name === '總值'` 太脆弱，改名字就找不到）。
+ * 優先順序：
+ * 1. `feasibility.bySupply[0].areaTypeCodes[0]`——巢狀累計供需的最窄那層，定義上就是資格
+ *    最少人能值的區域類型（ARCHITECTURE §9.1：總值 ⊂ 資深 ⊂ …）。
+ * 2. 沒有可行性資料時，從資格矩陣挑「可值人數最少」的區域類型。
+ * 3. 兩者都沒有資料（例如設定尚未載入）時，回退契約既有的 `CHIEF` 代碼。
+ */
+export function chiefAreaTypeCode(params: {
+  bySupply: FeasibilityReport['bySupply']
+  matrix: EligibilityMatrix['matrix']
+  areaTypes: AreaType[]
+}): string {
+  const narrowestLayer = params.bySupply[0]?.areaTypeCodes
+  if (narrowestLayer?.length === 1) return narrowestLayer[0]
+
+  // 資格矩陣還沒載入時是 `{}`，每個區域類型的「可值人數」都會算成 0，
+  // 排最前面的那個（例如 WARD）會被誤判成「可值人數最少」；矩陣是空的就直接跳過這條路徑，
+  // 交給最後的 'CHIEF' fallback，不要用一個沒意義的 0 打平去猜。
+  if (Object.keys(params.matrix).length === 0) return 'CHIEF'
+
+  let bestCode: string | null = null
+  let bestEligibleCount = Number.POSITIVE_INFINITY
+  for (const type of params.areaTypes) {
+    const eligibleCount = Object.values(params.matrix).filter((row) => row[type.code] === true).length
+    if (eligibleCount < bestEligibleCount) {
+      bestEligibleCount = eligibleCount
+      bestCode = type.code
+    }
+  }
+  return bestCode ?? 'CHIEF'
 }
 
 /** 每一天「有資格值總值且未登記」的在職人數；資格由資格矩陣依 `rankCode` 推出。 */
@@ -182,7 +221,7 @@ export function chiefAvailabilityByDate(params: {
 }
 
 // ---------------------------------------------------------------------------
-// 登記概況：總筆數、超過上限、尚未登記
+// 登記概況：總筆數、已達上限、尚未登記
 // ---------------------------------------------------------------------------
 
 export interface StaffCountView {
@@ -191,13 +230,13 @@ export interface StaffCountView {
   count: number
 }
 
-export function overCapEntries(
-  byStaff: BlockedDayRegistration['byStaff'],
-  nameById: Map<string, string>,
-  cap: number,
-): StaffCountView[] {
+/**
+ * 已達上限（`remaining === 0`）的人。後端在 `count >= cap` 時 PUT 就回 409，
+ * 所以「超過上限」在真實資料下永遠不會發生，能列出來的只有「剛好打平、沒有餘額」。
+ */
+export function overCapEntries(byStaff: BlockedDayRegistration['byStaff'], nameById: Map<string, string>): StaffCountView[] {
   return byStaff
-    .filter((s) => s.count > cap)
+    .filter((s) => s.remaining === 0)
     .map((s) => ({ staffId: s.staffId, name: nameById.get(s.staffId) ?? s.staffId, count: s.count }))
 }
 
@@ -259,8 +298,10 @@ export function buildShortageDays(
 // ---------------------------------------------------------------------------
 
 /**
- * 「一般病房需求 vs 低年級剩餘供給」吃緊的門檻。ARCHITECTURE §9.1：零登記時低年級供給
- * 110 點、一般病房需求 104 點，比值約 1.057，仍屬「很緊」；沿用設計稿的 1.5 倍門檻校準。
+ * 「一般病房需求 vs 低年級剩餘供給」吃緊的門檻。這裡的邊際供給／需求是從 `bySupply` 巢狀
+ * 累計的最後兩層相減得出（見下方函式註解），對應 ARCHITECTURE §9.1 零登記基準：低年級
+ * 專屬供給 110 點、一般病房專屬需求 117 點，110/117 ≈ 0.94——連基準都打不平；
+ * 沿用設計稿的 1.5 倍門檻校準。
  */
 const WARD_SQUEEZE_RATIO_THRESHOLD = 1.5
 

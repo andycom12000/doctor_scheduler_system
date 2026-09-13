@@ -50,30 +50,38 @@ export interface UsePointerPaintOptions {
 }
 
 export interface PointerPaintHandlers {
-  /** 掛在每一格自己的 `@pointerdown`，需要那一格自己的鍵。 */
+  /** 掛在每一格自己的 `@pointerdown`，需要那一格自己的鍵。非主指標／非左鍵（例如右鍵拖曳、
+   *  多點觸控的第二指）直接忽略，不起筆。 */
   onCellPointerDown: (event: PointerEvent, key: string) => void
   /** 掛在整個矩陣容器的 `@pointermove`。 */
   onPointerMove: (event: PointerEvent) => void
-  /** 掛在整個矩陣容器的 `@pointerup`。 */
-  onPointerUp: (event: PointerEvent) => void
-  /** 掛在整個矩陣容器的 `@pointercancel`（例如拖出視窗外、觸控被系統手勢搶走）。 */
-  onPointerCancel: (event: PointerEvent) => void
+  /** 掛在整個矩陣容器的 `@pointerup`。回傳這一筆畫（一次 pointerdown 到這次 up）
+   *  是否實際塗過至少一格——呼叫端可以用它跳過「點到姓名欄、根本沒起筆」時的收尾動作。 */
+  onPointerUp: (event: PointerEvent) => boolean
+  /** 掛在整個矩陣容器的 `@pointercancel`（例如拖出視窗外、觸控被系統手勢搶走），
+   *  回傳值意義同 `onPointerUp`。 */
+  onPointerCancel: (event: PointerEvent) => boolean
 }
 
 export function usePointerPaint(options: UsePointerPaintOptions): PointerPaintHandlers {
   const attribute = options.attribute ?? 'data-paint-key'
   const gate = createStrokeGate()
   let dragging = false
+  let paintedThisStroke = false
 
   function paintOnce(key: string | null): void {
     if (!key) return
     if (!gate.visit(key)) return
+    paintedThisStroke = true
     options.onPaint(key)
   }
 
   function onCellPointerDown(event: PointerEvent, key: string): void {
+    // 只認主指標的左鍵／單一觸控點起筆，避免右鍵選單拖曳或多點觸控的第二指也觸發塗格。
+    if (event.button !== 0 || !event.isPrimary) return
     dragging = true
     gate.reset()
+    paintedThisStroke = false
     const target = event.currentTarget as Element | null
     target?.setPointerCapture?.(event.pointerId)
     paintOnce(key)
@@ -85,9 +93,12 @@ export function usePointerPaint(options: UsePointerPaintOptions): PointerPaintHa
     paintOnce(resolvePaintKey(element, attribute))
   }
 
-  function endStroke(): void {
+  function endStroke(): boolean {
     dragging = false
     gate.reset()
+    const painted = paintedThisStroke
+    paintedThisStroke = false
+    return painted
   }
 
   return {

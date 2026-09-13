@@ -90,12 +90,34 @@ function calendarDay(date: string, overrides: Partial<CalendarDay> = {}): Calend
 }
 
 describe('chiefAreaTypeCode', () => {
-  it('以 AreaType.name 找出「總值」的代碼，不寫死字串', () => {
-    expect(chiefAreaTypeCode(areaTypes)).toBe('CHIEF')
+  it('優先用 bySupply 最窄那層（單一代碼）', () => {
+    const bySupply: FeasibilityReport['bySupply'] = [
+      { areaTypeCodes: ['CHIEF'], demandPoints: 1, supplyPoints: 1, headroom: 0 },
+      { areaTypeCodes: ['CHIEF', 'ICU'], demandPoints: 2, supplyPoints: 2, headroom: 0 },
+      { areaTypeCodes: ['CHIEF', 'ICU', 'WARD'], demandPoints: 3, supplyPoints: 3, headroom: 0 },
+    ]
+    expect(chiefAreaTypeCode({ bySupply, matrix, areaTypes })).toBe('CHIEF')
   })
 
-  it('找不到就回 null', () => {
-    expect(chiefAreaTypeCode([{ code: 'X', name: 'Y' }])).toBeNull()
+  it('沒有可行性資料時，從資格矩陣挑可值人數最少的區域類型', () => {
+    expect(chiefAreaTypeCode({ bySupply: [], matrix, areaTypes })).toBe('CHIEF')
+  })
+
+  it('bySupply 最窄層不是單一代碼時忽略，改用資格矩陣推導', () => {
+    const bySupply: FeasibilityReport['bySupply'] = [
+      { areaTypeCodes: ['CHIEF', 'ICU'], demandPoints: 1, supplyPoints: 1, headroom: 0 },
+    ]
+    expect(chiefAreaTypeCode({ bySupply, matrix, areaTypes })).toBe('CHIEF')
+  })
+
+  it('兩者都沒有資料時 fallback 回 CHIEF', () => {
+    expect(chiefAreaTypeCode({ bySupply: [], matrix: {}, areaTypes: [] })).toBe('CHIEF')
+  })
+
+  it('矩陣是空物件（尚未載入）但 areaTypes 已有資料時，不要誤判成 areaTypes 裡第一個代碼', () => {
+    // 矩陣是 {} 時每個區域類型的可值人數都會算成 0，若不擋這個情況，
+    // 排最前面的 WARD 會被誤判成「可值人數最少」，直接 fallback 回 CHIEF 才對。
+    expect(chiefAreaTypeCode({ bySupply: [], matrix: {}, areaTypes })).toBe('CHIEF')
   })
 })
 
@@ -115,7 +137,7 @@ describe('buildGroupViews', () => {
   const byStaff: BlockedDayRegistration['byStaff'] = [
     { staffId: 's-pgy1', count: 3, remaining: 13 },
     { staffId: 's-r2', count: 0, remaining: 8 },
-    { staffId: 's-r4', count: 17, remaining: -1 },
+    { staffId: 's-r4', count: 16, remaining: 0 },
     { staffId: 's-np', count: 1, remaining: 15 },
   ]
   const days = [calendarDay('2026-09-01'), calendarDay('2026-09-06', { isHoliday: true })]
@@ -160,7 +182,7 @@ describe('buildGroupViews', () => {
     ])
   })
 
-  it('超過月上限的人 overCap 為 true', () => {
+  it('remaining 為 0（已達上限）的人 overCap 為 true', () => {
     const result = buildGroupViews({
       staff,
       ranks,
@@ -174,6 +196,36 @@ describe('buildGroupViews', () => {
     })
     const senior = result.find((g) => g.groupCode === 'SENIOR')
     expect(senior?.rows.find((r) => r.staffId === 's-r4')?.overCap).toBe(true)
+    const junior = result.find((g) => g.groupCode === 'JUNIOR')
+    expect(junior?.rows.find((r) => r.staffId === 's-pgy1')?.overCap).toBe(false)
+  })
+
+  it('groupIndex 對齊 groups 陣列的原始位置，不受過濾空組影響', () => {
+    const groupsWithEmptyOne: RankGroup[] = [
+      { code: 'JUNIOR', name: '低年級' },
+      { code: 'EMPTY', name: '空組' },
+      { code: 'MID', name: '中階' },
+      { code: 'SENIOR', name: '資深' },
+      { code: 'NP', name: 'NP' },
+    ]
+    const result = buildGroupViews({
+      staff,
+      ranks,
+      groups: groupsWithEmptyOne,
+      byStaff,
+      entries,
+      days,
+      monthlyCap: 16,
+      eligibilityMatrix: matrix,
+      areaTypeNameByCode,
+    })
+    // EMPTY（原始索引 1）沒有在職人員被過濾掉；SENIOR 仍要對齊它在原始陣列裡的索引 3，
+    // 不是過濾後排在第三位（索引 2）。
+    expect(result.map((g) => g.groupCode)).toEqual(['JUNIOR', 'MID', 'SENIOR', 'NP'])
+    expect(result.find((g) => g.groupCode === 'JUNIOR')?.groupIndex).toBe(0)
+    expect(result.find((g) => g.groupCode === 'MID')?.groupIndex).toBe(2)
+    expect(result.find((g) => g.groupCode === 'SENIOR')?.groupIndex).toBe(3)
+    expect(result.find((g) => g.groupCode === 'NP')?.groupIndex).toBe(4)
   })
 })
 
@@ -208,7 +260,7 @@ describe('chiefAvailabilityByDate', () => {
 describe('overCapEntries / unregisteredEntries / totalRegisteredCount', () => {
   const byStaff: BlockedDayRegistration['byStaff'] = [
     { staffId: 's-a', count: 0, remaining: 16 },
-    { staffId: 's-b', count: 17, remaining: -1 },
+    { staffId: 's-b', count: 16, remaining: 0 },
     { staffId: 's-c', count: 5, remaining: 11 },
   ]
   const nameById = new Map([
@@ -217,8 +269,8 @@ describe('overCapEntries / unregisteredEntries / totalRegisteredCount', () => {
     ['s-c', 'C'],
   ])
 
-  it('overCapEntries 只列出超過上限的人', () => {
-    expect(overCapEntries(byStaff, nameById, 16)).toEqual([{ staffId: 's-b', name: 'B', count: 17 }])
+  it('overCapEntries 只列出 remaining 為 0（已達上限）的人', () => {
+    expect(overCapEntries(byStaff, nameById)).toEqual([{ staffId: 's-b', name: 'B', count: 16 }])
   })
 
   it('unregisteredEntries 只列出 count 為 0 的人', () => {
@@ -226,7 +278,7 @@ describe('overCapEntries / unregisteredEntries / totalRegisteredCount', () => {
   })
 
   it('totalRegisteredCount 加總全部人的 count', () => {
-    expect(totalRegisteredCount(byStaff)).toBe(22)
+    expect(totalRegisteredCount(byStaff)).toBe(21)
   })
 })
 

@@ -41,11 +41,15 @@ describe('createStrokeGate', () => {
 })
 
 /** 用假的 PointerEvent／Element 測試 composable 本身不需要真的 pointermove／document，
- * 只測試「pointerdown 立刻塗一次、pointerup 之後可以再塗同一格」這條不依賴 `document` 的路徑。 */
-function fakePointerDownEvent(pointerId = 1): PointerEvent {
+ * 只測試「pointerdown 立刻塗一次、pointerup 之後可以再塗同一格」這條不依賴 `document` 的路徑。
+ * 預設是主指標的左鍵按下（`button: 0, isPrimary: true`），符合真正會起筆的情境。 */
+function fakePointerDownEvent(overrides: Record<string, unknown> = {}): PointerEvent {
   return {
-    pointerId,
+    pointerId: 1,
+    button: 0,
+    isPrimary: true,
     currentTarget: { setPointerCapture: vi.fn() },
+    ...overrides,
   } as unknown as PointerEvent
 }
 
@@ -71,7 +75,42 @@ describe('usePointerPaint', () => {
     const onPaint = vi.fn()
     const { onCellPointerDown } = usePointerPaint({ onPaint })
     const capture = vi.fn()
-    onCellPointerDown({ pointerId: 7, currentTarget: { setPointerCapture: capture } } as unknown as PointerEvent, 'k')
+    onCellPointerDown(fakePointerDownEvent({ pointerId: 7, currentTarget: { setPointerCapture: capture } }), 'k')
     expect(capture).toHaveBeenCalledWith(7)
+  })
+
+  it('非左鍵（例如右鍵拖曳）不起筆，也不佔用之後的 pointermove', () => {
+    const onPaint = vi.fn()
+    const { onCellPointerDown } = usePointerPaint({ onPaint })
+    onCellPointerDown(fakePointerDownEvent({ button: 2 }), 'k')
+    expect(onPaint).not.toHaveBeenCalled()
+  })
+
+  it('非主指標（多點觸控的第二指）不起筆', () => {
+    const onPaint = vi.fn()
+    const { onCellPointerDown } = usePointerPaint({ onPaint })
+    onCellPointerDown(fakePointerDownEvent({ isPrimary: false }), 'k')
+    expect(onPaint).not.toHaveBeenCalled()
+  })
+
+  it('onPointerUp 回傳這一筆畫是否塗過格子：有起筆為 true', () => {
+    const onPaint = vi.fn()
+    const { onCellPointerDown, onPointerUp } = usePointerPaint({ onPaint })
+    onCellPointerDown(fakePointerDownEvent(), 'k')
+    expect(onPointerUp({} as PointerEvent)).toBe(true)
+  })
+
+  it('onPointerUp 回傳這一筆畫是否塗過格子：被過濾掉的 pointerdown 不算塗過，回 false', () => {
+    const onPaint = vi.fn()
+    const { onCellPointerDown, onPointerUp } = usePointerPaint({ onPaint })
+    onCellPointerDown(fakePointerDownEvent({ button: 2 }), 'k')
+    expect(onPointerUp({} as PointerEvent)).toBe(false)
+  })
+
+  it('onPointerCancel 回傳值意義與 onPointerUp 相同', () => {
+    const onPaint = vi.fn()
+    const { onCellPointerDown, onPointerCancel } = usePointerPaint({ onPaint })
+    onCellPointerDown(fakePointerDownEvent(), 'k')
+    expect(onPointerCancel({} as PointerEvent)).toBe(true)
   })
 })

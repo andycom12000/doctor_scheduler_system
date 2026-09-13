@@ -5,11 +5,11 @@
  *
  * 寫入策略：每次 PUT／DELETE 用回應的 `BlockedDayMutationResult` 就地patch本地已載入的
  * `BlockedDayRegistration`（`applyBlockedDayMutation`），不整份重抓——拖曳塗一整排時
- * 不必等每一格的 GET 才更新畫面。等一次拖曳（或一次點擊）結束才呼叫
- * `invalidate('blocked-days/{ym}')`，讓可行性預警（`blocked-days/{ym}/feasibility` 這個
- * 子資源 key 就放在這個字首下）與登記表本身重新對一次帳。
+ * 不必等每一格的 GET 才更新畫面。等一次拖曳（或一次點擊）結束、且這批寫入全部落地
+ * （`pendingWrites`）才呼叫 `invalidate('blocked-days/{ym}')`，讓可行性預警
+ * （`blocked-days/{ym}/feasibility` 這個子資源 key 就放在這個字首下）與登記表本身重新對一次帳。
  */
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/PageLayout.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
@@ -81,7 +81,13 @@ const areaTypeNameByCode = computed<Record<string, string>>(() => {
   return map
 })
 
-const chiefCode = computed(() => chiefAreaTypeCode(areaSettings.value?.areaTypes ?? []))
+const chiefCode = computed(() =>
+  chiefAreaTypeCode({
+    bySupply: feasibility.value?.bySupply ?? [],
+    matrix: eligibilityMatrix.value?.matrix ?? {},
+    areaTypes: areaSettings.value?.areaTypes ?? [],
+  }),
+)
 const monthlyCap = computed(() => registration.value?.monthlyCap ?? 16)
 const staffNameById = computed(() => new Map(staff.value.map((s) => [s.id, s.name])))
 
@@ -116,7 +122,7 @@ const chiefAvailability = computed(() =>
 )
 
 const overList = computed(() =>
-  registration.value ? overCapEntries(registration.value.byStaff, staffNameById.value, monthlyCap.value) : [],
+  registration.value ? overCapEntries(registration.value.byStaff, staffNameById.value) : [],
 )
 const noneList = computed(() =>
   registration.value ? unregisteredEntries(registration.value.byStaff, staffNameById.value) : [],
@@ -149,20 +155,31 @@ function showToast(message: string): void {
     toast.value = null
   }, 5000)
 }
+onBeforeUnmount(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+})
 
 function isBlockedNow(staffId: string, date: string): boolean {
   return registration.value?.entries.some((e) => e.staffId === staffId && e.date === date) ?? false
 }
+
+/**
+ * 拖曳中每一格的寫入都各自送出、各自 patch，彼此不等待；但一次拖曳結束時
+ * （`onStrokeEnd`）要在 invalidate 前等這批還沒回來的請求全部落地，不然晚到的
+ * PUT／DELETE 回應會在 invalidate 換掉 `registration` 之後才 resolve，把資料
+ * patch 進一個已經被取代的舊物件、畫面再也追不上（見 `paintCell` 內的重讀防呆）。
+ */
+const pendingWrites = new Set<Promise<unknown>>()
 
 async function paintCell(staffId: string, date: string): Promise<void> {
   const targetYm = ym.value
   if (!registration.value) return
   const wantBlocked = brush.value === 'set'
   if (isBlockedNow(staffId, date) === wantBlocked) return
+  const writePromise = wantBlocked ? setBlockedDay(targetYm, staffId, date) : clearBlockedDay(targetYm, staffId, date)
+  pendingWrites.add(writePromise)
   try {
-    const result = wantBlocked
-      ? await setBlockedDay(targetYm, staffId, date)
-      : await clearBlockedDay(targetYm, staffId, date)
+    const result = await writePromise
     // 讀取 `.value` 要在 await 之後——這段等待期間可能有人切了月份，或
     // `onStrokeEnd` 的 invalidate() 已經把整份物件換掉；重讀一次，物件已經不是
     // 這次操作的目標月份就直接放棄，交給重抓後的真相，不要把資料寫進錯的月份。
@@ -176,11 +193,17 @@ async function paintCell(staffId: string, date: string): Promise<void> {
     } else {
       showToast(describeError(err))
     }
+  } finally {
+    pendingWrites.delete(writePromise)
   }
 }
 
-function onStrokeEnd(): void {
-  void invalidate(`blocked-days/${ym.value}`)
+async function onStrokeEnd(): Promise<void> {
+  // 用等待開始當下的月份，不是 await 之後的 ym.value——拖曳結束到寫入全部落地這段期間
+  // 使用者可能已經切了月份，invalidate 要對準這次拖曳真正操作的那個月，不是畫面現在停在哪個月。
+  const targetYm = ym.value
+  await Promise.allSettled([...pendingWrites])
+  void invalidate(`blocked-days/${targetYm}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +225,7 @@ async function onSolve(): Promise<void> {
     void router.push({ name: 'variants', params: { ym: ym.value }, query: { job: job.jobId } })
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
+      showToast('已有求解工作在執行中，帶你去看那一個。')
       const busyJobId = extractBusyJobId(err.body)
       void router.push({
         name: 'variants',
