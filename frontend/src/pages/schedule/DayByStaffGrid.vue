@@ -185,7 +185,7 @@ function cellClick(staffId: string, date: string): void {
       <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty-holiday" />假日值班</span>
       <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--blocked" />不可排班日登記</span>
       <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--holiday" />假日（整列底色）</span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--vacancy" />未填補欄有空缺（H1）</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--vacancy" />空缺欄有數字＝該日有未填補區域（H1）</span>
       <span class="ad-legend__item">
         <span class="ad-legend__swatch ad-legend__swatch--violation-bg" />其他硬違規（H2／H3／H4／H6／H7）
       </span>
