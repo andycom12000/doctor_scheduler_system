@@ -266,4 +266,10 @@ describe('elapsed 累加器', () => {
     const next = accumulateElapsed(acc, { variantIndex: 2, elapsedSec: 8 })
     expect(totalElapsedSec(next)).toBe(23)
   })
+  it('同一份變體內耗時倒退（多樣性重試重新 BeginVariant）也視為新一段，不讓總耗時退回去', () => {
+    let acc = initialElapsedAccumulator(0, 0, 0)
+    acc = accumulateElapsed(acc, { variantIndex: 1, elapsedSec: 12 })
+    acc = accumulateElapsed(acc, { variantIndex: 1, elapsedSec: 0.3 })
+    expect(totalElapsedSec(acc)).toBeCloseTo(12.3)
+  })
 })

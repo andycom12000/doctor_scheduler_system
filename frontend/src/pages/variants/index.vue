@@ -472,7 +472,10 @@ const overlayVisible = computed(() => job.value?.status === 'queued' || job.valu
 const failureText = computed(() => describeFailure(job.value?.failureReason))
 const showEmptyState = computed(() => !jobId.value && !jobLoading.value)
 // 契約沒有「每份變體的耗時」欄位，退回整體耗時／完成的份數的平均值（PR 說明列出這個近似）。
-const perVariantSeconds = computed(() => averagePerVariantSeconds(job.value?.elapsedSec, variants.value.length))
+// 用 displayElapsedSec 而不是 job.elapsedSec：兩者在終態 GET 失敗那條分支會不同步
+// （job.elapsedSec 保留 attach 當下的舊值，displayElapsedSec 優先看累加器），橫幅與
+// 卡片右上角的耗時要同源，不然會出現橫幅正確、卡片卻用舊數字的矛盾（協調者審查回饋）。
+const perVariantSeconds = computed(() => averagePerVariantSeconds(displayElapsedSec.value, variants.value.length))
 function isVariantApplied(variant: Variant): boolean {
   return isVariantSelected(variant.duties, scheduleDuties.value)
 }
@@ -639,7 +642,9 @@ const variantListEmptyNote = computed(() => {
 }
 
 .job-header__title {
-  margin-right: auto;
+  /* 不設 margin-right: auto——只有最右邊的 .job-header__constraints 該把剩餘空間吃掉
+     （screen-04.html:66-68 只有最右一個 span 用 margin-left:auto），標題與 meta 兩個
+     span 之間只留 column-gap，meta 才會緊貼標題右側而不是被推到橫幅中段（協調者審查回饋）。 */
   font-family: var(--font-heading);
   font-size: 15px;
   letter-spacing: 0.08em;

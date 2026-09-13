@@ -18,6 +18,12 @@ function cellKeyOf(areaId: string, date: string): string {
   return `${areaId} ${date}`
 }
 
+/**
+ * 鍵是 `areaId + date`，一格只留一筆——如果某區某天 `requiredPerDay > 1`（同一格要
+ * 排多人），這裡會後蓋前、只留最後一筆，逐格差異／已選定判定都會少算。出廠值
+ * `requiredPerDay` 全部是 1（`docs/constraint-defaults.md`），目前不會踩到；
+ * 要是之後哪一區改成 > 1，這裡要先跟著改成「同格多筆」的結構（協調者審查回饋）。
+ */
 function indexByCell(duties: Duty[]): Map<string, Duty> {
   const map = new Map<string, Duty>()
   for (const duty of duties) map.set(cellKeyOf(duty.areaId, duty.date), duty)

@@ -51,8 +51,14 @@ const vacancies = computed(() => props.variant.metrics?.vacancies ?? 0)
       <span class="variant-card__secs">{{ formatSeconds(perVariantSeconds) }}</span>
     </header>
 
-    <div v-if="multipliers.length" class="variant-card__mults">
-      <span v-for="m in multipliers" :key="m.code" class="tag tag-neutral">{{ m.text }}</span>
+    <div class="variant-card__mults">
+      <!-- 平衡變體（乘數全部是 1）formatMultipliers 回空陣列——顯示一顆「全部 ×1」晶片
+           而不是整排消失，跟 stanceLine 04b 的說法一致（canvas-data.js:788 同樣是
+           mults: ['全部 ×1']，協調者審查回饋）。 -->
+      <template v-if="multipliers.length">
+        <span v-for="m in multipliers" :key="m.code" class="tag tag-neutral">{{ m.text }}</span>
+      </template>
+      <span v-else class="tag tag-neutral">全部 ×1</span>
     </div>
 
     <p v-if="variant.hardViolationCount > 0" class="variant-card__hard-warning">

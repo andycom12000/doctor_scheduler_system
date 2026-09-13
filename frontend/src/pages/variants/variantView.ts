@@ -225,11 +225,19 @@ export function initialElapsedAccumulator(
   return { baseSec: Math.max(0, jobElapsedSec - variantElapsedSec), variantIndex, lastVariantElapsedSec: variantElapsedSec }
 }
 
+/**
+ * 換下一份變體（`variantIndex` 改變）算一段結束，把上一段併入基底。另外，後端多樣性
+ * 重試會對**同一個** `variantIndex` 再呼叫一次 `BeginVariant`，這時 `elapsedSec` 會
+ * 從新的 0 開始算，同一份變體內的耗時看起來會「倒退」——這也要視為一段結束，
+ * 不然畫面的總耗時會跟著退回去（協調者審查回饋）。
+ */
 export function accumulateElapsed(
   acc: ElapsedAccumulator,
   event: { variantIndex: number; elapsedSec: number },
 ): ElapsedAccumulator {
-  if (acc.variantIndex > 0 && event.variantIndex !== acc.variantIndex) {
+  const isNewSegment =
+    acc.variantIndex > 0 && (event.variantIndex !== acc.variantIndex || event.elapsedSec < acc.lastVariantElapsedSec)
+  if (isNewSegment) {
     return { baseSec: acc.baseSec + acc.lastVariantElapsedSec, variantIndex: event.variantIndex, lastVariantElapsedSec: event.elapsedSec }
   }
   return { baseSec: acc.baseSec, variantIndex: event.variantIndex, lastVariantElapsedSec: event.elapsedSec }
