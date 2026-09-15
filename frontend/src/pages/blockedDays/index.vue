@@ -134,9 +134,11 @@ const shortageDays = computed(() =>
 )
 const wardSqueezeHint = computed(() => (feasibility.value ? evaluateWardSqueezeHint(feasibility.value.bySupply) : null))
 
+// 狀態字樣（草稿／已發布／尚無班表）已經是 YearMonthSwitcher 的 `.tag.tag-outline`，
+// 這裡不重複印，改印登記筆數這種切換器不會顯示的資訊（PR #63 審查回饋）。
 const scheduleBadge = computed(() => {
-  if (schedule.value) return `${schedule.value.status === 'published' ? '已發布' : '草稿'} v${schedule.value.revision}`
-  if (scheduleError.value instanceof ApiError && scheduleError.value.status === 404) return '值班表尚未產生'
+  if (schedule.value) return `已登記 ${totalCount.value} 筆 · v${schedule.value.revision}`
+  if (scheduleError.value instanceof ApiError && scheduleError.value.status === 404) return `已登記 ${totalCount.value} 筆`
   return undefined
 })
 

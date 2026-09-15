@@ -347,6 +347,10 @@ const titleText = computed(() => emptyStateTitle(props.ym))
   gap: 11px;
   text-align: center;
   padding: 0 16px;
+  /* 規格 §7：面板最小寬度以標題不換行為準——`panelRectStyle` 的寬度是格數算出來的比例，
+     視窗窄（例如 1024px）時可能小於標題本身的排版寬度，這裡讓內容（標題）撐開面板，
+     不讓標題換行撐破框。 */
+  min-width: max-content;
 }
 
 .blueprint > .corner {
@@ -399,6 +403,7 @@ const titleText = computed(() => emptyStateTitle(props.ym))
 
 .empty-matrix__title {
   font: 600 34px/1 var(--font-heading);
+  white-space: nowrap;
 }
 
 .empty-matrix__cta {

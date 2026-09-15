@@ -48,11 +48,18 @@ const scheduleErrorMessage = computed(() =>
   schedule.error.value && !isEmptyMonth.value ? describeError(schedule.error.value) : null,
 )
 
-// -- 空月份畫格線用；一般月份也拿它當區域中繼資料（areaTypeCode 分組），不必另外相信 Schedule.areas 的順序 --
-const areaSettingsKey = ref('settings/areas')
+// -- 一般月份用它當區域中繼資料（areaTypeCode 分組），不必另外相信 Schedule.areas 的順序；
+// 空狀態（issue #62）不需要，規格 §2 明文只准打 /staff 與 /calendars/{year}。
+// 這兩支不能只看 `isEmptyMonth`——`isEmptyMonth` 要等 schedule 的 fetch 落地（成功或 404）
+// 才有意義，但 `useResource` 的 `watch(..., { immediate: true })` 在 setup 當下就同步跑一次，
+// 那時候 schedule 還在 loading、`isEmptyMonth` 必然還是 false，光看它一樣會在真正的空月份
+// 誤打一次。改成也擋 `schedule.loading`：還不知道是不是空月份時先不打，schedule 落地後
+// 才決定要不要打（是空月份就永遠不打，不是空月份就這時候才打，比原本「跟 schedule 平行打」
+// 慢一點點，換來空月份真的一次都不打）。
+const areaSettingsKey = computed(() => (schedule.loading.value || isEmptyMonth.value ? null : 'settings/areas'))
 const areaSettings = useResource(areaSettingsKey, () => getAreaSettings())
 
-const constraintsKey = ref('settings/constraints')
+const constraintsKey = computed(() => (schedule.loading.value || isEmptyMonth.value ? null : 'settings/constraints'))
 const constraints = useResource(constraintsKey, () => getConstraints())
 const fairOn = computed(
   () => (constraints.data.value?.soft.find((s) => s.code === 'S7_FAIRNESS_POINT')?.weight ?? 0) > 0,
@@ -112,8 +119,11 @@ const areaTypeNameByCode = computed(
 )
 
 // -- 標題列：「5 區 · N 人 · 草稿 vN」 -----------------------------------------------
+// 空狀態不重複顯示年月——左邊的 YearMonthSwitcher 本身已經是「2026 年 11 月班表」大字，
+// PageLayout 副標再印一次「年月：2026-11」是純重複資訊（PR #63 審查回饋）。
 const subtitle = computed(() => {
   const s = schedule.data.value
+  if (isEmptyMonth.value) return ''
   if (!s) return `年月：${ym.value}`
   const statusLabel = s.status === 'published' ? '已發布' : '草稿'
   return `${s.areas.length} 區 · ${s.staffCount ?? 0} 人 · ${statusLabel} v${s.revision}`

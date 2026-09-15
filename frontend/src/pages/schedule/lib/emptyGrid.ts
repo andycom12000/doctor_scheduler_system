@@ -21,18 +21,24 @@ export interface EmptyGridColumn {
  * 依身分組排列人員欄：組間依 `groups` 給定的順序，組內依 `ranks` 給定的順序，
  * 最後依姓名排序。查不到身分組的人員一律歸到最後一組，不讓查無資料的人打散版面
  * （色帶寬度是 `Σ組內人數`，缺一個歸屬會讓色帶總寬跟欄數對不起來）。
+ *
+ * 只算在職（`status === 'active'`）人員——求解與 V01 的「日 × 人」都只排在職者，
+ * 空狀態骨架若把停用人員也畫成一欄，求解完成後會少一欄、格線位移，
+ * 違反規格「求解前後同一組格線」的要求。`listStaff()` 不帶 status 篩選、回傳全部，
+ * 篩選就地做，不改共用的 `staff` cache key。
  */
 export function orderStaffByGroup(
   staff: readonly Staff[],
   ranks: readonly Rank[],
   groups: readonly RankGroup[],
 ): EmptyGridColumn[] {
+  const activeStaff = staff.filter((s) => s.status === 'active')
   const rankByCode = new Map(ranks.map((r) => [r.code, r]))
   const groupOrder = new Map(groups.map((g, index) => [g.code, index]))
   const rankOrder = new Map(ranks.map((r, index) => [r.code, index]))
   const fallbackGroupIndex = groups.length > 0 ? groups.length - 1 : null
 
-  const columns: EmptyGridColumn[] = staff.map((s) => {
+  const columns: EmptyGridColumn[] = activeStaff.map((s) => {
     const rank = rankByCode.get(s.rankCode)
     const groupCode = rank?.groupCode ?? null
     const groupIndex = groupCode !== null ? groupOrder.get(groupCode) ?? fallbackGroupIndex : fallbackGroupIndex

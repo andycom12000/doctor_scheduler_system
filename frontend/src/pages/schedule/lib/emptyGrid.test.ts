@@ -25,8 +25,8 @@ const ranks: Rank[] = [
   { code: 'NP', name: 'NP', groupCode: 'NP', quotaCap: null, pointType: null },
 ]
 
-function staff(id: string, name: string, rankCode: string): Staff {
-  return { id, employeeNo: `E${id}`, name, rankCode, status: 'active', eligibleAreaTypes: [] }
+function staff(id: string, name: string, rankCode: string, status: Staff['status'] = 'active'): Staff {
+  return { id, employeeNo: `E${id}`, name, rankCode, status, eligibleAreaTypes: [] }
 }
 
 describe('orderStaffByGroup', () => {
@@ -50,6 +50,15 @@ describe('orderStaffByGroup', () => {
     const input: Staff[] = [staff('s-1', '陳建宏', 'PGY1'), staff('s-unknown', '未知身分', 'GHOST')]
     const ordered = orderStaffByGroup(input, ranks, groups)
     expect(ordered.find((c) => c.staffId === 's-unknown')?.groupIndex).toBe(3)
+  })
+
+  it('停用（inactive）人員不畫成欄——求解與 V01 都只排在職者，欄數才對得起來', () => {
+    const input: Staff[] = [
+      staff('s-active', '陳建宏', 'PGY1'),
+      staff('s-inactive', '已離職', 'R4', 'inactive'),
+    ]
+    const ordered = orderStaffByGroup(input, ranks, groups)
+    expect(ordered.map((c) => c.staffId)).toEqual(['s-active'])
   })
 })
 
@@ -120,13 +129,16 @@ describe('computePanelGeometry', () => {
     expect(computePanelGeometry(33, 30)).toEqual({ colSpan: 12, colStart: 11, rowSpan: 10, rowStart: 10 })
   })
 
-  it('34 欄 × 31 列', () => {
-    expect(computePanelGeometry(34, 31)).toEqual({
-      colSpan: Math.round(34 * 0.36),
-      colStart: Math.round((34 * 0.64) / 2),
-      rowSpan: Math.round(31 * 0.34),
-      rowStart: Math.round((31 * 0.66) / 2),
-    })
+  it('34 欄 × 31 列（字面數字釘住，不跟公式抄同一份算式）', () => {
+    expect(computePanelGeometry(34, 31)).toEqual({ colSpan: 12, colStart: 11, rowSpan: 11, rowStart: 10 })
+  })
+
+  it('28 列（平年 2 月）→ rowSpan 10、rowStart 9', () => {
+    expect(computePanelGeometry(34, 28)).toEqual({ colSpan: 12, colStart: 11, rowSpan: 10, rowStart: 9 })
+  })
+
+  it('29 列（閏年 2 月）→ rowSpan 10、rowStart 10', () => {
+    expect(computePanelGeometry(34, 29)).toEqual({ colSpan: 12, colStart: 11, rowSpan: 10, rowStart: 10 })
   })
 })
 

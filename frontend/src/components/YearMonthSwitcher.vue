@@ -20,7 +20,7 @@ import { useResource } from '@/composables/useResource'
 const { ym, setYearMonth } = useYearMonth()
 
 const listKey = ref('schedules')
-const { data } = useResource(listKey, () => listSchedules())
+const { data, error } = useResource(listKey, () => listSchedules())
 
 const monthStatus = computed(() => {
   const map = new Map<string, 'draft' | 'published'>()
@@ -48,7 +48,10 @@ const bigLabel = computed(() => {
   return `${year} 年 ${Number(month)} 月班表`
 })
 
-const currentStatusTag = computed(() => statusLabelOf(ym.value))
+// `GET /schedules` 清單載入失敗時 `data` 是 null，這時候不知道 `ym` 真正的狀態，
+// 「尚無班表」是 statusLabelOf 查不到資料時的預設值，不能拿它當「確定沒有班表」的結論
+// ——寧可不顯示這顆 tag，也不要顯示一個可能是錯的狀態。
+const currentStatusTag = computed(() => (error.value ? null : statusLabelOf(ym.value)))
 
 function shift(delta: number): void {
   setYearMonth(shiftYearMonth(ym.value, delta))
@@ -70,7 +73,7 @@ function onSelect(event: Event): void {
       </select>
     </div>
     <button type="button" class="ym-switcher__step" aria-label="下一個月" @click="shift(1)">›</button>
-    <span class="tag tag-outline ym-switcher__tag">{{ currentStatusTag }}</span>
+    <span v-if="currentStatusTag" class="tag tag-outline ym-switcher__tag">{{ currentStatusTag }}</span>
   </div>
 </template>
 
