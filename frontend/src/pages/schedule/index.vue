@@ -189,8 +189,11 @@ function goToVariants(): void {
 }
 
 // -- 空狀態「開始求解」（issue #62）：建工作 → rememberJobId → 導去變體頁接手進度覆蓋層。
-// 只有真的建成才記 jobId／導頁；409 SOLVER_BUSY 時直接帶 busy 那份 jobId 過去，變體頁的
-// `attachJob` 會驗證 yearMonth 是否吻合，不吻合就照它自己的規則退回「這個月還沒有求解紀錄」。
+// 只有真的建成才記 jobId／導頁；成功與 409 SOLVER_BUSY 兩條路徑都把 jobId 一併帶進
+// query（不只寫 localStorage）——`rememberJobId` 寫入失敗時（例如 WebView2 的使用者
+// 資料目錄還沒就緒，見 jobStorage.ts 檔頭說明），變體頁的 `attachJob` 仍能從
+// `route.query.job` 接手，不會退回「這個月還沒有求解紀錄」。`attachJob` 會驗證
+// yearMonth 是否吻合，不吻合就照它自己的規則退回。
 const solving = ref(false)
 const solveError = ref<string | null>(null)
 
@@ -201,7 +204,7 @@ async function startSolve(): Promise<void> {
   try {
     const job = await createSolverJob({ yearMonth: ym.value, variantCount: 3, timeLimitSecPerVariant: 15 })
     rememberJobId(ym.value, job.jobId)
-    await router.push({ name: 'variants', params: { ym: ym.value } })
+    await router.push({ name: 'variants', params: { ym: ym.value }, query: { job: job.jobId } })
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
       const busyJobId = extractBusyJobId(err.body)
