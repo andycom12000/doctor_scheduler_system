@@ -9,14 +9,17 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
 import { useResource, invalidate } from '@/composables/useResource'
 import { useCalendar } from '@/composables/useCalendar'
-import { getSchedule, setDuty } from '@/api/schedules'
+import { getSchedule } from '@/api/schedules'
 import { getDayDetail, getPointBoard, listVacancies, listViolations } from '@/api/views'
-import { getAreaSettings, getConstraints } from '@/api/settings'
+import { getAreaSettings, getConstraints, getRankSettings } from '@/api/settings'
 import { getBlockedDays } from '@/api/blockedDays'
 import { listStaff } from '@/api/staff'
+import { createSolverJob } from '@/api/solver'
 import { ApiError } from '@/api/client'
 import { describeError } from '@/api/errors'
 import type { Violation } from '@/api/types'
+import { rememberJobId } from '../variants/jobStorage'
+import { extractBusyJobId } from './lib/solverKickoff'
 import EmptyState from './EmptyState.vue'
 import AreaByDayGrid from './AreaByDayGrid.vue'
 import DayByStaffGrid from './DayByStaffGrid.vue'
@@ -63,9 +66,13 @@ const npDutyCap = computed(() => {
 })
 
 // -- 人員名冊：獨立於值班表存在，全院約 34 人一次抓；用來補點數看板（只列在職）查不到的人
-// ——最常見的是「當月有班、後來被停用」的人（PR #44 review：這種人的班不能憑空消失）--
+// ——最常見的是「當月有班、後來被停用」的人（PR #44 review：這種人的班不能憑空消失）。
+// 空月份（issue #62）的日 × 人骨架也是靠這支 + rankSettingsRes 畫身分組色帶，不打 /staff 以外的東西 --
 const staffListKey = ref('staff')
 const staffListRes = useResource(staffListKey, () => listStaff())
+
+const rankSettingsKey = ref('settings/ranks')
+const rankSettingsRes = useResource(rankSettingsKey, () => getRankSettings())
 
 // -- 不可排班日登記：獨立於值班表存在（ADR-0001），日 × 人檢視要疊這個狀態 --
 const blockedDaysKey = computed(() => (schedule.data.value ? `blocked-days/${ym.value}` : null))
@@ -137,10 +144,8 @@ const dayDetailKey = computed(() =>
 const dayDetailRes = useResource(dayDetailKey, () => getDayDetail(ym.value, effectiveDate.value as string))
 const dayDetailErrorMessage = computed(() => (dayDetailRes.error.value ? describeError(dayDetailRes.error.value) : null))
 
-// -- 候選人面板 + 空月份的「先建空草稿」------------------------------------------
+// -- 候選人面板 -------------------------------------------------------------------
 const candidateTarget = ref<{ areaId: string; date: string } | null>(null)
-const priming = ref(false)
-const primeError = ref<string | null>(null)
 
 const candidateAreaLabel = computed(() => {
   if (!candidateTarget.value) return ''
@@ -152,33 +157,8 @@ const candidateCurrentStaffId = computed(() => {
   return dutyMapByArea.value.get(`${candidateTarget.value.areaId}|${candidateTarget.value.date}`) ?? null
 })
 
-/**
- * 空月份點格：先用 `PATCH duties`（`staffId: null`）讓後端自動建一份空草稿，
- * 再開候選人面板——`GET candidates` 跟點數看板／違規一樣，該月尚無值班表時回 404
- * （api-contract.yaml `listViolations` 的說明「點數看板、空缺、候選人同此」），
- * 這裡的允許端點清單也沒有 `/staff`，priming 是唯一能在空月份湊出候選人清單的方法。
- *
- * `invalidate('schedules')`（不是 `schedules/${ym}`）：這是唯一一次會把某個月從
- * 「不存在」變成「草稿」的寫入，要連 `schedules` 這個清單 key 一起打掉，
- * 頂列年月切換器的狀態標籤才會跟著更新。
- */
-async function openCell(areaId: string, date: string): Promise<void> {
-  if (!isEmptyMonth.value) {
-    candidateTarget.value = { areaId, date }
-    return
-  }
-  if (priming.value) return
-  priming.value = true
-  primeError.value = null
-  try {
-    await setDuty(ym.value, { areaId, date, staffId: null })
-    await invalidate('schedules')
-    candidateTarget.value = { areaId, date }
-  } catch (err) {
-    primeError.value = describeError(err)
-  } finally {
-    priming.value = false
-  }
+function openCell(areaId: string, date: string): void {
+  candidateTarget.value = { areaId, date }
 }
 
 function closeCandidatePanel(): void {
@@ -207,13 +187,56 @@ async function jumpToViolation(violation: Violation): Promise<void> {
 function goToVariants(): void {
   router.push({ name: 'variants', params: { ym: ym.value } })
 }
-function goToBlockedDays(): void {
-  router.push({ name: 'blockedDays', params: { ym: ym.value } })
+
+// -- 空狀態「開始求解」（issue #62）：建工作 → rememberJobId → 導去變體頁接手進度覆蓋層。
+// 只有真的建成才記 jobId／導頁；409 SOLVER_BUSY 時直接帶 busy 那份 jobId 過去，變體頁的
+// `attachJob` 會驗證 yearMonth 是否吻合，不吻合就照它自己的規則退回「這個月還沒有求解紀錄」。
+const solving = ref(false)
+const solveError = ref<string | null>(null)
+
+async function startSolve(): Promise<void> {
+  if (solving.value) return
+  solving.value = true
+  solveError.value = null
+  try {
+    const job = await createSolverJob({ yearMonth: ym.value, variantCount: 3, timeLimitSecPerVariant: 15 })
+    rememberJobId(ym.value, job.jobId)
+    await router.push({ name: 'variants', params: { ym: ym.value } })
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      const busyJobId = extractBusyJobId(err.body)
+      await router.push({
+        name: 'variants',
+        params: { ym: ym.value },
+        query: busyJobId ? { job: busyJobId } : {},
+      })
+      return
+    }
+    solveError.value = describeError(err)
+  } finally {
+    solving.value = false
+  }
 }
+
+// -- 空狀態的兩支必要資料（staff／calendar／ranks）沒載完或失敗，不能拿去畫矩陣（規格 §2、§7）--
+const emptyStateBlockingError = computed(() => {
+  if (isEmptyMonth.value && staffListRes.error.value) return describeError(staffListRes.error.value)
+  if (isEmptyMonth.value && calendar.error.value) return describeError(calendar.error.value)
+  if (isEmptyMonth.value && rankSettingsRes.error.value) return describeError(rankSettingsRes.error.value)
+  return null
+})
+const emptyStateLoading = computed(
+  () =>
+    isEmptyMonth.value &&
+    !emptyStateBlockingError.value &&
+    ((staffListRes.loading.value && !staffListRes.data.value) ||
+      (calendar.loading.value && !calendar.calendar.value) ||
+      (rankSettingsRes.loading.value && !rankSettingsRes.data.value)),
+)
 </script>
 
 <template>
-  <PageLayout title="排班主表" :subtitle="subtitle">
+  <PageLayout title="排班主表" :subtitle="subtitle" :fill="isEmptyMonth">
     <template #actions>
       <nav
         v-if="!isEmptyMonth && !scheduleErrorMessage && schedule.data.value"
@@ -251,25 +274,32 @@ function goToBlockedDays(): void {
           單日詳表
         </button>
       </nav>
-      <button type="button" class="btn btn-secondary" disabled title="#34">匯出 Excel</button>
-      <button type="button" class="btn btn-secondary" disabled title="#34">驗證約束</button>
-      <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
-      <button type="button" class="btn btn-primary" disabled title="#34">{{ publishLabel }}</button>
+      <!-- 空狀態（issue #62）：匯出／驗證／重新求解／發布這四顆需要既有班表，一律不顯示
+           （規格 §3）。「尚無班表」的狀態標籤改由 YearMonthSwitcher 自己的 .tag.tag-outline
+           負責（issue #62 段落 B），這裡不重複畫一顆。 -->
+      <template v-if="!isEmptyMonth">
+        <button type="button" class="btn btn-secondary" disabled title="#34">匯出 Excel</button>
+        <button type="button" class="btn btn-secondary" disabled title="#34">驗證約束</button>
+        <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
+        <button type="button" class="btn btn-primary" disabled title="#34">{{ publishLabel }}</button>
+      </template>
     </template>
 
     <div v-if="schedule.loading.value && !schedule.data.value && !isEmptyMonth" class="schedule-state">載入中…</div>
     <div v-else-if="scheduleErrorMessage" class="schedule-state">{{ scheduleErrorMessage }}</div>
+    <div v-else-if="isEmptyMonth && emptyStateBlockingError" class="schedule-state">{{ emptyStateBlockingError }}</div>
+    <div v-else-if="isEmptyMonth && emptyStateLoading" class="schedule-state">載入中…</div>
 
     <EmptyState
       v-else-if="isEmptyMonth"
-      :areas="areaSettings.data.value?.areas ?? []"
-      :days="days"
       :ym="ym"
-      :priming="priming"
-      :prime-error="primeError"
-      @cell-click="openCell"
-      @register-blocked-days="goToBlockedDays"
-      @solve="goToVariants"
+      :staff="staffListRes.data.value?.items ?? []"
+      :ranks="rankSettingsRes.data.value?.ranks ?? []"
+      :groups="rankSettingsRes.data.value?.groups ?? []"
+      :days="days"
+      :solving="solving"
+      :solve-error="solveError"
+      @solve="startSolve"
     />
 
     <div v-else class="schedule">
