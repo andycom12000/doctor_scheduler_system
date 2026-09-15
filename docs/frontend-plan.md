@@ -97,10 +97,10 @@ TURN 3 與 TURN 4 已經是修訂後的版本：5 區、33 人、10 身分、4 �
 
 ### 3.1 SCREEN 01 排班主表（最大）
 
-端點：`GET /schedules`、`GET /schedules/{ym}`、`PATCH duties`、`POST duties/swap`、`POST validate`、`POST publish`、`GET export`、`GET violations`、`GET point-board`、`GET days/{date}`、`GET vacancies`、`GET candidates`、`GET /calendars/{year}`、`GET /settings/areas`（空月份畫格線用）、`GET /settings/constraints`（只為了知道 S7 是否停用）。
+端點：`GET /schedules`、`GET /schedules/{ym}`、`PATCH duties`、`POST duties/swap`、`POST validate`、`POST publish`、`GET export`、`GET violations`、`GET point-board`、`GET days/{date}`、`GET vacancies`、`GET candidates`、`GET /calendars/{year}`、`GET /settings/areas`（一般月份的區域中繼資料）、`GET /settings/constraints`（只為了知道 S7 是否停用）、`GET /staff`、`GET /settings/ranks`（空月份骨架的身分組色帶）、`POST /solver-jobs`（空月份「開始求解」）。
 
 前端擁有的邏輯：
-- **空月份狀態**：年月切換器一定會落到沒有值班表的月份，`GET /schedules/{ym}` 回 404。不顯示錯誤，改用 `/settings/areas` 與行事曆畫出空的 5 × 30 格線，標題列寫「值班表尚未產生」並給「去登記不可排班日」與「求解」兩個入口；使用者若直接點格指派，後端的 setDuty 會自動建草稿，畫面收到 `MutationResult` 後切回正常狀態。點數看板、違規、空缺三個側欄在空月份一律不打。
+- **空月份狀態**（issue #62，SCREEN 01 V02）：年月切換器一定會落到沒有值班表的月份，`GET /schedules/{ym}` 回 404。不顯示錯誤，改畫「日 × 人」密集矩陣骨架（欄＝在職人員依身分組排列、列＝當月日數），中央疊霧化遮罩與貼齊格線的訊息面板，唯一動作是「開始求解」（`POST /solver-jobs` 建工作後導去變體頁接手進度）。空狀態只打 `GET /staff` 與 `GET /calendars/{year}`（加上年月切換器自己的 `GET /schedules`），不打 `settings/areas`／`settings/constraints`／點數看板／違規／空缺／候選人；不再有「點格自動建草稿」與「去登記不可排班日」兩個入口，求解才是產生值班表的唯一路徑。
 - 三個檢視共用同一份 `Schedule`，各自只是投影。區域 × 日是 5 列 × 30 欄；日 × 人是 30 列 × 34 欄（欄依 4 個身分組排列，右側「空缺」欄）；單日詳表用 `days/{date}` 自帶的月負載，不再打點數看板。
 - **主要互動是點格**：點一格開候選人面板（`GET candidates`），列出剩餘額度、同區延續比例、`blockingReasons`。**有阻擋理由仍可選**，寫入不會被拒，面板只是把理由標紅。
 - **次要互動是拖拉對調**：拖一格到另一格呼叫 `swap`。這是唯一的拖拉場景，用 Pointer Events 自刻。README 說拖拉體驗撐不住是唯一值得換框架的理由，所以這一段訂成**有時間盒的 spike**：一天內做出「拖動有預覽、放下後對調、Esc 取消」三件事就 go，做不到就退回「點兩格 → 對調」按鈕，不換框架。

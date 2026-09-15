@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../../support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../../_ds/industry-ab64fa60-5bee-44e0-9c30-f087bf5dd6c1/styles.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<script src="../../_ds/industry-ab64fa60-5bee-44e0-9c30-f087bf5dd6c1/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--color-bg);font-family:"Barlow","Noto Sans TC",system-ui,sans-serif}
+h1,h2,h3,h4,h5,h6{font-family:"Barlow Condensed","Noto Sans TC",system-ui,sans-serif}
+.dv-turn{padding:44px 48px 40px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);text-decoration:none}
+.dv-tname{font:600 14px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;letter-spacing:.02em}
+.dv-opts{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start;margin-top:26px}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px}
+.anw{position:relative;padding:0 340px;width:calc(680px + var(--cw));box-sizing:border-box;align-self:flex-start}
+.an{position:absolute;display:flex;align-items:flex-start;width:334px}
+.anR{left:calc(340px + var(--cw))}
+.anL{right:calc(340px + var(--cw));flex-direction:row-reverse}
+.anl{flex:none;width:38px;height:1px;background:var(--color-accent);margin-top:10px;position:relative}
+.anl::before{content:"";position:absolute;top:-2px;width:5px;height:5px;background:var(--color-accent)}
+.anR .anl::before{left:-2px}
+.anL .anl::before{right:-2px}
+.anb{flex:1;min-width:0;border:1px solid var(--color-accent);padding:6px 9px;background:var(--color-bg)}
+.anL .anb{text-align:right}
+.ank{display:block;font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px}
+.anr{font:600 10.5px/1.55 ui-monospace,Menlo,monospace;letter-spacing:-.01em;color:var(--color-accent-900);margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid color-mix(in srgb,var(--color-accent) 35%,transparent);word-break:break-word}
+.ant{margin:0;padding:0;list-style:none;font:400 11px/1.5 "Noto Sans TC",sans-serif}
+.ant li{position:relative;padding-left:9px}
+.ant li::before{content:"·";position:absolute;left:2px}
+.anL .ant li{padding-left:0;padding-right:9px}
+.anL .ant li::before{left:auto;right:2px}
+.anlg{display:flex;gap:18px;align-items:center;margin-top:14px;font:400 11.5px/1.5 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb,var(--color-text) 9%,transparent);color:var(--color-text);text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:10px;font:400 12px/1.4 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 60%,transparent)}
+.dv-olabel b{font:600 16px/1.2 "Barlow Condensed","Noto Sans TC",sans-serif;color:var(--color-text)}
+.dv-card{background:var(--color-bg);border:1px solid var(--color-divider);box-shadow:var(--shadow-sm);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}
+.dv-next{margin:26px 0 0;font:12px/1.6 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.cap{font:400 11px/1.3 "Noto Sans TC",sans-serif;letter-spacing:.02em;color:color-mix(in srgb,var(--color-text) 50%,transparent);margin:0 0 7px}
+.cap b{font-weight:600;color:var(--color-text);letter-spacing:.06em;text-transform:uppercase;font-family:"Barlow Condensed",sans-serif;font-size:12px}
+.sq{width:100%;border-collapse:collapse}
+.sq th{padding:0;font:600 9px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em;color:color-mix(in srgb,var(--color-text) 55%,transparent);border-bottom:1px solid var(--color-divider)}
+.sq td{padding:0;border-bottom:1px solid color-mix(in srgb,var(--color-text) 7%,transparent);border-right:1px solid color-mix(in srgb,var(--color-text) 5%,transparent)}
+.k{font:600 10px/1 "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)}
+.nv{display:flex;align-items:center;gap:20px;padding:0 16px;height:46px;border-bottom:1px solid var(--color-divider)}
+.nv a{font:400 13px/1 "Noto Sans TC",sans-serif;color:color-mix(in srgb,var(--color-text) 65%,transparent);text-decoration:none}
+.nv a.on{color:var(--color-accent);font-weight:500}
+.bd{font:600 17px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em;margin-right:auto;display:flex;align-items:center;gap:9px}
+</style>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" data-bg-color="#f2f2f3"><rect width="400" height="300" fill="#f2f2f3"/><g transform="translate(120,90)"><rect x="0" y="0" width="160" height="120" fill="none" stroke="#1d1f20" stroke-width="1.5"/><rect x="0" y="0" width="40" height="30" fill="#5980a6"/><rect x="80" y="30" width="40" height="30" fill="#5980a6" opacity=".55"/><rect x="40" y="60" width="40" height="30" fill="#5980a6" opacity=".3"/><rect x="120" y="90" width="40" height="30" fill="#5980a6"/><path d="M0 30h160M0 60h160M0 90h160M40 0v120M80 0v120M120 0v120" stroke="#1d1f20" stroke-width=".75" opacity=".35"/></g></svg></template>
+</helmet>
+
+
+<section class="dv-turn" id="todo">
+<div class="dv-thd"><a class="dv-tid" href="#todo">待設計</a><span class="dv-tname">本頁尚未設計的 variant（逐一設計）</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:22px;max-width:1348px">
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V02</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">月份空狀態</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">該月尚未產生班表：只有年月切換器與「開始求解」入口，對應 GET /api/schedules/{ym} 回 404。</div>
+</div>
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V03</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">載入中 ／ 求解後回填</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">取班表與名冊期間的骨架狀態，以及求解完成後套用變體的回填瞬間。</div>
+</div>
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V04</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">已發布狀態</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">status=published 的工具列與提示（發布不等於鎖定，仍可改後重新發布）。</div>
+</div>
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V05</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">換人選單</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">點格開啟 candidates 清單：資格、剩餘額度、間隔天數與不可排班日的排除理由。</div>
+</div>
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V06</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">兩格對調</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">POST duties/swap 的選取第一格 → 第二格互動與確認。</div>
+</div>
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V07</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">違規單筆詳情</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">側欄某筆違規展開：code、severity、涉及的人與日期、跳到該格。</div>
+</div>
+<div style="border:1px dashed color-mix(in srgb,var(--color-text) 28%,transparent);padding:13px 14px;min-height:104px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;background:color-mix(in srgb,var(--color-text) 9%,transparent)">V08</span><span style="font:600 15px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif">匯出 Excel</span></div>
+<div style="font:400 11.5px/1.6 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent)">匯出中與完成提示（GET /schedules/{ym}/export）。</div>
+</div>
+</div>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">已設計</a><span class="dv-tname">排班主表　V01</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">V01</a><b>排班主表</b><span>三種檢視（區域 × 日 ／ 日 × 人 ／ 單日詳表）、年月切換面板、點數看板、違規側欄；「日 × 人」右側為常駐資訊側欄（2a）</span></div>
+<p class="cap"><b>SCREEN 01</b> · 排班主表 · 檢視分頁：區域 × 日 ／ 日 × 人 ／ 單日詳表（可點擊）</p>
+<div class="anw" style="--cw:1348px">
+<sc-for list="{{ anns }}" as="a" hint-placeholder-count="8">
+<div class="{{ a.cls }}" style="{{ a.pos }}"><span class="anl"></span><div class="anb"><span class="ank">{{ a.k }}</span><div class="anr"><sc-for list="{{ a.routes }}" as="r" hint-placeholder-count="1"><div>{{ r }}</div></sc-for></div><ul class="ant"><sc-for list="{{ a.items }}" as="it" hint-placeholder-count="2"><li>{{ it }}</li></sc-for></ul></div></div>
+</sc-for>
+<div class="dv-card" style="width:1348px">
+<div class="nv"><span class="bd"><span style="width:14px;height:14px;border:1px solid var(--color-accent);display:inline-block"></span>醫師值班排班系統</span>
+<a href="#3a" class="on">排班主表</a><a href="#2a">區域與點數</a><a href="#2a">資格與約束</a><a href="#2a">變體比較</a><a href="#3b">不可排班日登記</a><a href="#4a">人員維護</a>
+<span class="tag tag-neutral" style="margin-left:auto">本機執行 · 免安裝</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="position:relative;display:flex;align-items:center;gap:2px">
+<button style="width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer;font:400 15px/1 'Barlow Condensed',sans-serif" onClick="{{ ymPrev }}">‹</button>
+<div style="{{ ymLabelS }}" onClick="{{ ymToggle }}">{{ ymLabel }}<span style="font-size:10px;opacity:.45">▼</span></div>
+<button style="width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer;font:400 15px/1 'Barlow Condensed',sans-serif" onClick="{{ ymNext }}">›</button>
+<div style="{{ ymPanelS }}">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+<button style="width:24px;height:24px;flex:none;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer" onClick="{{ ymYearPrev }}">‹</button>
+<div style="flex:1;text-align:center;font:600 17px/1 'Barlow Condensed',sans-serif;letter-spacing:.06em">{{ ymYearLabel }}</div>
+<button style="width:24px;height:24px;flex:none;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer" onClick="{{ ymYearNext }}">›</button>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+<sc-for list="{{ ymMonths }}" as="mo" hint-placeholder-count="12"><div style="{{ mo.s }}" onClick="{{ mo.on }}">{{ mo.t }}</div></sc-for>
+</div>
+<button class="btn btn-ghost btn-block" style="margin-top:9px" onClick="{{ ymThisMonth }}">回到本月（2026 / 09）</button>
+</div>
+</div>
+<span class="tag tag-neutral">{{ areaCount }} 區 · {{ peopleCount }} 人 · 草稿 v2</span>
+<div style="display:flex;margin-left:10px">
+<div style="{{ tabMxS }}" onClick="{{ onMx }}">區域 × 日</div>
+<div style="{{ tabDpS }}" onClick="{{ onDp }}">日 × 人</div>
+<div style="{{ tabDdS }}" onClick="{{ onDd }}">單日詳表</div>
+</div>
+<div style="margin-left:auto;display:flex;gap:8px">
+<button class="btn btn-secondary">匯出 Excel</button><button class="btn btn-secondary">驗證約束</button><button class="btn btn-secondary">重新求解</button>
+<button class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>重新發布</button>
+</div>
+</div>
+<div id="nsp-dp" style="padding:12px 14px;overflow-x:auto;{{ showDp }}">
+<div style="display:flex;gap:14px;align-items:stretch">
+<div style="flex:none;width:859px">
+<div style="display:flex;min-width:0">
+<div style="width:44px;flex:none"></div>
+<sc-for list="{{ dpGroups }}" as="g" hint-placeholder-count="4"><div style="{{ g.s }}">{{ g.label }}</div></sc-for>
+</div>
+<div style="display:flex">
+<div style="width:44px;flex:none;height:86px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 8%,transparent)"></div>
+<sc-for list="{{ dpHead }}" as="h" hint-placeholder-count="20"><div style="{{ h.s }}" onMouseEnter="{{ h.on }}" onMouseLeave="{{ h.off }}"><span style="{{ h.nS }}">{{ h.name }}</span></div></sc-for>
+<div class="k" style="width:56px;flex:none;height:86px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;border-left:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 8%,transparent)">空缺</div>
+</div>
+<div style="display:flex">
+<div class="k" style="width:44px;flex:none;height:46px;display:flex;align-items:center;justify-content:center;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">身分</div>
+<sc-for list="{{ dpHead }}" as="h" hint-placeholder-count="20"><div style="{{ h.eS }}">{{ h.rank }}</div></sc-for>
+<div style="width:56px;flex:none;height:46px;display:flex;align-items:center;justify-content:center;font:400 9px/1.3 'Noto Sans TC',sans-serif;text-align:center;color:color-mix(in srgb,var(--color-text) 45%,transparent);border-left:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-bottom:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">未填補<br>區域</div>
+</div>
+<sc-for list="{{ dpRows }}" as="dr" hint-placeholder-count="30">
+<div style="display:flex">
+<div style="{{ dr.labS }}">{{ dr.d }}<span style="{{ dr.wdS }}">{{ dr.wd }}</span></div>
+<sc-for list="{{ dr.cells }}" as="dc" hint-placeholder-count="20"><div style="{{ dc.s }}" data-nm="{{ dc.nm }}">{{ dc.t }}</div></sc-for>
+<div style="{{ dr.vacS }}">{{ dr.vac }}</div>
+</div>
+</sc-for>
+<div style="display:flex">
+<div class="k" style="width:44px;flex:none;height:19px;display:flex;align-items:center;padding-left:5px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent);border-top:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">班數</div>
+<sc-for list="{{ dpFoot }}" as="f" hint-placeholder-count="20"><div style="{{ f.s }}">{{ f.n }}</div></sc-for>
+</div>
+<div style="display:flex">
+<div class="k" style="width:44px;flex:none;height:17px;display:flex;align-items:center;padding-left:5px;border-right:1px solid color-mix(in srgb,var(--color-text) 14%,transparent)">額度</div>
+<sc-for list="{{ dpFoot }}" as="f" hint-placeholder-count="20"><div style="{{ f.pS }}">{{ f.pt }}</div></sc-for>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:13px">
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<sc-for list="{{ v2Stats }}" as="s" hint-placeholder-count="3"><div class="blueprint" style="border:1px solid var(--color-divider);padding:9px 10px;display:flex;flex-direction:column;gap:3px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><span class="k">{{ s.k }}</span><span style="font:600 22px/1 'Barlow Condensed',sans-serif">{{ s.v }}</span><span style="font:400 10px/1.4 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 50%,transparent)">{{ s.sub }}</span></div></sc-for>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">硬違規 · {{ alertTag }}</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ a2alerts }}" as="v" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--color-divider);padding:7px 9px"><span style="{{ v.badge }}">{{ v.code }}</span><div style="min-width:0"><div style="font:500 11.5px/1.45 'Noto Sans TC',sans-serif">{{ v.title }}</div><div style="font:400 10px/1.45 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 52%,transparent)">{{ v.who }}</div></div></div></sc-for>
+</div>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">身分組容量利用率</div>
+<sc-for list="{{ util }}" as="u" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:46px;flex:none;font:600 10.5px/1 'Barlow Condensed',sans-serif">{{ u.lv }}</span><div style="width:96px;flex:none;background:color-mix(in srgb,var(--color-text) 8%,transparent)"><div style="{{ u.s }}"></div></div><span style="width:34px;flex:none;text-align:right;font:600 10.5px/1 'Barlow Condensed',sans-serif">{{ u.pct }}</span><span style="font:400 10.5px/1.4 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 52%,transparent)">{{ u.txt }}</span></div></sc-for>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">接近額度上限</div>
+<sc-for list="{{ v2Near }}" as="p" hint-placeholder-count="8"><div style="display:flex;align-items:center;gap:8px;margin-bottom:5px" onMouseEnter="{{ p.on }}" onMouseLeave="{{ p.off }}"><span style="{{ p.rkS }}">{{ p.rank }}</span><span style="width:58px;flex:none;font:400 11.5px/1 'Noto Sans TC',sans-serif">{{ p.name }}</span><div style="flex:1;min-width:0;background:color-mix(in srgb,var(--color-text) 8%,transparent)"><div style="{{ p.bar }}"></div></div><span style="{{ p.ptsS }}">{{ p.pts }}</span></div></sc-for>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">假日班數最多</div>
+<sc-for list="{{ v2Hol }}" as="p" hint-placeholder-count="6"><div style="display:flex;align-items:center;gap:8px;margin-bottom:5px" onMouseEnter="{{ p.on }}" onMouseLeave="{{ p.off }}"><span style="{{ p.rkS }}">{{ p.rank }}</span><span style="width:58px;flex:none;font:400 11.5px/1 'Noto Sans TC',sans-serif">{{ p.name }}</span><div style="flex:1;min-width:0;background:color-mix(in srgb,var(--color-text) 8%,transparent)"><div style="{{ p.bar }}"></div></div><span style="{{ p.holS }}">{{ p.hol }}</span></div></sc-for>
+</div>
+<div>
+<div class="k" style="margin-bottom:6px">空缺清單 · 待人工指派</div>
+<div style="display:flex;flex-wrap:wrap;gap:5px">
+<sc-for list="{{ v2Vac }}" as="v" hint-placeholder-count="2"><span style="{{ v.s }}">{{ v.t }}</span></sc-for>
+</div>
+</div>
+<div style="margin-top:auto;font:400 10.5px/1.5 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 50%,transparent)">滑過任一姓名會框出該人在左表的班；側欄隨年月切換重算。</div>
+</div>
+</div>
+<div style="display:flex;gap:16px;margin-top:12px;align-items:center;flex-wrap:wrap">
+<span class="k">圖例</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:var(--color-accent-100);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>平日值班（格內為區域代號）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:var(--color-accent-300);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>假日值班（額度 {{ qHoN }} 點）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--color-text) 22%,transparent) 0 1px,transparent 1px 4px);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>不可排班日（求解輸入）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:color-mix(in srgb,var(--color-text) 9%,transparent);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>假日（整列底色）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);border:1px solid color-mix(in srgb,var(--color-text) 10%,transparent)"></span>該日有區域空缺（H1）</span>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="width:22px;height:15px;background:repeating-linear-gradient(45deg,var(--color-accent-800) 0 2px,var(--color-accent-400) 2px 5px);box-shadow:inset 0 0 0 1.5px var(--color-accent-900)"></span>排到已登記的不可排班日（H5）</span>
+<span style="font-size:11px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">滑過姓名可框出該人的班 · 空白＝未值班</span>
+</div>
+</div>
+
+<div style="{{ showMx }}">
+<div style="display:flex">
+<div id="nsp-mx" style="flex:1;padding:12px 14px;min-width:0">
+<div style="display:flex;align-items:flex-end;border-bottom:1px solid var(--color-divider);padding-bottom:2px">
+<div class="k" style="width:132px;flex:none">區域 / 日期</div>
+<sc-for list="{{ a2days }}" as="d" hint-placeholder-count="30"><div style="{{ d.th }}"><span style="{{ d.wdS }}">{{ d.wd }}</span><span style="{{ d.ddS }}">{{ d.dd }}</span><span style="{{ d.pS }}">{{ d.p }}</span></div></sc-for>
+<div class="k" style="width:44px;flex:none;text-align:right">填補</div>
+</div>
+<sc-for list="{{ a2groups }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:8px;padding:9px 0 4px">
+<span style="{{ g.badge }}">{{ g.code }}</span>
+<span style="font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif">{{ g.name }}</span>
+<span style="font-size:10.5px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">{{ g.meta }}</span>
+</div>
+<sc-for list="{{ g.rows }}" as="ar" hint-placeholder-count="3">
+<div style="display:flex;align-items:center">
+<div style="width:132px;flex:none;font:600 11.5px 'Barlow Condensed',sans-serif;letter-spacing:.06em">{{ ar.id }}</div>
+<sc-for list="{{ ar.cells }}" as="c" hint-placeholder-count="30"><div style="{{ c.s }}" data-nm="{{ c.nm }}">{{ c.t }}</div></sc-for>
+<div style="{{ ar.statS }}">{{ ar.stat }}</div>
+</div>
+</sc-for>
+</sc-for>
+<div style="display:flex;align-items:center;margin-top:10px">
+<div class="k" style="width:132px;flex:none">每日已填補</div>
+<sc-for list="{{ fill }}" as="f" hint-placeholder-count="30"><div style="{{ f.s }}">{{ f.t }}</div></sc-for>
+</div>
+<div style="display:flex;gap:14px;margin-top:12px;align-items:center;flex-wrap:wrap">
+<span class="k">身分組</span>
+<sc-for list="{{ a2legend }}" as="l" hint-placeholder-count="4"><span style="display:flex;align-items:center;gap:5px;font-size:11px"><span style="{{ l.s }}">{{ l.t }}</span>{{ l.label }}</span></sc-for>
+<span style="display:flex;align-items:center;gap:5px;font-size:11px;margin-left:8px"><span style="width:20px;height:14px;background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);border:1px solid var(--color-accent)"></span>空缺（H1 · 登記過多時的正常結果）</span>
+<span style="font-size:11px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">格內為姓名簡稱 · 值休休值：值班後至少休兩天（間隔 ≥ {{ restGap }} 天，NP 豁免）</span>
+</div>
+<div style="margin-top:14px;border-top:1px solid var(--color-divider);padding-top:11px">
+<div style="display:flex;align-items:center;margin-bottom:8px"><span class="k">點數看板 · 額度點數（已排 / 上限 · 剩餘 · 假日班）</span><span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">依身分組分區 · 組內比較的是剩餘額度 · {{ capNote }}</span></div>
+<div id="nsp-bd" style="display:flex;gap:16px">
+<sc-for list="{{ boardCols }}" as="col" hint-placeholder-count="4">
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+<div style="{{ col.hdS }}">{{ col.label }}</div>
+<sc-for list="{{ col.rows }}" as="b" hint-placeholder-count="11">
+<div style="display:flex;align-items:center;gap:6px;padding:1px 3px;margin:0 -3px;cursor:default" data-row="{{ b.name }}" onMouseEnter="{{ b.on }}" onMouseLeave="{{ b.off }}">
+<span style="{{ b.rkS }}">{{ b.rank }}</span>
+<span style="font-size:11px;width:46px;flex:none">{{ b.name }}</span>
+<div style="flex:1;height:5px;background:color-mix(in srgb,var(--color-text) 9%,transparent)"><div style="{{ b.bar }}"></div></div>
+<span style="font:600 10.5px 'Barlow Condensed',sans-serif;width:38px;text-align:right;flex:none">{{ b.pts }}</span>
+<span style="{{ b.leftS }}">{{ b.left }}</span>
+<span style="font-size:9.5px;color:color-mix(in srgb,var(--color-text) 45%,transparent);width:24px;text-align:right;flex:none">假{{ b.hol }}</span>
+<sc-if value="{{ fairOn }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;color:color-mix(in srgb,var(--color-text) 38%,transparent);width:30px;text-align:right;flex:none">公{{ b.fair }}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+<div style="{{ fairNoteS }}">{{ fairNote }}</div>
+</div>
+</div>
+<div style="width:306px;flex:none;border-left:1px solid var(--color-divider);padding:12px 14px;display:flex;flex-direction:column;gap:13px">
+<div>
+<div style="display:flex;align-items:center;margin-bottom:7px"><span class="k">身分組容量利用率</span><span class="tag tag-outline" style="margin-left:auto">可行性指標</span></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ util }}" as="u" hint-placeholder-count="4">
+<div><div style="display:flex;align-items:baseline;gap:6px;font-size:11px"><span style="font:600 11px 'Barlow Condensed',sans-serif">{{ u.lv }}</span><span style="color:color-mix(in srgb,var(--color-text) 50%,transparent)">{{ u.txt }}</span><span style="margin-left:auto;font:600 12px 'Barlow Condensed',sans-serif">{{ u.pct }}</span></div>
+<div style="height:4px;background:color-mix(in srgb,var(--color-text) 9%,transparent)"><div style="{{ u.s }}"></div></div></div>
+</sc-for>
+</div>
+</div>
+<div>
+<div style="display:flex;align-items:center;margin-bottom:6px"><span class="k">違規</span><span class="tag tag-outline" style="margin-left:auto">{{ alertTag }}</span></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ a2alerts }}" as="v" hint-placeholder-count="4">
+<div style="border:1px solid var(--color-divider);padding:7px 8px;display:flex;gap:7px;align-items:flex-start">
+<span style="{{ v.badge }}">{{ v.kind }}</span>
+<div style="min-width:0"><div style="font-size:11.5px;line-height:1.35">{{ v.title }}</div><div style="font:600 9px/1.5 ui-monospace,Menlo,monospace;color:color-mix(in srgb,var(--color-text) 46%,transparent)">{{ v.code }}</div><div style="font-size:10px;color:color-mix(in srgb,var(--color-text) 52%,transparent)">{{ v.who }}</div></div>
+</div>
+</sc-for>
+</div>
+<div style="font-size:10.5px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 52%,transparent);margin-top:7px">API 只帶 code 與 severity；底色／斜紋／外框由前端決定。公平性是身分組層級的分數、指不到格子，不出現在這裡。</div>
+</div>
+</div>
+</div>
+</div>
+
+<div style="padding:14px 16px;{{ showDd }}">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+<button class="btn btn-secondary" onClick="{{ dayPrev }}">前一日</button>
+<div><div style="font:600 22px/1.05 'Barlow Condensed',sans-serif;letter-spacing:.04em">{{ dd.label }}</div>
+<div style="font-size:11.5px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">{{ dd.sub }}</div></div>
+<button class="btn btn-secondary" onClick="{{ dayNext }}">次一日</button>
+<span style="{{ dd.statS }}">{{ dd.stat }}</span>
+<span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">月負載由 GET /api/schedules/{ym}/days/{date} 自帶，不需另打點數看板</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px;max-width:760px">
+<sc-for list="{{ dd.rows }}" as="dl" hint-placeholder-count="5">
+<div style="{{ dl.s }}">
+<span style="font:600 13px 'Barlow Condensed',sans-serif;letter-spacing:.06em;width:46px;flex:none">{{ dl.area }}</span>
+<span style="font-size:11.5px;width:96px;flex:none;color:color-mix(in srgb,var(--color-text) 62%,transparent)">{{ dl.type }}</span>
+<span style="{{ dl.rkS }}">{{ dl.rank }}</span>
+<span style="font-size:12.5px;width:70px;flex:none">{{ dl.name }}</span>
+<span style="margin-left:auto;font-size:10.5px;color:color-mix(in srgb,var(--color-text) 52%,transparent);text-align:right">{{ dl.load }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+<p class="dv-next">三種檢視共用同一份值班表與同一組約束：<b>區域 × 日</b>（列＝5 個區域，含額度點數看板與違規側欄）、<b>日 × 人</b>（案主指定格式，列＝日期、欄＝人員依 4 個身分組排列，右側「空缺」欄標出 H1）、<b>單日詳表</b>（單日 5 區的指派人與該人月負載，可翻頁）。每日每區恰好 1 人，沒有主責／支援。「已發布」不是鎖定——已發布的值班表仍可逐格修改，工具列的動作是「重新發布」，會重算月結轉。</p>
+</div>
+</div>
+</section>
+
+<section class="dv-turn" id="t8">
+<div class="dv-thd"><a class="dv-tid" href="#t8">V02</a><span class="dv-tname">月份空狀態 · 日 × 人密集矩陣（一頁塞完）</span></div>
+<div class="anlg"><span class="k">做法</span><span>{{ dnNote }}</span><span>縱向 100% 不捲動</span></div>
+<div style="display:flex;align-items:center;gap:16px;margin-top:22px;flex-wrap:wrap">
+<span class="k">視窗</span>
+<div style="display:flex">
+<div style="{{ dnVp169S }}" onClick="{{ bxPick169 }}">16 : 9 · 1600 × 900</div>
+<div style="{{ dnVp43S }}" onClick="{{ bxPick43 }}">4 : 3 · 1280 × 960</div>
+</div>
+<span id="8c"></span>
+</div>
+<div class="dv-card" style="{{ dnCardS }}">
+<div class="nv" style="flex:none"><span class="bd"><span style="width:14px;height:14px;border:1px solid var(--color-accent);display:inline-block"></span>醫師值班排班系統</span>
+<a href="#t1" class="on">排班主表</a><a href="#t1">區域與點數</a><a href="#t1">資格與約束</a><a href="#t1">變體比較</a><a href="#t1">不可排班日登記</a><a href="#t1">人員維護</a>
+</div>
+<div style="flex:none;display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="display:flex;align-items:center;gap:2px">
+<button style="width:26px;height:26px;flex:none;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer;font:400 15px/1 'Barlow Condensed',sans-serif" onClick="{{ ymPrev }}">‹</button>
+<div style="{{ ymLabelS }}" onClick="{{ ymToggle }}">{{ ymLabel }}<span style="font-size:10px;opacity:.45">▼</span></div>
+<button style="width:26px;height:26px;flex:none;background:transparent;border:1px solid color-mix(in srgb,var(--color-text) 16%,transparent);cursor:pointer;font:400 15px/1 'Barlow Condensed',sans-serif" onClick="{{ ymNext }}">›</button>
+</div>
+<span class="tag tag-outline">尚無班表</span>
+</div>
+
+<div style="flex:1;min-height:0;padding:16px;display:flex;align-items:center;justify-content:center">
+<div style="{{ dnGridW }};position:relative">
+<div style="display:flex;flex:none">
+<div style="{{ dnGbPadS }}"></div>
+<sc-for list="{{ dnGroups }}" as="g" hint-placeholder-count="4"><div style="{{ g.s }}">{{ g.label }}</div></sc-for>
+</div>
+<div style="display:flex;flex:none">
+<div style="{{ dnLabPadS }}"></div>
+<sc-for list="{{ dnHead }}" as="h" hint-placeholder-count="30"><div style="{{ h.s }}"><span style="{{ h.ddS }}">{{ h.dd }}</span><span style="{{ h.wdS }}">{{ h.wd }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex:none">
+<div class="k" style="{{ dnRkPadS }}">身分</div>
+<sc-for list="{{ dnHead }}" as="h" hint-placeholder-count="33"><div style="{{ h.eS }}">{{ h.wd }}</div></sc-for>
+</div>
+<sc-for list="{{ dnRows }}" as="r" hint-placeholder-count="33">
+<div style="{{ r.s }}">
+<div style="{{ r.labS }}">{{ r.name }}<span style="{{ r.rkS }}">{{ r.rank }}</span></div>
+<sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="30"><div style="{{ c.s }}"></div></sc-for>
+</div>
+</sc-for>
+<div style="{{ pnMaskS }}"></div>
+<div class="blueprint" style="{{ pnPanelBS }}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span class="k">SCHEDULE NOT GENERATED</span>
+<div style="font:600 34px/1 'Barlow Condensed','Noto Sans TC',sans-serif">{{ esYm }}尚未產生班表</div>
+<button class="btn btn-primary blueprint" style="margin-top:4px;padding:10px 22px;font:600 13.5px/1 'Barlow Condensed','Noto Sans TC',sans-serif;letter-spacing:.05em"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>開始求解</button>
+</div>
+</div>
+</div>
+<div style="font:400 11.5px/1.7 'Noto Sans TC',sans-serif;color:color-mix(in srgb,var(--color-text) 58%,transparent);max-width:1000px;margin-top:12px">
+不捲動：列高由「視窗剩餘高度 ÷ 列數」決定，{{ dnSize }}（{{ dnRatio }}）都是一頁塞完。{{ dnNote }}。排版沿用 V01 的日 × 人表：頂部身分組色帶、姓名直書欄頭、下接身分列，左側日期欄帶星期，假日整列底色。矩陣整片以 blur 2.5px ＋ 58% 紙色霧化（nav 與年月工具列不霧化），面板置中且四邊貼齊格線交點。
+</div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;pointWeekday&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1,&quot;min&quot;:1,&quot;max&quot;:4,&quot;step&quot;:1,&quot;unit&quot;:&quot;點&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;點數規則&quot;},&quot;pointHoliday&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:2,&quot;min&quot;:1,&quot;max&quot;:6,&quot;step&quot;:1,&quot;unit&quot;:&quot;點&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;點數規則&quot;},&quot;quotaCap&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:12,&quot;min&quot;:6,&quot;max&quot;:24,&quot;step&quot;:1,&quot;unit&quot;:&quot;點&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;點數規則&quot;},&quot;fairnessPointOn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;點數規則&quot;},&quot;blockedCap&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:16,&quot;min&quot;:4,&quot;max&quot;:28,&quot;step&quot;:1,&quot;unit&quot;:&quot;天&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;不可排班日&quot;}}">
+class Component extends DCLogic {
+  // hover 直接改 DOM，不觸發任何 re-render
+  hl(name) {
+    const mx = document.getElementById('nsp-mx'), bd = document.getElementById('nsp-bd');
+    if (mx) mx.querySelectorAll('[data-nm]').forEach(el => {
+      const on = !name || el.dataset.nm === name;
+      el.style.opacity = on ? '' : '.15';
+      el.style.outline = name && el.dataset.nm === name ? '1.5px solid var(--color-text)' : '';
+      el.style.outlineOffset = '-1.5px';
+    });
+    const dp = document.getElementById('nsp-dp');
+    if (dp) dp.querySelectorAll('[data-nm]').forEach(el => {
+      const on = name && el.dataset.nm === name;
+      el.style.boxShadow = on ? 'inset 0 0 0 1px var(--color-text)' : '';
+    });
+    if (bd) bd.querySelectorAll('[data-row]').forEach(el => {
+      const on = !name || el.dataset.row === name;
+      el.style.opacity = on ? '' : '.4';
+      el.style.background = name && el.dataset.row === name ? 'color-mix(in srgb,var(--color-accent) 16%,transparent)' : '';
+    });
+  }
+
+  // 年月切換：左右箭頭快切，點標題開月份面板
+  // API: GET /schedules?year=&month= → 切換後重新載入該月班表（草稿或已發布）
+  stepYm(n) {
+    this.setState(s => {
+      const ym = s.ym || { y: 2026, m: 9 };
+      let y = ym.y, mm = ym.m + n;
+      if (mm < 1) { mm = 12; y--; } if (mm > 12) { mm = 1; y++; }
+      return { ym: { y, m: mm }, ymYear: y };
+    });
+  }
+
+  ymVals() {
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const ym = (this.state && this.state.ym) || { y: 2026, m: 9 };
+    const open = !!(this.state && this.state.ymOpen);
+    const py = (this.state && this.state.ymYear) || ym.y;
+    return {
+      ymLabel: `${ym.y} 年 ${ym.m} 月班表`,
+      ymPrev: () => this.stepYm(-1), ymNext: () => this.stepYm(1),
+      ymToggle: () => this.setState(s => ({ ymOpen: !s.ymOpen, ymYear: (s.ym || ym).y })),
+      ymLabelS: `display:flex;align-items:center;gap:6px;padding:3px 8px;cursor:pointer;font:600 20px/1.2 'Barlow Condensed','Noto Sans TC',sans-serif;border:1px solid ${open ? 'var(--color-accent)' : 'transparent'};${open ? 'background:color-mix(in srgb,var(--color-accent) 8%,transparent);' : ''}`,
+      ymPanelS: `display:${open ? 'block' : 'none'};position:absolute;top:34px;left:0;z-index:20;width:236px;padding:11px 12px 12px;background:var(--color-bg);border:1px solid var(--color-accent);box-shadow:var(--shadow-md)`,
+      ymYearLabel: String(py),
+      ymYearPrev: () => this.setState({ ymYear: py - 1 }),
+      ymYearNext: () => this.setState({ ymYear: py + 1 }),
+      ymThisMonth: () => this.setState({ ym: { y: 2026, m: 9 }, ymYear: 2026, ymOpen: false }),
+      ymMonths: Array.from({ length: 12 }, (_, i) => {
+        const mm = i + 1, sel = py === ym.y && mm === ym.m;
+        return {
+          t: mm + ' 月',
+          s: `height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font:600 12.5px/1 'Barlow Condensed','Noto Sans TC',sans-serif;border:1px solid ${sel ? 'var(--color-accent)' : dim(12)};${sel ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`,
+          on: () => this.setState({ ym: { y: py, m: mm }, ymOpen: false })
+        };
+      })
+    };
+  }
+
+  // SCREEN 01 的拉線註解隨分頁換：共用 4＋4 支，分頁專屬 2 支
+  annsFor(view) {
+    const L = (top, k, routes, items) => ({ cls: 'an anL', pos: `top:${top}px`, k, routes, items });
+    const R = (top, k, routes, items) => ({ cls: 'an anR', pos: `top:${top}px`, k, routes, items });
+    const tabName = { mx: '區域 × 日', dp: '日 × 人', dd: '單日詳表' }[view];
+    if (view === 'dd') {
+      return {
+        annTab: tabName,
+        anns: [
+          L(12, '讀取', ['GET /api/schedules/{ym}/days/{date}'], ['本頁主資料：單日 5 區的指派人與該人月負載', '「前一日／次一日」換 date 重取']),
+          L(168, '讀取', ['GET /api/calendars/{year}'], ['判定該日為平日／假日／國定假日', '決定標題下方「1 班 n 點」']),
+          R(40, '寫入', ['PATCH /api/schedules/{ym}/duties'], ['在單日列表上直接換人', '已發布仍可改，改完重新發布']),
+          R(196, '讀取', ['GET /api/schedules/{ym}/candidates'], ['空缺列的可指派人員建議（資格＋額度＋間隔）']),
+          R(332, '讀取', ['GET /api/schedules/{ym}/violations'], ['空缺列的標示：只帶 code 與 severity', '渲染方式由前端決定'])
+        ]
+      };
+    }
+    const common = [
+      L(12, '讀取', ['GET /api/schedules'], ['有值班表的月份清單（年月切換器）']),
+      L(92, '讀取', ['GET /api/schedules/{ym}'], ['單月完整值班表：狀態、revision、每格指派', '單一科部，沒有 unitId']),
+      L(196, '讀取', ['GET /api/staff'], ['人員名冊 33 人一次全帶，依身分組排列', '編輯介面見 SCREEN 06 人員維護']),
+      L(320, '讀取', ['GET /api/calendars/{year}', 'GET /api/blocked-days/{ym}'], ['表頭星期與假日底色；補班日視為平日', '已登記的不可排班日＝斜紋格，求解輸入']),
+      R(62, '寫入', ['PATCH /api/schedules/{ym}/duties', 'POST /api/schedules/{ym}/duties/swap'], [
+        view === 'mx' ? '點「區域 × 日」格改指派人員' : '點「日 × 人」格改指派區域',
+        '兩格對調 · 臨時換人是常態'
+      ]),
+      R(240, '動作', ['POST /api/schedules/{ym}/validate', 'POST /api/solver-jobs'], ['工具列「驗證約束」', '工具列「重新求解」→ 只回 jobId']),
+      R(400, '動作', ['GET /api/schedules/{ym}/export', 'POST /api/schedules/{ym}/publish'], ['匯出 Excel', '「重新發布」會重算月結轉；發布不等於鎖定']),
+      R(560, '讀取', ['GET /api/schedules/{ym}/violations'], [
+        '每筆只帶 code 與 severity，不帶 display',
+        view === 'mx' ? '右側違規側欄；底色／斜紋／外框由前端決定' : '衝突格底色與右側空缺欄'
+      ])
+    ];
+    const perTab = {
+      mx: [
+        L(452, '讀取', ['GET /api/schedules/{ym}/point-board'], ['額度點數看板：已排／上限、剩餘額度、假日班數', '公平性點數為選配欄位，停用時整欄隱藏']),
+        L(566, '讀取', ['GET /api/schedules/{ym}/point-board'], ['右側身分組容量利用率由同一份看板彙總'])
+      ],
+      dp: [
+        L(452, '讀取', ['GET /api/schedules/{ym}/point-board'], ['表格底部兩列：每人班數與額度點數', '欄位順序依 4 個身分組']),
+        L(566, '讀取', ['GET /api/schedules/{ym}/vacancies'], ['右側「空缺」欄的未填補區域代號'])
+      ],
+      dd: []
+    };
+    return { anns: common.concat(perTab[view]), annTab: tabName };
+  }
+
+  setStaff(i) { this.setState({ staffSel: i }); }
+
+  setBrush(b) { this.setState({ brush: b }); }
+
+  paint(name, j) {
+    this.setState(s => {
+      const reg = Object.assign({}, s.reg || this.nbSeed());
+      const key = name + '-' + j, b = s.brush || 'on';
+      if (b === 'clear' || reg[key]) delete reg[key]; else reg[key] = 1;
+      return { reg };
+    });
+  }
+
+  // SCREEN 01 值班表：5 區 × 33 人，不可排班日沿用 SCREEN 05 的登記
+  s01Model() {
+    const P = this.props || {};
+    const ym = (this.state && this.state.ym) || { y: 2026, m: 9 };
+    const key = `${P.pointWeekday || 1}|${P.pointHoliday || 2}|${P.quotaCap || 12}|${ym.y}-${ym.m}`;
+    const G = globalThis;
+    if (!G.__s01 || G.__s01Key !== key) { G.__s01 = this.buildS01(ym); G.__s01Key = key; }
+    return G.__s01;
+  }
+
+  buildS01(ym) {
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const P = this.props || {};
+    const wD = Math.max(1, P.pointWeekday ?? 1), wH = Math.max(1, P.pointHoliday ?? 2);
+    const cap = Math.max(2, P.quotaCap ?? 12), fairOn = P.fairnessPointOn === true;
+    const restGap = 3, npDayCap = 20, npMaxConsec = 6;
+    const MM = String(ym.m).padStart(2, '0');
+    const wdn = ['日', '一', '二', '三', '四', '五', '六'];
+    const nD = new Date(ym.y, ym.m, 0).getDate(), dow0 = new Date(ym.y, ym.m - 1, 1).getDay();
+    const cw = 26, chh = 24, dpw = 23, dph = 21;
+    const a2days = [];
+    for (let i = 0; i < nD; i++) {
+      const dw = (dow0 + i) % 7, he = dw === 0 || dw === 6;
+      a2days.push({
+        dd: String(i + 1).padStart(2, '0'), wd: wdn[dw], he, p: he ? wH : wD,
+        th: `width:${cw}px;flex:none;padding:3px 0 4px;text-align:center;${he ? `background:${dim(7)};` : ''}`,
+        wdS: `display:block;font:600 9px/1 'Barlow Condensed',sans-serif;color:${dim(50)}`,
+        ddS: "display:block;font:600 11px/1.35 'Barlow Condensed',sans-serif",
+        pS: `display:block;${mono};font-size:8px;color:${he ? 'var(--color-accent-700)' : dim(32)}`
+      });
+    }
+    const GT = [
+      { tint: 'color-mix(in srgb,var(--color-accent) 12%,transparent)', fg: 'var(--color-accent-800)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 30%,transparent)', fg: 'var(--color-accent-900)' },
+      { tint: 'var(--color-accent)', fg: 'var(--color-bg)' },
+      { tint: dim(12), fg: dim(70) }
+    ];
+    const GNAME = ['G1 · PGY1 PGY2 R1 打工R', 'G2 · R2 R3', 'G3 · R4 R5 R6', 'G4 · NP'];
+    const people = this.nbRoster().people.map(p => Object.assign({}, p, { pts: 0, hol: 0, dutyDays: [], last: -99, lastArea: null, streak: 0, byArea: {} }));
+    const byName = {};
+    people.forEach((p, i) => { p.idx = i; p.ab = p.name.slice(0, 2); byName[p.name] = p; });
+    const blocked = this.nbSeed();
+    const isBlocked = (p, j) => !!blocked[p.name + '-' + j];
+
+    const AREAS = [{ id: 'A', t: 'WARD' }, { id: 'B', t: 'WARD' }, { id: 'C', t: 'WARD' }, { id: 'ICU', t: 'ICU' }, { id: '總值', t: 'CHIEF' }];
+    const elig = (p, t) => t === 'WARD' ? true : t === 'ICU' ? p.icu : p.chief;
+    const order = ['總值', 'ICU', 'A', 'B', 'C'].map(id => AREAS.find(a => a.id === id));
+    const assign = {};
+    for (let j = 0; j < nD; j++) {
+      const used = {}, he = a2days[j].he, w = he ? wH : wD;
+      order.forEach(a => {
+        const cand = people.filter(p => {
+          if (!elig(p, a.t) || used[p.name] || isBlocked(p, j)) return false;
+          if (p.g === 3) return p.dutyDays.length < npDayCap && !(p.last === j - 1 && p.streak >= npMaxConsec);
+          return j - p.last >= restGap && p.pts + w <= cap;
+        });
+        cand.sort((x, y) => {
+          const np = (x.g === 3 ? 1 : 0) - (y.g === 3 ? 1 : 0);                       // S5 NP 盡量不用
+          if (np) return np;
+          if (a.t === 'ICU') { const pf = (x.g === 1 ? 0 : 1) - (y.g === 1 ? 0 : 1); if (pf) return pf; }  // S3
+          if (a.t === 'WARD') { const pf = (x.g === 2 ? 1 : 0) - (y.g === 2 ? 1 : 0); if (pf) return pf; } // S4 資深留給總值
+          if (a.t === 'CHIEF' && he) { const nh = x.hol - y.hol; if (nh) return nh; }
+          const rem = (cap - y.pts) - (cap - x.pts);                                   // S1 剩餘額度多的先排
+          if (rem) return rem;
+          const same = ((x.lastArea === a.id) ? 0 : 1) - ((y.lastArea === a.id) ? 0 : 1); // S2 同區延續
+          if (same) return same;
+          return x.idx - y.idx;
+        });
+        const pick = cand[0] || null;
+        if (pick) {
+          used[pick.name] = 1;
+          if (pick.g !== 3) pick.pts += w;
+          pick.streak = pick.last === j - 1 ? pick.streak + 1 : 1;
+          pick.last = j; pick.lastArea = a.id;
+          if (he) pick.hol++;
+          pick.dutyDays.push({ j, area: a.id, he });
+          pick.byArea[a.id] = (pick.byArea[a.id] || 0) + 1;
+        }
+        assign[a.id + '-' + j] = pick ? pick.name : null;
+      });
+    }
+    // 已發布仍可逐格修改：兩處臨時換人，正是違規清單的來源
+    const edits = [];
+    const jb = Math.min(nD - 2, 19);
+    const pB = people.find(p => isBlocked(p, jb) && p.g <= 1 && assign['A-' + jb] !== p.name);
+    if (pB) { assign['A-' + jb] = pB.name; edits.push({ code: 'H5_BLOCKED_DAY', sev: 'error', who: `${pB.name} · A ${MM}/${String(jb + 1).padStart(2, '0')}`, title: '排到本人已登記的不可排班日' }); }
+    const jg = Math.min(nD - 1, 20);
+    const pG = people.find(p => p.g === 1 && p.dutyDays.some(d => d.j === jg - 1) && !isBlocked(p, jg));
+    if (pG) { assign['B-' + jg] = pG.name; edits.push({ code: 'H4_MIN_GAP', sev: 'error', who: `${pG.name} · B ${MM}/${String(jg + 1).padStart(2, '0')}`, title: '值休休值：與前一日的值班相隔不足 3 天' }); }
+
+    const cellS = (g, he) => `width:${cw}px;height:${chh}px;flex:none;display:flex;align-items:center;justify-content:center;font:500 9.5px/1 "Noto Sans TC",sans-serif;background:${GT[g].tint};color:${GT[g].fg};border-right:1px solid ${he ? dim(20) : dim(7)};border-bottom:1px solid ${dim(7)};`;
+    const vacS = `width:${cw}px;height:${chh}px;flex:none;display:flex;align-items:center;justify-content:center;${mono};font-size:9.5px;color:var(--color-accent-900);background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);border:1.5px solid var(--color-accent)`;
+    const TYPES = [
+      { c: 'WARD', n: '一般病房', ids: ['A', 'B', 'C'], meta: '3 區 · 每區每日 1 人 · 全部身分可值', g: 0 },
+      { c: 'ICU', n: 'ICU', ids: ['ICU'], meta: '1 區 · 每日 1 人 · R2 以上可值 · S3 優先 R2/R3', g: 1 },
+      { c: 'CHIEF', n: '總值', ids: ['總值'], meta: '1 區 · 每日 1 人 · 僅 R4~R6（13 人）· S4 優先', g: 2 }
+    ];
+    const a2groups = TYPES.map(t => ({
+      code: t.c, name: t.n, meta: t.meta,
+      badge: `${mono};padding:2px 6px;background:${GT[t.g].tint};color:${GT[t.g].fg}`,
+      rows: t.ids.map(id => {
+        let filled = 0;
+        const cells = a2days.map((d, j) => {
+          const nm = assign[id + '-' + j];
+          if (!nm) return { t: '缺', nm: '', s: vacS };
+          filled++;
+          return { t: byName[nm].ab, nm, s: cellS(byName[nm].g, d.he) };
+        });
+        return { id, cells, stat: filled + '/' + nD, statS: `width:44px;flex:none;text-align:right;${mono};font-size:10px;color:${filled < nD ? 'var(--color-accent)' : dim(45)}` };
+      })
+    }));
+    const fill = a2days.map((d, j) => {
+      const miss = AREAS.filter(a => !assign[a.id + '-' + j]).length;
+      return {
+        t: String(AREAS.length - miss),
+        s: `width:${cw}px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;${miss ? 'background:var(--color-accent-200);color:var(--color-accent-900);' : `color:${dim(40)};`}border-right:1px solid ${dim(6)}`
+      };
+    });
+    const GLABEL = [['G1', '一般病房'], ['G2', '一般病房 · ICU'], ['G3', '全部含總值'], ['G4', 'NP · 一般病房']];
+    const a2legend = GLABEL.map((g, i) => ({
+      t: g[0], label: g[1],
+      s: `${mono};font-size:9px;padding:3px 6px;background:${GT[i].tint};color:${GT[i].fg}`
+    }));
+
+    const boardCols = [0, 1, 2, 3].map(gi => ({
+      label: GNAME[gi],
+      hdS: `${mono};font-size:9.5px;letter-spacing:.06em;padding:3px 5px;margin-bottom:2px;background:${GT[gi].tint};color:${GT[gi].fg}`,
+      rows: people.filter(p => p.g === gi).map(p => {
+        const np = p.g === 3;
+        const pct = np ? Math.min(100, Math.round(p.dutyDays.length / npDayCap * 100)) : Math.min(100, Math.round(p.pts / cap * 100));
+        return {
+          name: p.name, rank: p.rank, hol: String(p.hol), fair: '—',
+          pts: np ? p.dutyDays.length + '/' + npDayCap + '天' : p.pts + '/' + cap,
+          left: np ? '—' : '餘' + (cap - p.pts),
+          on: () => this.hl(p.name), off: () => this.hl(null),
+          rkS: `${mono};font-size:9px;padding:2px 4px;flex:none;width:34px;text-align:center;background:${GT[p.g].tint};color:${GT[p.g].fg}`,
+          leftS: `${mono};font-size:9.5px;width:30px;text-align:right;flex:none;color:${!np && cap - p.pts <= 1 ? 'var(--color-accent-800)' : dim(50)}`,
+          bar: `height:5px;width:${pct}%;background:${pct >= 95 ? 'repeating-linear-gradient(45deg,var(--color-accent-800) 0 3px,var(--color-accent-400) 3px 6px)' : 'var(--color-accent)'}`
+        };
+      })
+    }));
+    const util = [0, 1, 2, 3].map(gi => {
+      const ps = people.filter(p => p.g === gi);
+      if (gi === 3) {
+        const u = ps.reduce((s, p) => s + p.dutyDays.length, 0), c = ps.length * npDayCap;
+        const pct = Math.round(u / c * 100);
+        return { lv: 'G4 NP', txt: `${u} / ${c} 天（H6 每月 20 天）`, pct: pct + '%', s: `height:4px;width:${pct}%;background:${dim(45)}` };
+      }
+      const u = ps.reduce((s, p) => s + p.pts, 0), c = ps.length * cap;
+      const pct = Math.round(u / c * 100);
+      return { lv: 'G' + (gi + 1), txt: `${u} / ${c} 點`, pct: pct + '%', s: `height:4px;width:${pct}%;background:${pct >= 92 ? 'var(--color-accent-800)' : 'var(--color-accent)'}` };
+    });
+
+    const vacList = [];
+    AREAS.forEach(a => a2days.forEach((d, j) => { if (!assign[a.id + '-' + j]) vacList.push(`${a.id} ${MM}/${d.dd}`); }));
+    const overCap = people.filter(p => p.g !== 3 && p.pts > cap);
+    const rawAlerts = [];
+    if (vacList.length) rawAlerts.push({ code: 'H1_AREA_COVERAGE', sev: 'error', title: `${vacList.length} 個區域-日沒有合格且可用的人`, who: vacList.slice(0, 4).join('、') + (vacList.length > 4 ? ' 等' : '') });
+    edits.forEach(v => rawAlerts.push(v));
+    if (overCap.length) rawAlerts.push({ code: 'H3_QUOTA_CAP', sev: 'error', title: `${overCap.length} 人超過額度點數上限`, who: overCap.slice(0, 3).map(p => `${p.name} ${p.pts}/${cap}`).join('、') });
+    const a2alerts = rawAlerts.map(v => ({
+      kind: v.sev === 'error' ? 'error' : 'warn', code: v.code, title: v.title, who: v.who,
+      badge: `${mono};font-size:9px;padding:3px 5px;flex:none;${v.sev === 'error' ? 'background:var(--color-accent);color:var(--color-bg)' : `background:var(--color-accent-200);color:var(--color-accent-900)`}`
+    }));
+
+    // 日 × 人：列＝日期，欄＝人員依身分組
+    const dpEmp = p => p.rank;
+    const dpGroups = [0, 1, 2, 3].map(gi => {
+      const n = people.filter(p => p.g === gi).length;
+      return {
+        label: `${GNAME[gi].split(' · ')[0]} · ${n} 人`,
+        s: `width:${n * dpw}px;flex:none;text-align:center;font:600 10px/1 'Barlow Condensed',sans-serif;letter-spacing:.1em;padding:5px 0;background:${GT[gi].tint};color:${GT[gi].fg};border-right:1px solid var(--color-bg)`
+      };
+    });
+    const dpHead = people.map(p => ({
+      name: p.name, rank: p.rank,
+      on: () => this.hl(p.name), off: () => this.hl(null),
+      s: `width:${dpw}px;flex:none;height:86px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(8)};border-bottom:1px solid ${dim(8)}`,
+      nS: 'writing-mode:vertical-rl;text-orientation:upright;font:500 11px/1 "Noto Sans TC",sans-serif;letter-spacing:.06em',
+      eS: `width:${dpw}px;flex:none;height:46px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(8)};border-bottom:1px solid ${dim(14)};writing-mode:vertical-rl;font:600 9px/1 'Barlow Condensed',sans-serif;color:${dim(58)};letter-spacing:.04em`
+    }));
+    const shortArea = { 'A': 'A', 'B': 'B', 'C': 'C', 'ICU': 'I', '總值': '總' };
+    const dutyOf = {};
+    people.forEach(p => { dutyOf[p.name] = {}; });
+    AREAS.forEach(a => a2days.forEach((d, j) => { const nm = assign[a.id + '-' + j]; if (nm) dutyOf[nm][j] = a.id; }));
+    const dpRows = a2days.map((d, j) => {
+      const vac = AREAS.filter(a => !assign[a.id + '-' + j]).map(a => a.id);
+      return {
+        d: String(j + 1), wd: d.wd,
+        labS: `width:44px;flex:none;height:${dph}px;display:flex;align-items:center;gap:4px;padding-left:5px;${d.he ? `background:${dim(9)};` : ''}border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)};font:600 11px/1 'Barlow Condensed',sans-serif`,
+        wdS: `font:400 8.5px/1 "Noto Sans TC",sans-serif;color:${dim(45)}`,
+        cells: people.map(p => {
+          const area = dutyOf[p.name][j];
+          const bl = isBlocked(p, j);
+          const conflict = area && bl;
+          const base = `width:${dpw}px;flex:none;height:${dph}px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;border-right:1px solid ${dim(7)};border-bottom:1px solid ${dim(7)};`;
+          const s = conflict
+            ? `${base}background:repeating-linear-gradient(45deg,var(--color-accent-800) 0 2px,var(--color-accent-400) 2px 5px);color:var(--color-bg);box-shadow:inset 0 0 0 1.5px var(--color-accent-900)`
+            : area
+              ? `${base}background:${d.he ? 'var(--color-accent-300)' : 'var(--color-accent-100)'};color:var(--color-accent-900)`
+              : bl
+                ? `${base}background:repeating-linear-gradient(45deg,${dim(22)} 0 1px,transparent 1px 4px);color:${dim(0)}`
+                : `${base}${d.he ? `background:${dim(9)};` : ''}color:${dim(0)}`;
+          return { t: area ? shortArea[area] : '', nm: p.name, s };
+        }),
+        vac: vac.length ? vac.join(' ') : '',
+        vacS: `width:56px;flex:none;height:${dph}px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;border-left:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)};${vac.length ? 'background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);color:var(--color-accent-900)' : `color:${dim(30)}`}`
+      };
+    });
+    const dpFoot = people.map(p => ({
+      n: String(p.dutyDays.length),
+      pt: p.g === 3 ? '—' : String(p.pts),
+      s: `width:${dpw}px;flex:none;height:19px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;border-right:1px solid ${dim(7)};border-top:1px solid ${dim(14)};color:${dim(62)}`,
+      pS: `width:${dpw}px;flex:none;height:17px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;border-right:1px solid ${dim(7)};color:${p.g !== 3 && p.pts >= cap ? 'var(--color-accent-800)' : dim(45)}`
+    }));
+
+    const ddOf = j => {
+      const d = a2days[j], w = d.he ? wH : wD;
+      const rows = AREAS.map(a => {
+        const nm = assign[a.id + '-' + j], p = nm ? byName[nm] : null;
+        const type = a.t === 'WARD' ? '一般病房' : a.t === 'ICU' ? 'ICU' : '總值';
+        return {
+          area: a.id, type,
+          rank: p ? p.rank : '—', name: p ? p.name : '空缺',
+          rkS: `${mono};font-size:9.5px;padding:3px 5px;flex:none;width:42px;text-align:center;background:${p ? GT[p.g].tint : dim(8)};color:${p ? GT[p.g].fg : dim(45)}`,
+          load: p ? (p.g === 3 ? `本月 ${p.dutyDays.length}/${npDayCap} 天 · 假日 ${p.hol} 班` : `額度 ${p.pts}/${cap} 點 · 餘 ${cap - p.pts} · 假日 ${p.hol} 班`) : '無合格且可用的人',
+          s: `display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid ${p ? 'var(--color-divider)' : 'var(--color-accent)'};${p ? '' : 'background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--color-accent) 12%,transparent) 0 4px,transparent 4px 8px);'}`
+        };
+      });
+      const nvac = rows.filter(r => r.name === '空缺').length;
+      return {
+        label: `${ym.y} / ${MM} / ${d.dd}（星期${d.wd}）`,
+        sub: `${d.he ? '假日' : '平日'} · 1 班 ${w} 點 · 5 區各 1 人`,
+        stat: nvac ? `${nvac} 區空缺` : '全數填補',
+        statS: `${mono};padding:4px 9px;${nvac ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`,
+        rows
+      };
+    };
+    return {
+      a2days, a2groups, fill, a2legend, boardCols, util, a2alerts, dpGroups, dpHead, dpRows, dpFoot,
+      ddOf, restGap: String(restGap), nD,
+      raw: { people, assign, dutyOf, blocked, AREAS, cap, npDayCap, shortArea, wD, wH, MM },
+      areaCount: String(AREAS.length), peopleCount: String(people.length),
+      nDays: String(nD), assignN: String(AREAS.length * nD),
+      alertTag: rawAlerts.length ? `${rawAlerts.filter(v => v.sev === 'error').length} error` : '無違規',
+      qHoN: String(wH), fairOn,
+      capNote: `額度上限暫以 ${cap} 點代入，正式值見 SCREEN 02 的身分設定`,
+      fairNote: fairOn ? '公平性點數（實驗性）：查表值待案主提供，此處以「—」佔位。' : '公平性點數（S7）預設停用，整欄隱藏；啟用後成為看板的次要欄位。',
+      fairNoteS: `font-size:10.5px;line-height:1.5;color:${dim(50)};margin-top:8px`
+    };
+  }
+
+  s01Vals() {
+    const m = this.s01Model();
+    const day = Math.max(0, Math.min(m.nD - 1, (this.state && this.state.day != null) ? this.state.day : 12));
+    const out = Object.assign({}, m, { dd: m.ddOf(day) });
+    delete out.ddOf; delete out.nD;
+    return out;
+  }
+
+  setEs(v) { this.setState({ es: v }); }
+
+  setEf(v) { this.setState({ ef: v }); }
+
+  setVp(v) { this.setState({ vp: v }); }
+
+  setBz(v) { this.setState({ bz: v }); }
+
+  setCa(v) { this.setState({ ca: v }); }
+
+  setDn(v) { this.setState({ dn: v }); }
+
+  setPn(v) { this.setState({ pn: v }); }
+
+  // V02 空狀態 · 橫式密集矩陣：欄＝日、列＝人員，列高＝剩餘高度 ÷ 20，故 20 列剛好塞滿視窗
+  denseVals() {
+    const m = this.s01Model(), R = m.raw;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const vp = (this.state && this.state.vp) || '169';
+    const dn = 'c';
+    const W = vp === '169' ? 1600 : 1280, H = vp === '169' ? 900 : 960;
+    const tab = (on, first) => `flex:none;padding:8px 15px;font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;user-select:none;border:1px solid ${on ? 'var(--color-accent)' : dim(16)};border-left-width:${first ? '1px' : '0'};${on ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+
+    // 三種都不捲動：列高 ＝ 視窗剩餘高度 ÷ 列數，全部列一頁塞完
+    const people = R.people, days = m.a2days;
+    const byDayCol = dn !== 'c';                            // a／b：欄＝日；c：欄＝人
+    const LAB = byDayCol ? 96 : 44;                         // c 版對齊 V01 日 × 人表：44px 日期欄
+    const GBH = 18, RKH = 24;                               // c 版身分組色帶／身分列
+    const headH = byDayCol ? 22 : 76;                        // c 版姓名直書欄頭
+    const headTotal = headH + (byDayCol ? 0 : GBH + RKH);
+    const GT = [
+      { tint: 'color-mix(in srgb,var(--color-accent) 12%,transparent)', fg: 'var(--color-accent-800)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 30%,transparent)', fg: 'var(--color-accent-900)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 55%,transparent)', fg: 'var(--color-bg)' },
+      { tint: dim(12), fg: dim(70) }
+    ];
+    const GNAME = ['G1', 'G2', 'G3', 'G4'];
+    const nCols = byDayCol ? days.length : people.length;
+    const nRows = byDayCol ? people.length : days.length;
+    // 格子改用 flex 平分：矩陣寬高各 100%，捨位零頭由瀏覽器吸收，四邊留白就等於容器的 16px
+    const cw = Math.round((W - 32 - LAB) / nCols);
+    const rh = Math.round((H - 100 - (dn === 'b' ? 65 : 0) - 32 - headTotal) / nRows); // 僅用於說明文字
+    const dnGroups = [0, 1, 2, 3].map(gi => {
+      const n = people.filter(p => p.g === gi).length;
+      return {
+        label: `${GNAME[gi]} · ${n} 人`,
+        s: `flex:${n};min-width:0;height:${GBH}px;display:flex;align-items:center;justify-content:center;font:600 10px/1 'Barlow Condensed',sans-serif;letter-spacing:.1em;background:${GT[gi].tint};color:${GT[gi].fg};border-right:1px solid var(--color-bg)`
+      };
+    });
+    // 面板貼齊格線：起點與跨距一律換算成整數格
+    const snap = (cs, cn, rs, rn) => {
+      const c0 = Math.round(nCols * cs), c1 = Math.round(nCols * cn);
+      const r0 = Math.round(nRows * rs), r1 = Math.round(nRows * rn);
+      return `position:absolute;left:calc(${LAB}px + (100% - ${LAB}px) * ${(c0 / nCols).toFixed(4)});top:calc(${headTotal}px + (100% - ${headTotal}px) * ${(r0 / nRows).toFixed(4)});width:calc((100% - ${LAB}px) * ${(c1 / nCols).toFixed(4)});height:calc((100% - ${headTotal}px) * ${(r1 / nRows).toFixed(4)});`;
+    };
+    const mid = (cn, rn) => snap((1 - cn) / 2, cn, (1 - rn) / 2, rn);   // 置中且仍貼齊格線
+    const GB = { 0: 1, 11: 1, 18: 1, 31: 1 };               // 身分組交界（c 版用較重的欄線）
+
+    const dnHead = byDayCol
+      ? days.map(d => ({
+          dd: d.dd, wd: d.wd,
+          s: `flex:1;min-width:0;height:${headH}px;text-align:center;${d.he ? `background:${dim(7)};` : ''}`,
+          wdS: `display:block;font:600 10.5px/1 'Barlow Condensed',sans-serif;color:${d.he ? 'var(--color-accent-700)' : dim(76)};margin-top:2px`,
+          ddS: "display:block;font:600 12px/1.1 'Barlow Condensed',sans-serif"
+        }))
+      : people.map((p, i) => ({
+          dd: p.name, wd: p.rank,
+          s: `flex:1;min-width:0;height:${headH}px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(8)};border-bottom:1px solid ${dim(8)};${GB[i] ? `border-left:1px solid ${dim(22)};` : ''}`,
+          wdS: 'display:none',
+          ddS: 'writing-mode:vertical-rl;text-orientation:upright;font:500 11px/1 "Noto Sans TC",sans-serif;letter-spacing:.06em',
+          eS: `flex:1;min-width:0;height:${RKH}px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(8)};border-bottom:1px solid ${dim(14)};font:600 9px/1 'Barlow Condensed',sans-serif;color:${dim(58)};letter-spacing:.04em;${GB[i] ? `border-left:1px solid ${dim(22)};` : ''}`
+        }));
+
+    const dnRows = byDayCol
+      ? people.map((p, i) => ({
+          name: p.name, rank: p.rank,
+          s: 'display:flex;flex:1;min-height:0',
+          labS: `width:${LAB}px;flex:none;height:100%;display:flex;align-items:center;gap:6px;padding-left:8px;border-right:1px solid ${dim(16)};border-bottom:1px solid ${dim(9)};${i === 0 ? `border-top:1px solid ${dim(16)};` : ''}font:500 11.5px/1 'Noto Sans TC',sans-serif`,
+          rkS: `${mono};font-size:10px;color:${dim(76)}`,
+          cells: days.map(d => ({
+            s: `flex:1;min-width:0;height:100%;border-right:1px solid ${dim(6)};border-bottom:1px solid ${dim(9)};${i === 0 ? `border-top:1px solid ${dim(16)};` : ''}${d.he ? `background:${dim(5)};` : ''}`
+          }))
+        }))
+      : days.map((d, j) => ({
+          name: d.dd, rank: d.wd,
+          s: 'display:flex;flex:1;min-height:0',
+          labS: `width:${LAB}px;flex:none;height:100%;display:flex;align-items:center;gap:4px;padding-left:5px;border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)};${mono};${d.he ? `background:${dim(9)};` : ''}`,
+          rkS: `font:400 8.5px/1 "Noto Sans TC",sans-serif;color:${d.he ? 'var(--color-accent-700)' : dim(45)}`,
+          cells: people.map((p, i) => ({
+            s: `flex:1;min-width:0;height:100%;border-right:1px solid ${dim(7)};border-bottom:1px solid ${dim(7)};${GB[i] ? `border-left:1px solid ${dim(22)};` : ''}${d.he ? `background:${dim(9)};` : ''}`
+          }))
+        }));
+
+    return {
+      dnVp169S: tab(vp === '169', true), dnVp43S: tab(vp === '43', false),
+      dnCardS: `width:${W}px;height:${H}px;display:flex;flex-direction:column;overflow:hidden`,
+      dnHead, dnRows, dnGroups,
+      dnGridW: `width:100%;height:100%;display:flex;flex-direction:column`,
+      dnGbPadS: `width:${LAB}px;flex:none;height:${GBH}px`,
+      dnRkPadS: `width:${LAB}px;flex:none;height:${RKH}px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(14)}`,
+      dnLabPadS: `width:${LAB}px;flex:none;height:${headH}px;${byDayCol ? '' : `border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(8)}`}`,
+      dnNote: `欄＝人員 ${nCols} 欄、列＝日 ${nRows} 列；格子 ${cw} × ${rh}px，一頁塞完不捲動`,
+      // 矩陣整片霧化：blur 2.5px ＋ 58% 紙色，面板置中且仍貼齊格線
+      pnMaskS: 'position:absolute;inset:0;pointer-events:none;backdrop-filter:blur(2.5px);background:color-mix(in srgb,var(--color-bg) 58%,transparent)',
+      pnPanelBS: mid(0.36, 0.34) + 'background:var(--color-bg);border:1px solid var(--color-accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;text-align:center',
+      pnCellS: `flex:1;min-width:0;white-space:nowrap;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:0 13px;border-right:1px solid ${dim(14)}`,
+      dnScope: `${people.length} 人 × ${nRows} 日 · ${R.AREAS.length * nRows} 個指派`,
+      dnFacts: [
+        { k: '人員', v: String(people.length) },
+        { k: '日數', v: String(nRows) },
+        { k: '待排指派', v: String(R.AREAS.length * nRows) }
+      ],
+      dnSize: `${W} × ${H}`, dnRatio: vp === '169' ? '16 : 9' : '4 : 3',
+      esYm: `${(this.state && this.state.ym || { y: 2026, m: 9 }).y} 年 ${(this.state && this.state.ym || { y: 2026, m: 9 }).m} 月`
+    };
+  }
+
+  // V02 空狀態 · 月曆式：7 欄 × 週數，格子用 flex 垂直撐滿整個視窗（不對應 5 區 × 30 日的資料量）
+  calVals() {
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const vp = (this.state && this.state.vp) || '169';
+    const ca = (this.state && this.state.ca) || 'a';
+    const W = vp === '169' ? 1600 : 1280, H = vp === '169' ? 900 : 960;
+    const ym = (this.state && this.state.ym) || { y: 2026, m: 9 };
+    const tab = (on, first) => `flex:none;padding:8px 15px;font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;user-select:none;border:1px solid ${on ? 'var(--color-accent)' : dim(16)};border-left-width:${first ? '1px' : '0'};${on ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+
+    const nD = new Date(ym.y, ym.m, 0).getDate();
+    const dow0 = (new Date(ym.y, ym.m - 1, 1).getDay() + 6) % 7;   // 週一起始
+    const prevN = new Date(ym.y, ym.m - 1, 0).getDate();
+    const weeks = Math.ceil((dow0 + nD) / 7);
+    const cells = [];
+    for (let i = 0; i < weeks * 7; i++) {
+      const dn = i - dow0 + 1;
+      const inM = dn >= 1 && dn <= nD;
+      const col = i % 7, he = col >= 5;
+      cells.push({
+        t: String(inM ? dn : dn < 1 ? prevN + dn : dn - nD).padStart(2, '0'),
+        inM, he, col, row: Math.floor(i / 7)
+      });
+    }
+    const calRows = Array.from({ length: weeks }, (_, r) => ({
+      s: 'display:flex;flex:1;min-height:0',
+      cells: cells.slice(r * 7, r * 7 + 7).map(c => ({
+        t: c.t,
+        s: `flex:1;min-width:0;height:100%;display:flex;flex-direction:column;padding:7px 9px;border-left:1px solid ${dim(13)};border-top:1px solid ${dim(13)};${c.col === 6 ? `border-right:1px solid ${dim(13)};` : ''}${c.row === weeks - 1 ? `border-bottom:1px solid ${dim(13)};` : ''}${c.he && c.inM ? `background:${dim(4)};` : ''}${!c.inM ? `background:${dim(2)};` : ''}`,
+        nS: `${mono};font-size:13px;letter-spacing:.02em;color:${!c.inM ? dim(52) : c.he ? 'var(--color-accent-700)' : 'var(--color-text)'}`
+      }))
+    }));
+    const calHead = ['一', '二', '三', '四', '五', '六', '日'].map((w, i) => ({
+      t: w,
+      s: `flex:1;min-width:0;height:30px;display:flex;align-items:center;padding-left:9px;${mono};font-size:11.5px;letter-spacing:.1em;color:${i >= 5 ? 'var(--color-accent-700)' : dim(72)}`
+    }));
+
+    return {
+      caVp169S: tab(vp === '169', true), caVp43S: tab(vp === '43', false),
+      caTabAS: tab(ca === 'a', true), caTabBS: tab(ca === 'b', false), caTabCS: tab(ca === 'c', false),
+      caPickA: () => this.setCa('a'), caPickB: () => this.setCa('b'), caPickC: () => this.setCa('c'),
+      caMountA: ca === 'a', caMountB: ca === 'b', caMountC: ca === 'c',
+      caCardS: `width:${W}px;height:${H}px;display:flex;flex-direction:column;overflow:hidden`,
+      calRows, calHead,
+      // 面板貼齊格線：第 3–5 欄 × 第 2–3 列（百分比，格子等寬等高所以完全吻合）
+      caPanelS: `position:absolute;left:${(200 / 7).toFixed(4)}%;top:${(100 / weeks).toFixed(4)}%;width:${(300 / 7).toFixed(4)}%;height:${(200 / weeks).toFixed(4)}%;background:var(--color-bg);border:1px solid var(--color-accent);display:flex;flex-direction:column;justify-content:center;gap:11px;padding:0 28px`,
+      caWeeks: String(weeks), caSize: `${W} × ${H}`, caRatio: vp === '169' ? '16 : 9' : '4 : 3'
+    };
+  }
+
+  // V02 空狀態 · 格子為主的極簡版：方格製圖板置中，周邊只留標題、一行說明與一個動作
+  boxAesVals() {
+    const m = this.s01Model(), R = m.raw;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const vp = (this.state && this.state.vp) || '169';
+    const bz = (this.state && this.state.bz) || 'a';
+    const W = vp === '169' ? 1600 : 1280, H = vp === '169' ? 900 : 960;
+    const cw = Math.floor((W - 32 - 60) / 30), ch = cw;   // 正方模組
+    const tab = (on, first) => `flex:none;padding:8px 15px;font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;user-select:none;border:1px solid ${on ? 'var(--color-accent)' : dim(16)};border-left-width:${first ? '1px' : '0'};${on ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+
+    const azHead = m.a2days.map((d, j) => ({
+      t: (j === 0 || (j + 1) % 5 === 0) ? d.dd : '',
+      s: `width:${cw}px;flex:none;height:22px;line-height:15px;text-align:center;${mono};font-size:11px;color:${d.he ? 'var(--color-accent-700)' : dim(72)}`
+    }));
+    const azRows = R.AREAS.map((a, i) => ({
+      id: a.id,
+      labS: `width:60px;flex:none;height:${ch}px;display:flex;align-items:center;${mono};font-size:12px;color:var(--color-text);border-top:${i === 0 ? `1px solid ${dim(22)}` : '0'}`,
+      cells: m.a2days.map((d, j) => ({
+        s: `width:${cw}px;height:${ch}px;flex:none;border-left:1px solid ${dim(14)};border-top:1px solid ${dim(i === 0 ? 22 : 14)};${j === 29 ? `border-right:1px solid ${dim(14)};` : ''}${i === 4 ? `border-bottom:1px solid ${dim(22)};` : ''}${d.he ? `background:${dim(4)};` : ''}`
+      }))
+    }));
+
+    return {
+      azVp169S: tab(vp === '169', true), azVp43S: tab(vp === '43', false),
+      azTabAS: tab(bz === 'a', true), azTabBS: tab(bz === 'b', false), azTabCS: tab(bz === 'c', false),
+      azPickA: () => this.setBz('a'), azPickB: () => this.setBz('b'), azPickC: () => this.setBz('c'),
+      azMountA: bz === 'a', azMountB: bz === 'b', azMountC: bz === 'c',
+      azCardS: `width:${W}px;height:${H}px;display:flex;flex-direction:column;overflow:hidden`,
+      azPlateW: `width:${60 + 30 * cw}px`,
+      azHead, azRows,
+      // 6c：疊在製圖板上的面板，邊界貼齊格線（第 2–4 列、第 10–21 欄）
+      azPanelS: `position:absolute;left:${60 + 9 * cw}px;top:${ch}px;width:${12 * cw}px;height:${3 * ch}px;background:var(--color-bg);border:1px solid var(--color-accent);display:flex;flex-direction:column;justify-content:center;gap:10px;padding:0 ${Math.round(cw / 2)}px`,
+      azSize: `${W} × ${H}`, azRatio: vp === '169' ? '16 : 9' : '4 : 3'
+    };
+  }
+
+  setBx(v) { this.setState({ bx: v }); }
+
+  // V02 空狀態 · WPF ＋ WebView2 的固定視窗：16:9 1600×900 ／ 4:3 1280×960，高度也要填滿、不出現頁面捲軸
+  boxVals() {
+    const m = this.s01Model(), R = m.raw;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const vp = (this.state && this.state.vp) || '169';
+    const bx = (this.state && this.state.bx) || 'a';
+    const W = vp === '169' ? 1600 : 1280, H = vp === '169' ? 900 : 960;
+    const tab = (on, first) => `flex:none;padding:8px 15px;font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;user-select:none;border:1px solid ${on ? 'var(--color-accent)' : dim(16)};border-left-width:${first ? '1px' : '0'};${on ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+
+    const nP = R.people.length, seed = this.nbSeed();
+    const supply = m.a2days.map((d, j) => {
+      let off = 0;
+      R.people.forEach(p => { if (seed[p.name + '-' + j]) off++; });
+      return { avail: nP - off, d };
+    });
+    const minAvail = Math.min.apply(null, supply.map(s => s.avail));
+    const cw = Math.floor((W - 32 - 60) / 30);
+
+    return {
+      bxVp169S: tab(vp === '169', true), bxVp43S: tab(vp === '43', false),
+      bxPick169: () => this.setVp('169'), bxPick43: () => this.setVp('43'),
+      bxTabAS: tab(bx === 'a', true), bxTabBS: tab(bx === 'b', false),
+      bxPickA: () => this.setBx('a'), bxPickB: () => this.setBx('b'),
+      bxMountA: bx === 'a', bxMountB: bx === 'b',
+      bxCardS: `width:${W}px;height:${H}px;display:flex;flex-direction:column;overflow:hidden`,
+      bxSize: `${W} × ${H}`,
+      bxRatio: vp === '169' ? '16 : 9' : '4 : 3',
+      bxCenterS: `flex:none;width:${vp === '169' ? 560 : 520}px;display:flex;flex-direction:column;justify-content:center`,
+      // 骨架：欄寬依視窗寬算，列高交給 flex，整塊吃掉剩下的高度
+      bxSkelRows: R.AREAS.map(a => ({
+        id: a.id,
+        rowS: 'display:flex;flex:1;min-height:0',
+        labS: `width:60px;flex:none;display:flex;align-items:center;padding-left:8px;${mono};font-size:12px;color:var(--color-text);border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)}`,
+        cells: m.a2days.map(d => ({
+          s: `width:${cw}px;height:100%;flex:none;border-right:1px solid ${dim(6)};border-bottom:1px solid ${dim(6)};${d.he ? `background:${dim(6)};` : ''}`
+        }))
+      })),
+      bxHead: m.a2days.map(d => ({
+        dd: d.dd, wd: d.wd,
+        s: `width:${cw}px;flex:none;padding:3px 0 4px;text-align:center;${d.he ? `background:${dim(7)};` : ''}`,
+        wdS: `display:block;font:600 10.5px/1 'Barlow Condensed',sans-serif;color:${dim(72)}`,
+        ddS: "display:block;font:600 12.5px/1.35 'Barlow Condensed',sans-serif"
+      })),
+      // 柱狀高度用百分比，父容器 flex:1 → 高度隨視窗長高
+      bxBars: supply.map(s => ({
+        dd: s.d.dd, n: String(s.avail),
+        colS: `width:${cw}px;flex:none;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px`,
+        barS: `width:${Math.max(7, cw - 12)}px;height:${Math.round(s.avail / nP * 100)}%;background:${s.avail === minAvail ? 'var(--color-accent-800)' : s.d.he ? 'var(--color-accent-400)' : 'var(--color-accent-200)'}`,
+        nS: `${mono};font-size:10.5px;color:${dim(76)}`
+      })),
+      bxBarsThin: supply.map(s => ({
+        dd: s.d.dd,
+        colS: 'flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px',
+        barS: `width:100%;max-width:14px;height:${Math.round(s.avail / nP * 100)}%;background:${s.avail === minAvail ? 'var(--color-accent-800)' : s.d.he ? 'var(--color-accent-400)' : 'var(--color-accent-200)'}`,
+        nS: `${mono};font-size:10px;color:${dim(76)}`
+      })),
+      bxSupplyNote: `每日可用人數 ${minAvail}–${nP} 人 · 谷底 ${minAvail} 人（33 人扣掉當日已登記的不可排班日）`
+    };
+  }
+
+  // V02 空狀態 · 滿版（1680px）：以 3a／3c 為底各再兩種
+  efVals() {
+    const m = this.s01Model(), R = m.raw;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const ef = (this.state && this.state.ef) || 'a';
+    const tabS = v => `flex:none;padding:8px 15px;font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;user-select:none;border:1px solid ${ef === v ? 'var(--color-accent)' : dim(16)};border-left-width:${v === 'a' ? '1px' : '0'};${ef === v ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+    const seed = this.nbSeed();
+
+    // 每日可用人數＝33 − 當日已登記不可排班的人（求解前就能看的供給曲線）
+    const nP = R.people.length;
+    const supply = m.a2days.map((d, j) => {
+      let off = 0;
+      R.people.forEach(p => { if (seed[p.name + '-' + j]) off++; });
+      return { avail: nP - off, off, d };
+    });
+    const minAvail = Math.min.apply(null, supply.map(s => s.avail));
+    const bar = (cw, hMax) => supply.map(s => ({
+      dd: s.d.dd, n: String(s.avail),
+      colS: `width:${cw}px;flex:none;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;height:${hMax + 16}px`,
+      barS: `width:${Math.max(6, cw - 10)}px;height:${Math.round(s.avail / nP * hMax)}px;background:${s.avail === minAvail ? 'var(--color-accent-800)' : s.d.he ? 'var(--color-accent-400)' : 'var(--color-accent-200)'}`,
+      nS: `${mono};font-size:10px;color:${dim(76)}`
+    }));
+
+    const skel = (cw, h) => R.AREAS.map(a => ({
+      id: a.id,
+      labS: `width:60px;flex:none;height:${h}px;display:flex;align-items:center;padding-left:8px;${mono};font-size:12px;color:var(--color-text);border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)}`,
+      cells: m.a2days.map(d => ({
+        s: `width:${cw}px;height:${h}px;flex:none;border-right:1px solid ${dim(6)};border-bottom:1px solid ${dim(6)};${d.he ? `background:${dim(6)};` : ''}`
+      }))
+    }));
+    const head = cw => m.a2days.map(d => ({
+      dd: d.dd, wd: d.wd,
+      s: `width:${cw}px;flex:none;padding:3px 0 4px;text-align:center;${d.he ? `background:${dim(7)};` : ''}`,
+      wdS: `display:block;font:600 10px/1 'Barlow Condensed',sans-serif;color:${dim(72)}`,
+      ddS: "display:block;font:600 11px/1.35 'Barlow Condensed',sans-serif"
+    }));
+
+    const prev = [
+      ['空缺格', '0 / 150'], ['額度使用', '51% · 190 / 372 點'],
+      ['假日班最多', '4 班 · R3 曾怡君'], ['狀態', '草稿 · 未發布']
+    ].map(p => ({ k: p[0], v: p[1] }));
+
+    return {
+      efTabAS: tabS('a'), efTabBS: tabS('b'), efTabCS: tabS('c'), efTabDS: tabS('d'),
+      efPickA: () => this.setEf('a'), efPickB: () => this.setEf('b'), efPickC: () => this.setEf('c'), efPickD: () => this.setEf('d'),
+      efMountA: ef === 'a', efMountB: ef === 'b', efMountC: ef === 'c', efMountD: ef === 'd',
+      efSupply: bar(28, 46), efSupplyWide: bar(52, 54),
+      // 4a 的柱狀落在 flex:1 欄內（約 499px），欄寬得由 flex 決定，不能給固定 px
+      efSupplyThin: supply.map(s => ({
+        dd: s.d.dd, n: String(s.avail),
+        colS: `flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;height:62px`,
+        barS: `width:100%;max-width:13px;height:${Math.round(s.avail / nP * 46)}px;background:${s.avail === minAvail ? 'var(--color-accent-800)' : s.d.he ? 'var(--color-accent-400)' : 'var(--color-accent-200)'}`,
+        nS: `${mono};font-size:10px;color:${dim(76)}`
+      })),
+      efSkelA: skel(39, 34), efSkelB: skel(52, 38),
+      efHeadA: head(39), efHeadB: head(52),
+      efPrev: prev,
+      efSupplyNote: `每日可用人數 ${minAvail}–${nP} 人（33 人扣掉當日已登記的不可排班日）· 谷底 ${minAvail} 人`
+    };
+  }
+
+  // V02 月份空狀態：GET /api/schedules/{ym} 回 404 時的三種處理（同一層 shell，上方 tab 切換）
+  esVals() {
+    const m = this.s01Model(), R = m.raw;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const es = (this.state && this.state.es) || 'a';
+    const tabS = v => `flex:none;padding:8px 15px;font:600 13px/1 'Barlow Condensed','Noto Sans TC',sans-serif;letter-spacing:.02em;cursor:pointer;user-select:none;border:1px solid ${es === v ? 'var(--color-accent)' : dim(16)};border-left-width:${v === 'a' ? '1px' : '0'};${es === v ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+
+    const seed = this.nbSeed(), who = {};
+    let regDays = 0;
+    Object.keys(seed).forEach(k => { who[k.slice(0, k.lastIndexOf('-'))] = 1; regDays++; });
+    const stS = st => `${mono};font-size:9px;padding:3px 6px;flex:none;${st === 'ok' ? `border:1px solid ${dim(18)};color:${dim(58)}` : 'background:var(--color-accent-200);color:var(--color-accent-900)'}`;
+    const esChecks = [
+      ['人員名冊', `${R.people.length} 人 · 10 身分 · 4 身分組`, 'ok', '就緒', 'SCREEN 06'],
+      ['不可排班日登記', `${Object.keys(who).length} / ${R.people.length} 人已登記 · 共 ${regDays} 天`, 'ok', '就緒', 'SCREEN 05'],
+      ['區域與點數規則', '5 區 · 平日 1 點 · 假日 2 點 · 額度上限待填', 'warn', '待補值', 'SCREEN 02'],
+      ['資格矩陣與約束', '10 × 3 矩陣 · 7 硬 ／ 7 軟（預設值）', 'ok', '就緒', 'SCREEN 03'],
+      ['上月結轉', '2026 / 08 仍是草稿，結轉偏移全部為 0', 'warn', '注意', 'SCREEN 01']
+    ].map(c => ({ k: c[0], v: c[1], st: c[3], to: c[4], stS: stS(c[2]) }));
+
+    const esPlans = [
+      ['變體 1', '額度公平優先', 'S1 × 1.5'],
+      ['變體 2', '權重均衡（預設）', '— '],
+      ['變體 3', '同區延續優先', 'S2 × 0.5']
+    ].map(p => ({ id: p[0], name: p[1], w: p[2] }));
+
+    const cw = 40;
+    const esHead = m.a2days.map(d => ({
+      dd: d.dd, wd: d.wd,
+      s: `width:${cw}px;flex:none;padding:3px 0 4px;text-align:center;${d.he ? `background:${dim(7)};` : ''}`,
+      wdS: `display:block;font:600 10px/1 'Barlow Condensed',sans-serif;color:${dim(72)}`,
+      ddS: "display:block;font:600 12px/1.35 'Barlow Condensed',sans-serif"
+    }));
+    const esRows = R.AREAS.map(a => ({
+      id: a.id,
+      labS: `width:60px;flex:none;height:34px;display:flex;align-items:center;padding-left:7px;${mono};font-size:12px;color:var(--color-text);border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)}`,
+      cells: m.a2days.map(d => ({
+        s: `width:${cw}px;height:34px;flex:none;border-right:1px solid ${dim(6)};border-bottom:1px solid ${dim(6)};${d.he ? `background:${dim(6)};` : ''}`
+      }))
+    }));
+
+    return {
+      esTabAS: tabS('a'), esTabBS: tabS('b'), esTabCS: tabS('c'),
+      esPickA: () => this.setEs('a'), esPickB: () => this.setEs('b'), esPickC: () => this.setEs('c'),
+      esMountA: es === 'a', esMountB: es === 'b', esMountC: es === 'c',
+      esChecks, esPlans, esHead, esRows,
+      esYm: `${(this.state && this.state.ym || { y: 2026, m: 9 }).y} 年 ${(this.state && this.state.ym || { y: 2026, m: 9 }).m} 月`
+    };
+  }
+
+  // 日 × 人右側側欄：摘要、接近額度上限、假日班數、空缺清單（月層級，隨年月重算）
+  dpSideVals() {
+    const m = this.s01Model(), R = m.raw;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const GT = [
+      { tint: 'color-mix(in srgb,var(--color-accent) 12%,transparent)', fg: 'var(--color-accent-800)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 30%,transparent)', fg: 'var(--color-accent-900)' },
+      { tint: 'var(--color-accent)', fg: 'var(--color-bg)' },
+      { tint: dim(12), fg: dim(70) }
+    ];
+    const nD = m.nD, cap = R.cap, people = R.people, days = m.a2days;
+    const vacOf = j => R.AREAS.filter(a => !R.assign[a.id + '-' + j]).map(a => a.id);
+    let vacTotal = 0;
+    for (let j = 0; j < nD; j++) vacTotal += vacOf(j).length;
+    const qp = people.filter(p => p.g !== 3);
+    const usedPts = qp.reduce((s, p) => s + p.pts, 0), capPts = qp.length * cap;
+
+    const v2Stats = [
+      ['空缺格', String(vacTotal), `${R.AREAS.length} 區 × ${nD} 日 ＝ ${R.AREAS.length * nD} 格`],
+      ['硬違規', m.a2alerts.length + ' 筆', '逐筆可跳到該格'],
+      ['額度使用', Math.round(usedPts / capPts * 100) + '%', `${usedPts} / ${capPts} 點 · G1–G3`]
+    ].map(s => ({ k: s[0], v: s[1], sub: s[2] }));
+
+    const rkS = p => `${mono};font-size:9px;padding:2px 4px;flex:none;width:36px;text-align:center;background:${GT[p.g].tint};color:${GT[p.g].fg}`;
+    const v2Near = qp.slice().sort((a, b) => (cap - a.pts) - (cap - b.pts) || a.idx - b.idx).slice(0, 8).map(p => {
+      const pct = Math.min(100, Math.round(p.pts / cap * 100));
+      return {
+        name: p.name, rank: p.rank, pts: `${p.pts}/${cap}`, rkS: rkS(p),
+        bar: `height:5px;width:${pct}%;background:${cap - p.pts <= 1 ? 'var(--color-accent-800)' : 'var(--color-accent)'}`,
+        ptsS: `${mono};font-size:9.5px;width:38px;text-align:right;flex:none;color:${cap - p.pts <= 1 ? 'var(--color-accent-800)' : dim(55)}`,
+        on: () => this.hl(p.name), off: () => this.hl(null)
+      };
+    });
+
+    const holMax = Math.max(1, Math.max.apply(null, people.map(p => p.hol)));
+    const v2Hol = people.slice().sort((a, b) => b.hol - a.hol || a.idx - b.idx).slice(0, 6).map(p => ({
+      name: p.name, rank: p.rank, hol: p.hol + ' 班', rkS: rkS(p),
+      bar: `height:5px;width:${Math.round(p.hol / holMax * 100)}%;background:var(--color-accent)`,
+      holS: `${mono};font-size:9.5px;width:38px;text-align:right;flex:none;color:${dim(55)}`,
+      on: () => this.hl(p.name), off: () => this.hl(null)
+    }));
+
+    const v2Vac = [];
+    for (let j = 0; j < nD; j++) vacOf(j).forEach(id => v2Vac.push({
+      t: `${id} ${R.MM}/${days[j].dd}`,
+      s: `${mono};font-size:10px;padding:3px 6px;border:1px solid var(--color-accent);color:var(--color-accent-900)`
+    }));
+    if (!v2Vac.length) v2Vac.push({
+      t: `本月 ${R.AREAS.length * nD} 格全數填補`,
+      s: `font:400 11px/1.4 'Noto Sans TC',sans-serif;padding:6px 8px;border:1px dashed ${dim(24)};color:${dim(52)}`
+    });
+
+    return { v2Stats, v2Near, v2Hol, v2Vac, vacTotalN: String(vacTotal) };
+  }
+
+
+  // SCREEN 02 區域／身分／點數規則、SCREEN 03 資格矩陣與約束（CONSTRAINT_DEFAULTS.md）
+  s23Vals() {
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const GT = [
+      { tint: 'color-mix(in srgb,var(--color-accent) 12%,transparent)', fg: 'var(--color-accent-800)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 30%,transparent)', fg: 'var(--color-accent-900)' },
+      { tint: 'var(--color-accent)', fg: 'var(--color-bg)' },
+      { tint: dim(10), fg: dim(65) }
+    ];
+    const badge = g => `${mono};font-size:10px;padding:3px 6px;display:inline-block;background:${GT[g].tint};color:${GT[g].fg}`;
+
+    const s2Areas = [
+      { code: 'WARD', name: '一般病房', areas: ['A', 'B', 'C'], note: '每日 3 人 · 每區 1 人', g: 0 },
+      { code: 'ICU', name: 'ICU', areas: ['ICU'], note: '每日 1 人', g: 1 },
+      { code: 'CHIEF', name: '總值', areas: ['總值'], note: '每日 1 人 · 僅 R4~R6 可值', g: 2 }
+    ].map(a => ({ code: a.code, name: a.name, areas: a.areas, note: a.note, badgeS: badge(a.g) }));
+
+    const RK = [
+      ['PGY1', 0], ['PGY2', 0], ['R1', 0], ['打工R', 0],
+      ['R2', 1], ['R3', 1],
+      ['R4', 2], ['R5', 2], ['R6', 2], ['NP', 3]
+    ];
+    const ableOf = g => g === 2 ? '一般病房 · ICU · 總值' : g === 1 ? '一般病房 · ICU' : '一般病房';
+    const s2Ranks = RK.map(r => {
+      const code = r[0], g = r[1], np = code === 'NP', r6 = code === 'R6';
+      return {
+        code, grp: 'G' + (g + 1), able: ableOf(g),
+        cap: np ? '不計' : '待填',
+        capS: `${mono};font-size:11px;padding:3px 7px;${np ? `border:1px solid ${dim(14)};color:${dim(55)}` : `background:${dim(7)};color:${dim(72)}`}`,
+        ptType: np ? '不計' : '待確認',
+        badgeS: badge(g),
+        ov: r6 ? '待填' : '',
+        ovWrapS: r6 ? 'display:flex;align-items:center;gap:6px' : 'display:none',
+        ovTagS: `${mono};font-size:9.5px;padding:2px 5px;background:var(--color-accent);color:var(--color-bg)`,
+        ovDashS: r6 ? 'display:none' : `color:${dim(30)}`
+      };
+    });
+
+    const fairRows = [['平日', '平日'], ['平日', '假日'], ['假日', '平日'], ['假日', '假日']];
+    const s2Fair = ['TYPE A', 'TYPE B'].map(label => ({
+      label, rows: fairRows.map(r => ({ d0: r[0], d1: r[1], v: '待填' }))
+    }));
+
+    const s3Types = [{ c: 'WARD', n: '一般病房 · 3 區' }, { c: 'ICU', n: 'ICU · 1 區' }, { c: 'CHIEF', n: '總值 · 1 區' }];
+    const cellS = ok => `flex:1;height:22px;display:flex;align-items:center;justify-content:center;${mono};font-size:11px;border:1px solid ${ok ? 'var(--color-accent)' : dim(12)};${ok ? 'background:var(--color-accent);color:var(--color-bg)' : `color:${dim(28)}`}`;
+    const s3Elig = RK.map(r => {
+      const g = r[1];
+      const ok = [true, g === 1 || g === 2, g === 2];
+      return {
+        code: r[0], badgeS: `${badge(g)};width:58px;flex:none;text-align:center`,
+        cells: ok.map(v => ({ t: v ? '✓' : '✗', s: cellS(v) }))
+      };
+    });
+
+    const primS = `${mono};font-size:9.5px;padding:2px 6px;flex:none;background:${dim(8)};color:${dim(66)}`;
+    const s3Hard = [
+      ['H1', '每日每區恰好 1 人', 'H1_AREA_COVERAGE', 'ExactCount', '全體', '—'],
+      ['H2', '身分資格', 'H2_ELIGIBILITY', 'Eligible', '全體', '—'],
+      ['H3', '額度點數上限', 'H3_QUOTA_CAP', 'Budget', 'NP 豁免 · quota_point', '—'],
+      ['H4', '值休休值', 'H4_MIN_GAP', 'MinGap', 'NP 豁免', 'days 3'],
+      ['H5', '不可排班日', 'H5_BLOCKED_DAY', 'Forbidden', '全體', '—'],
+      ['H6', 'NP 每月天數上限', 'H6_NP_MONTHLY_DAYS', 'Budget', 'NP · duty_day', 'cap 20'],
+      ['H7', 'NP 最多連六', 'H7_NP_MAX_CONSECUTIVE', 'MaxConsecutive', 'NP', 'days 6']
+    ].map(h => ({ id: h[0], name: h[1], code: h[2], prim: h[3], scope: h[4], params: h[5], primS }));
+
+    const dirTag = d => d
+      ? `${mono};font-size:9.5px;padding:2px 6px;flex:none;width:34px;text-align:center;${d === '優先' ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(18)};color:${dim(62)}`}`
+      : 'display:none';
+    const s3Soft = [
+      ['S1', '額度點數組內公平', 'S1_QUOTA_FAIRNESS', 'NP 豁免 · quota_point', '', '100'],
+      ['S2', '同區延續', 'S2_AREA_CONSISTENCY', 'NP 豁免', '', '40'],
+      ['S3', 'R2/R3 優先 ICU', 'S3_R2R3_PREFER_ICU', 'R2 R3 · ICU', '優先', '50'],
+      ['S4', 'R4~R6 優先總值', 'S4_R4R6_PREFER_CHIEF', 'R4 R5 R6 · 總值', '優先', '50'],
+      ['S5', 'NP 盡量不用', 'S5_NP_LAST_RESORT', 'NP', '避開', '60'],
+      ['S6', 'NP 避開假日', 'S6_NP_AVOID_HOLIDAY', 'NP · 日類 假日', '避開', '30'],
+      ['S7', '公平性點數組內公平', 'S7_FAIRNESS_POINT', 'NP 豁免 · fairness_point', '', '0']
+    ].map(s => ({ id: s[0], name: s[1], code: s[2], scope: s[3], dir: s[4], dirS: dirTag(s[4]), w: s[5] }));
+
+    const P = this.props || {};
+    return {
+      s2Areas, s2Ranks, s2Fair, s3Types, s3Elig, s3Hard, s3Soft,
+      qWd: String(P.pointWeekday ?? 1) + ' 點', qHo: String(P.pointHoliday ?? 2) + ' 點',
+      satBonus: '待填', satWindow: '待填'
+    };
+  }
+
+  // SCREEN 05 名冊：33 人、10 身分、4 身分組（CONTEXT.md）；資格由資格矩陣直接給定
+  nbRoster() {
+    if (this.__roster) return this.__roster;
+    const RK = [['PGY1', 0, 4], ['PGY2', 0, 3], ['R1', 0, 3], ['打工R', 0, 1],
+                ['R2', 1, 4], ['R3', 1, 3],
+                ['R4', 2, 5], ['R5', 2, 4], ['R6', 2, 4], ['NP', 3, 2]];
+    const SUR = '陳林黃張李王吳劉蔡楊許鄭謝洪郭曾邱廖賴徐周葉蘇莊呂江何蕭羅高潘簡方'.split('');
+    const GIV = ['彥廷','孟儒','宜靜','家豪','于萱','冠宇','品瑄','柏翰','思妤','宗翰','雅涵','允中','昱翔','詩涵','建宏','怡君','政霖','舒涵','秉澄','語彤','俊霖','念慈','子齊','若瑄','奕辰','嘉玲','世勳','佩璇','振宇','曉薇','孟軒','雨柔','宸睿'];
+    let i = 0; const people = [];
+    RK.forEach(r => {
+      for (let k = 0; k < r[2]; k++) {
+        people.push({
+          name: SUR[i] + GIV[i], emp: 'D' + String(1400 + i * 7), rank: r[0], g: r[1],
+          ward: true, icu: r[1] === 1 || r[1] === 2, chief: r[1] === 2
+        });
+        i++;
+      }
+    });
+    this.__roster = { people };
+    return this.__roster;
+  }
+
+  nbSeed() {
+    if (this.__nbSeed) return this.__nbSeed;
+    const people = this.nbRoster().people;
+    const rnd = s => Math.abs((Math.sin(s * 12.9898) * 43758.5453) % 1);
+    const reg = {};
+    people.forEach((p, i) => {
+      if (i % 9 === 5) return;
+      const target = i % 17 === 3 ? 17 : 2 + Math.floor(rnd(i + 1) * 11);
+      let put = 0, guard = 0;
+      while (put < target && guard < 300) {
+        const j = Math.floor(rnd((i + 1) * 31 + guard * 7) * 31);
+        guard++;
+        if (reg[p.name + '-' + j]) continue;
+        reg[p.name + '-' + j] = 1; put++;
+      }
+    });
+    people.filter(p => p.chief).slice(0, 11).forEach(p => { reg[p.name + '-12'] = 1; });
+    this.__nbSeed = reg;
+    return reg;
+  }
+
+  // SCREEN 05 不可排班日登記：GET · PUT · DELETE /api/blocked-days/{ym} ＋ /feasibility
+  nbVals() {
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const sel = (this.state && this.state.ym) || { y: 2026, m: 9 };
+    const ny = sel.m === 12 ? sel.y + 1 : sel.y, nm = sel.m === 12 ? 1 : sel.m + 1;
+    const NM = String(nm).padStart(2, '0');
+    const P = this.props || {};
+    const cap = Math.max(1, P.blockedCap ?? 16);
+    const cw = 23, ch = 21;
+    const nD = new Date(ny, nm, 0).getDate(), dow0 = new Date(ny, nm - 1, 1).getDay();
+    const wdn = ['日', '一', '二', '三', '四', '五', '六'];
+    const days = [];
+    for (let i = 0; i < nD; i++) {
+      const dw = (dow0 + i) % 7;
+      days.push({ dd: String(i + 1).padStart(2, '0'), wd: wdn[dw], he: dw === 0 || dw === 6 });
+    }
+    const people = this.nbRoster().people;
+    const reg = (this.state && this.state.reg) || this.nbSeed();
+    const brush = (this.state && this.state.brush) || 'on';
+    const brushS = b => `flex:none;padding:6px 12px;font:600 12px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;user-select:none;border:1px solid ${brush === b ? 'var(--color-accent)' : dim(16)};border-left-width:${b === 'on' ? '1px' : '0'};${brush === b ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+
+    const GT = [
+      { tint: 'color-mix(in srgb,var(--color-accent) 12%,transparent)', fg: 'var(--color-accent-800)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 30%,transparent)', fg: 'var(--color-accent-900)' },
+      { tint: 'var(--color-accent)', fg: 'var(--color-bg)' },
+      { tint: dim(10), fg: dim(65) }
+    ];
+    const GMETA = [
+      { label: '身分組 1', sub: 'PGY1 · PGY2 · R1 · 打工R', capNote: '可值：一般病房' },
+      { label: '身分組 2', sub: 'R2 · R3', capNote: '可值：一般病房 · ICU' },
+      { label: '身分組 3', sub: 'R4 · R5 · R6', capNote: '可值：一般病房 · ICU · 總值' },
+      { label: '身分組 4', sub: 'NP', capNote: '可值：一般病房 · 額度不計' }
+    ];
+
+    const count = {}, blocked = {};
+    for (let j = 0; j < nD; j++) blocked[j] = 0;
+    const allRows = people.map(p => {
+      let n = 0;
+      const cells = days.map((d, j) => {
+        const v = !!reg[p.name + '-' + j];
+        if (v) { n++; blocked[j]++; }
+        const base = `width:${cw}px;flex:none;height:${ch}px;display:flex;align-items:center;justify-content:center;cursor:pointer;${mono};font-size:9px;border-right:1px solid ${dim(7)};border-bottom:1px solid ${dim(7)};`;
+        const s = v
+          ? `${base}background:var(--color-accent);color:var(--color-bg)`
+          : `${base}${d.he ? `background:${dim(9)};` : ''}color:${dim(0)}`;
+        return { t: v ? '×' : '', s, on: () => this.paint(p.name, j) };
+      });
+      count[p.name] = n;
+      const over = n > cap;
+      return {
+        name: p.name, rank: p.rank, emp: p.emp, cells,
+        n: String(n), left: String(Math.max(0, cap - n)),
+        rkS: `${mono};font-size:9px;padding:2px 4px;flex:none;background:${GT[p.g].tint};color:${GT[p.g].fg}`,
+        nameS: 'font:500 11px/1 "Noto Sans TC",sans-serif;width:56px;flex:none',
+        empS: `font:600 8.5px/1 ui-monospace,Menlo,monospace;color:${dim(45)};width:38px;flex:none`,
+        nS: `width:34px;flex:none;height:${ch}px;display:flex;align-items:center;justify-content:center;${mono};font-size:9.5px;border-left:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)};${over ? 'background:var(--color-accent);color:var(--color-bg)' : `color:${dim(60)}`}`,
+        leftS: `width:34px;flex:none;height:${ch}px;display:flex;align-items:center;justify-content:center;${mono};font-size:9.5px;border-bottom:1px solid ${dim(7)};${over ? 'color:var(--color-accent);' : `color:${dim(45)};`}`
+      };
+    });
+    const nbGroups = GMETA.map((meta, gi) => ({
+      label: meta.label, sub: meta.sub, capNote: meta.capNote,
+      rows: people.map((p, i) => ({ g: p.g, r: allRows[i] })).filter(x => x.g === gi).map(x => x.r),
+      hdS: `display:flex;align-items:center;gap:8px;height:20px;padding-left:4px;margin-top:${gi ? '5px' : '0'};background:${dim(4)};border-bottom:1px solid ${dim(12)}`,
+      labS: `${mono};font-size:10px;letter-spacing:.1em;padding:2px 5px;background:${GT[gi].tint};color:${GT[gi].fg}`,
+      subS: `font:500 10.5px/1 "Noto Sans TC",sans-serif;color:${dim(60)}`,
+      capS: `font-size:10px;color:${dim(42)};margin-left:auto;padding-right:8px`
+    }));
+
+    const availOf = (j, fn) => people.filter(p => fn(p) && !reg[p.name + '-' + j]).length;
+    const per = days.map((d, j) => {
+      const c = availOf(j, p => p.chief), ic = availOf(j, p => p.icu), al = availOf(j, () => true);
+      const tag = c === 0 ? '總值無人可用' : c <= 2 ? '總值吃緊' : ic <= 2 ? '總值＋ICU 吃緊' : al <= 5 ? '全區吃緊' : '尚有餘裕';
+      const risk = c === 0 ? 3 : c <= 2 ? 2 : (ic <= 2 || al <= 5) ? 1 : 0;
+      return { j, d, c, ic, al, tag, risk };
+    });
+    const nbHead = days.map(d => ({
+      dd: d.dd, wd: d.wd,
+      s: `width:${cw}px;flex:none;padding:3px 0 4px;text-align:center;${d.he ? `background:${dim(7)};` : ''}border-bottom:1px solid ${dim(14)}`,
+      wdS: `display:block;font:600 8.5px/1 'Barlow Condensed',sans-serif;color:${dim(50)}`,
+      ddS: "display:block;font:600 11px/1.3 'Barlow Condensed',sans-serif"
+    }));
+    const nbFoot = per.map(x => ({
+      n: String(blocked[x.j]), chief: String(x.c),
+      s: `width:${cw}px;flex:none;height:19px;display:flex;align-items:center;justify-content:center;${mono};font-size:9.5px;border-right:1px solid ${dim(7)};border-top:1px solid ${dim(14)};${x.risk >= 2 ? 'background:var(--color-accent);color:var(--color-bg)' : ''}`,
+      cS: `width:${cw}px;flex:none;height:17px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;border-right:1px solid ${dim(7)};${x.risk >= 2 ? 'color:var(--color-accent-900);background:color-mix(in srgb,var(--color-accent) 16%,transparent)' : `color:${dim(48)}`}`
+    }));
+    const nbRisk = per.slice().sort((a, b) => (b.risk - a.risk) || (a.c - b.c) || (a.ic - b.ic)).slice(0, 3).map(x => ({
+      date: NM + '/' + x.d.dd, wd: '星期' + x.d.wd, tag: x.tag,
+      detail: `總值可用 ${x.c} / 13 人 · 總值＋ICU ${x.ic} / 20 人 · 全區 ${x.al} / 33 人（需 5 人）`,
+      s: `display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid ${x.risk >= 2 ? 'var(--color-accent)' : dim(12)};${x.risk >= 2 ? 'background:color-mix(in srgb,var(--color-accent) 8%,transparent);' : ''}`,
+      tagS: `${mono};margin-left:auto;font-size:10px;padding:2px 5px;${x.risk >= 2 ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`
+    }));
+
+    const supply = fn => people.filter(fn).reduce((s, p) => s + (nD - (count[p.name] || 0)), 0);
+    const LZ = [
+      { label: '總值', sub: 'R4~R6 · 13 人', d: nD * 1, s: supply(p => p.chief) },
+      { label: '總值 ＋ ICU', sub: 'R2 以上 · 20 人', d: nD * 2, s: supply(p => p.icu) },
+      { label: '全部 5 區', sub: '全員 33 人', d: nD * 5, s: supply(() => true) }
+    ];
+    const nbLayers = LZ.map(l => {
+      const r = l.s / l.d, tight = r < 1.6;
+      return {
+        label: l.label, sub: l.sub, ratio: r.toFixed(1) + '×',
+        note: `需求 ${l.d} 人日 · 可用供給 ${l.s} 人日`,
+        ratioS: `${mono};margin-left:auto;font-size:11.5px;color:${tight ? 'var(--color-accent-800)' : dim(55)}`,
+        barS: `height:6px;width:${Math.min(100, Math.round(l.d / l.s * 100))}%;background:${tight ? 'var(--color-accent)' : dim(38)}`
+      };
+    });
+    const lowSupply = supply(p => !p.icu), wardDemand = nD * 3, lowR = lowSupply / wardDemand;
+    const wardTight = lowR < 1.5;
+    const nbWardNote = wardTight
+      ? `一般病房 vs 低年級＋NP 剩餘供給 ${lowR.toFixed(1)}×：吃緊，資深會被拉進一般病房，S3「R2/R3 優先 ICU」會被犧牲`
+      : `一般病房 vs 低年級＋NP 剩餘供給 ${lowR.toFixed(1)}×：目前寬鬆，S3「R2/R3 優先 ICU」可望滿足`;
+
+    const over = people.filter(p => (count[p.name] || 0) > cap);
+    const none = people.filter(p => !(count[p.name] > 0));
+    const totalN = people.reduce((s, p) => s + (count[p.name] || 0), 0);
+    return {
+      nbGroups, nbHead, nbFoot, nbRisk, nbLayers, nbWardNote,
+      nbWardS: `margin-top:9px;padding:7px 8px;font-size:10.5px;line-height:1.5;border:1px solid ${wardTight ? 'var(--color-accent)' : dim(12)};${wardTight ? 'background:color-mix(in srgb,var(--color-accent) 8%,transparent);color:var(--color-accent-900);' : `color:${dim(58)};`}`,
+      nbTitle: `${ny} 年 ${nm} 月 · 不可排班日登記`,
+      nbBrushOn: brushS('on'), nbBrushClear: brushS('clear'),
+      onBrushOn: () => this.setBrush('on'), onBrushClear: () => this.setBrush('clear'),
+      nbCap: String(cap),
+      nbTotalN: String(totalN),
+      nbTotalNote: `${people.length} 人中 ${people.length - none.length} 人已登記 · 平均 ${(totalN / people.length).toFixed(1)} 天 · 上限 ${cap} 天`,
+      nbOverN: String(over.length),
+      nbOverList: over.length ? over.slice(0, 4).map(p => `${p.name} ${count[p.name]} 天`).join('、') + (over.length > 4 ? ' 等' : '') + '（登記時 PUT 回 409，須先清除）' : '無人超過上限',
+      nbNoneN: String(none.length),
+      nbNoneList: none.length ? none.slice(0, 6).map(p => p.name).join('、') + (none.length > 6 ? ' 等' : '') + '——無通知機制，求解前逐一確認' : '全員皆已登記',
+      nbOverS: `${mono};padding:3px 8px;margin-left:auto;${over.length ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`
+    };
+  }
+
+  // SCREEN 06 人員維護：GET /api/staff（33 人全帶）＋ PATCH/DELETE /api/staff/{id}
+  staffVals() {
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const GT = [
+      { tint: 'color-mix(in srgb,var(--color-accent) 12%,transparent)', fg: 'var(--color-accent-800)' },
+      { tint: 'color-mix(in srgb,var(--color-accent) 30%,transparent)', fg: 'var(--color-accent-900)' },
+      { tint: 'var(--color-accent)', fg: 'var(--color-bg)' },
+      { tint: dim(12), fg: dim(70) }
+    ];
+    const ableOf = g => g === 2 ? '一般病房 · ICU · 總值' : g === 1 ? '一般病房 · ICU' : '一般病房';
+    const people = this.nbRoster().people;
+    const m = this.s01Model();
+    const loadOf = {};
+    (m.boardCols || []).forEach(c => (c.rows || []).forEach(r => { loadOf[r.name] = r; }));
+    const sel = (this.state && this.state.staffSel != null) ? this.state.staffSel : 20;
+    const offIdx = { 6: 1, 27: 1 };   // 兩位停用中
+    const statusOf = i => offIdx[i] ? '停用' : '在職';
+    const staffRows = people.map((p, i) => {
+      const on = i === sel, st = statusOf(i);
+      return {
+        name: p.name, emp: p.emp, rank: p.rank, grp: 'G' + (p.g + 1), able: ableOf(p.g), st,
+        on: () => this.setStaff(i),
+        s: `display:flex;align-items:center;gap:10px;padding:6px 9px;cursor:pointer;border:1px solid ${on ? 'var(--color-accent)' : 'transparent'};border-bottom-color:${on ? 'var(--color-accent)' : dim(8)};${on ? 'background:color-mix(in srgb,var(--color-accent) 8%,transparent);' : ''}${st === '停用' ? 'opacity:.55;' : ''}`,
+        rkS: `${mono};font-size:9.5px;padding:3px 5px;flex:none;width:40px;text-align:center;background:${GT[p.g].tint};color:${GT[p.g].fg}`,
+        stS: `${mono};font-size:9.5px;padding:2px 6px;flex:none;margin-left:auto;${st === '在職' ? `border:1px solid ${dim(14)};color:${dim(55)}` : 'background:var(--color-accent-200);color:var(--color-accent-900)'}`
+      };
+    });
+    const p = people[sel] || {};
+    const st = statusOf(sel);
+    const load = loadOf[p.name];
+    const segS = on => `flex:1;text-align:center;padding:7px 0;font:600 12px/1 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;border:1px solid ${on ? 'var(--color-accent)' : dim(14)};${on ? 'background:var(--color-accent);color:var(--color-bg);' : ''}`;
+    const hasDuty = load && load.pts && !String(load.pts).startsWith('0');
+    return {
+      staffRows,
+      staffTotal: `共 ${people.length} 人 · 在職 ${people.length - 2} · 停用 2 · 無分頁`,
+      stName: p.name || '', stEmp: p.emp || '', stRank: p.rank || '',
+      stGrp: 'G' + ((p.g || 0) + 1),
+      stLoad: load ? `本月 ${load.pts}${load.left === '—' ? '' : ' · ' + load.left} · 假日 ${load.hol} 班` : '本月尚無值班',
+      stTitle: `${p.name || ''}　${p.emp || ''}`,
+      stOnDuty: segS(st === '在職'), stOff: segS(st === '停用'),
+      stAbleChips: ableOf(p.g || 0).split(' · ').map(c => ({
+        c, s: `${mono};font-size:11px;padding:5px 9px;border:1px solid var(--color-accent);color:var(--color-accent-800);background:color-mix(in srgb,var(--color-accent) 10%,transparent)`
+      })),
+      stStatusBtn: st === '在職' ? '停用此人員' : '恢復在職',
+      stHint: st === '在職' ? '停用後不再納入求解，歷史值班表保留。狀態變更即時生效，沒有生效日。' : '此人員目前不納入求解。',
+      stDelNote: hasDuty ? '已有值班紀錄，只能停用；DELETE 會回 409。' : '本月尚無值班紀錄，可硬刪（DELETE /api/staff/{id}）。',
+      stDelS: `font-size:10.5px;line-height:1.5;padding:6px 8px;border:1px solid ${hasDuty ? dim(12) : 'var(--color-accent)'};color:${hasDuty ? dim(55) : 'var(--color-accent-900)'}`
+    };
+  }
+
+  // SCREEN 04 三份變體：同一份輸入、不同權重乘數（ADR-0003），指標與熱圖就地算
+  s04Vals() {
+    const P = this.props || {};
+    const ym = (this.state && this.state.ym) || { y: 2026, m: 9 };
+    const key = `${P.pointWeekday || 1}|${P.pointHoliday || 2}|${P.quotaCap || 12}|${P.fairnessPointOn}|${ym.y}-${ym.m}`;
+    const G = globalThis;
+    if (!G.__s04 || G.__s04Key !== key) { G.__s04 = this.buildS04(ym); G.__s04Key = key; }
+    return G.__s04;
+  }
+
+  buildS04(ym) {
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const P = this.props || {};
+    const wD = Math.max(1, P.pointWeekday ?? 1), wH = Math.max(1, P.pointHoliday ?? 2);
+    const cap = Math.max(2, P.quotaCap ?? 12), fairOn = P.fairnessPointOn === true;
+    const restGap = 3, npDayCap = 20;
+    const nD = new Date(ym.y, ym.m, 0).getDate(), dow0 = new Date(ym.y, ym.m - 1, 1).getDay();
+    const he = j => { const dw = (dow0 + j) % 7; return dw === 0 || dw === 6; };
+    const roster = this.nbRoster().people;
+    const blocked = this.nbSeed();
+    const AREAS = [{ id: 'A', t: 'WARD' }, { id: 'B', t: 'WARD' }, { id: 'C', t: 'WARD' }, { id: 'ICU', t: 'ICU' }, { id: '總值', t: 'CHIEF' }];
+    const order = ['總值', 'ICU', 'A', 'B', 'C'].map(id => AREAS.find(a => a.id === id));
+    const elig = (p, t) => t === 'WARD' ? true : t === 'ICU' ? p.icu : p.chief;
+
+    const solve = (m1, m2) => {
+      const people = roster.map((p, i) => Object.assign({}, p, { idx: i, pts: 0, hol: 0, days: 0, last: -99, lastArea: null, byArea: {} }));
+      const assign = {};
+      for (let j = 0; j < nD; j++) {
+        const used = {}, w = he(j) ? wH : wD;
+        order.forEach(a => {
+          const cand = people.filter(p => {
+            if (!elig(p, a.t) || used[p.name] || blocked[p.name + '-' + j]) return false;
+            if (p.g === 3) return p.days < npDayCap;
+            return j - p.last >= restGap && p.pts + w <= cap;
+          });
+          let best = null, bestC = Infinity;
+          cand.forEach(p => {
+            let c = 0;
+            if (p.g === 3) c += 600;                                        // S5
+            if (a.t === 'ICU' && p.g !== 1) c += 500;                        // S3
+            if (a.t === 'WARD' && p.g === 2) c += 500;                       // S4：資深留給總值
+            if (p.g === 3 && he(j)) c += 300;                                // S6
+            c += (cap - p.pts) * -100 * m1;                                  // S1 剩餘額度
+            c += (p.lastArea === a.id ? 0 : 40) * m2;                        // S2 同區延續
+            c += p.idx * 0.01;
+            if (c < bestC) { bestC = c; best = p; }
+          });
+          if (best) {
+            used[best.name] = 1;
+            if (best.g !== 3) best.pts += w;
+            best.last = j; best.lastArea = a.id; best.days++;
+            if (he(j)) best.hol++;
+            best.byArea[a.id] = (best.byArea[a.id] || 0) + 1;
+          }
+          assign[a.id + '-' + j] = best ? best.name : null;
+        });
+      }
+      const byName = {};
+      people.forEach(p => byName[p.name] = p);
+      let vac = 0;
+      AREAS.forEach(a => { for (let j = 0; j < nD; j++) if (!assign[a.id + '-' + j]) vac++; });
+      let fairGap = 0;
+      [0, 1, 2].forEach(gi => {
+        const rem = people.filter(p => p.g === gi && p.days > 0).map(p => cap - p.pts);
+        if (rem.length) fairGap = Math.max(fairGap, Math.max.apply(null, rem) - Math.min.apply(null, rem));
+      });
+      const cross = people.reduce((s, p) => {
+        const mx = Object.keys(p.byArea).reduce((a, k) => Math.max(a, p.byArea[k]), 0);
+        return s + (p.days - mx);
+      }, 0);
+      let icuOk = 0, icuN = 0;
+      for (let j = 0; j < nD; j++) { const nm = assign['ICU-' + j]; if (nm) { icuN++; if (byName[nm].g === 1) icuOk++; } }
+      const prefPct = icuN ? Math.round(icuOk / icuN * 100) : 0;
+      const GC = ['color-mix(in srgb,var(--color-accent) 14%,transparent)', 'color-mix(in srgb,var(--color-accent) 34%,transparent)', 'var(--color-accent-700)', dim(16)];
+      const hm = [];
+      AREAS.forEach(a => {
+        for (let j = 0; j < nD; j++) {
+          const nm = assign[a.id + '-' + j];
+          hm.push(nm
+            ? `background:${GC[byName[nm].g]};border:.5px solid ${dim(6)}`
+            : `background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 2px,transparent 2px 4px);border:.5px solid var(--color-accent)`);
+        }
+      });
+      return { vac, fairGap, cross, prefPct, hm };
+    };
+
+    const defs = [
+      { name: '變體 A', id: 'v-a', stance: '重視公平', m1: 1.5, m2: 0.5, secs: '4.2s', mults: ['S1 ×1.5', 'S2 ×0.5'] },
+      { name: '變體 B', id: 'v-b', stance: '重視延續性', m1: 0.5, m2: 1.5, secs: '6.8s', mults: ['S1 ×0.5', 'S2 ×1.5'] },
+      { name: '變體 C', id: 'v-c', stance: '平衡', m1: 1, m2: 1, secs: '3.7s', mults: ['全部 ×1'] }
+    ];
+    const runs = defs.map(d => Object.assign({}, d, solve(d.m1, d.m2)));
+    const bestVac = Math.min.apply(null, runs.map(r => r.vac));
+    const variants = runs.map(r => {
+      const sel = r.id === 'v-c';
+      const metrics = [
+        { k: '空缺數', v: String(r.vac) + ' 格', p: Math.max(0, 100 - r.vac * 8), warn: r.vac > 0 },
+        { k: '額度點數公平', v: 'Δ ' + r.fairGap + ' 點', p: Math.max(0, 100 - r.fairGap * 12) },
+        { k: '同區延續', v: r.cross + ' 次跨區', p: Math.max(0, 100 - r.cross * 1.2) },
+        { k: '身分區域偏好', v: r.prefPct + '%', p: r.prefPct }
+      ];
+      if (fairOn) metrics.push({ k: '公平性點數', v: '待填', p: 0 });
+      return {
+        name: r.name, stance: r.stance, secs: r.secs, sel,
+        wrap: `flex:1;position:relative;padding:14px 15px;border:1px solid ${sel ? 'var(--color-accent)' : dim(16)};${sel ? 'background:color-mix(in srgb,var(--color-accent) 6%,transparent);' : ''}`,
+        tagS: `${mono};padding:3px 7px;${sel ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`,
+        mults: r.mults.map(t => ({ t, s: `${mono};font-size:9.5px;padding:2px 6px;background:${dim(7)};color:${dim(66)}` })),
+        hmWrap: `display:grid;grid-template-columns:repeat(${nD},1fr);gap:1px;height:56px`,
+        hm: r.hm,
+        metrics: metrics.map(mm => ({
+          k: mm.k, v: mm.v,
+          s: `height:4px;width:${Math.round(mm.p)}%;background:${mm.warn ? 'var(--color-accent-800)' : 'var(--color-accent)'}`,
+          vS: `font:600 12px 'Barlow Condensed',sans-serif;width:56px;text-align:right;color:${mm.warn ? 'var(--color-accent-800)' : 'inherit'}`
+        })),
+        vacNote: r.vac > 0
+          ? `空缺 ${r.vac} 格：登記過多時求解器回「空缺最少」的變體，不是整份失敗——空缺待人工指派。`
+          : '無空缺：5 區 × ' + nD + ' 日全數填補。',
+        vacNoteS: `font-size:10.5px;line-height:1.5;margin-top:9px;padding:6px 8px;border:1px solid ${r.vac > 0 ? 'var(--color-accent)' : dim(12)};color:${r.vac > 0 ? 'var(--color-accent-900)' : dim(55)};${r.vac > 0 ? 'background:color-mix(in srgb,var(--color-accent) 8%,transparent);' : ''}`,
+        btn: sel ? '✓ 已選定' : '選定此變體',
+        btnS: `flex:1;height:32px;font:600 13px 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;border:1px solid ${sel ? 'var(--color-accent)' : dim(16)};${sel ? 'background:var(--color-accent);color:var(--color-bg)' : 'background:transparent'}`
+      };
+    });
+    return {
+      variants,
+      jobId: '求解 #7K3', jobShort: '#7K3',
+      jobTime: `3 份變體 · 共 14.7s`,
+      warnings: [
+        { text: '上月仍是草稿，尚未發布', code: 'PREV_MONTH_DRAFT' },
+        { text: '上月尚未發布，月結轉為空——S1 的起始偏移全部為 0', code: 'CARRY_OVER_EMPTY' },
+        ...(bestVac > 0 ? [{ text: `所有變體都有空缺（最少 ${bestVac} 格）：不可排班日登記量偏高`, code: 'VACANCY_UNAVOIDABLE' }] : [])
+      ].map(w => Object.assign({}, w, {
+        badgeS: `${mono};font-size:9px;padding:2px 6px;flex:none;background:var(--color-accent-200);color:var(--color-accent-900)`
+      }))
+    };
+  }
+
+  setView(v) { this.setState({ view: v }); }
+  stepDay(n) { this.setState(s => ({ day: Math.max(0, Math.min(29, (s.day == null ? 12 : s.day) + n)) })); }
+
+  renderVals() {
+    const m = this.areaModel();
+    const view = (this.state && this.state.view) || 'mx';
+    const day = Math.max(0, Math.min(29, (this.state && this.state.day != null) ? this.state.day : 12));
+    const tab = v => `flex:none;padding:7px 13px;font:600 12.5px/1 'Barlow Condensed','Noto Sans TC',sans-serif;letter-spacing:.02em;cursor:pointer;user-select:none;border:1px solid ${view === v ? 'var(--color-accent)' : 'color-mix(in srgb,var(--color-text) 16%,transparent)'};border-left-width:${v === 'mx' ? '1px' : '0'};${view === v ? 'background:var(--color-accent);color:var(--color-bg);' : 'background:transparent;'}`;
+    const show = v => `display:${view === v ? 'block' : 'none'}`;
+    const out = Object.assign({}, m, this.ymVals(), this.annsFor(view), this.staffVals(), this.nbVals(), this.s23Vals(), this.s01Vals(), this.s04Vals(), this.dpSideVals(), this.denseVals(), {
+      tabMxS: tab('mx'), tabDpS: tab('dp'), tabDdS: tab('dd'),
+      onMx: () => this.setView('mx'), onDp: () => this.setView('dp'), onDd: () => this.setView('dd'),
+      showMx: show('mx'), showDp: show('dp'), showDd: show('dd'),
+      dayPrev: () => this.stepDay(-1), dayNext: () => this.stepDay(1)
+    });
+    // V01 卡片的三個檢視共存於 DOM：未選到的大矩陣不掛，畫布才跑得動
+    if (view !== 'dp') out.dpRows = [];
+    if (view !== 'mx') out.a2groups = [];
+    return out;
+  }
+
+  renderValsLegacy() {
+    const P = this.props || {};
+    const showV = P.showViolations !== false;
+    const nDays = Math.max(7, Math.min(28, P.gridDays || 14));
+    const cw = P.compact ? 24 : 29, ch = P.compact ? 22 : 26;
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const cell = (bg, fg, extra) => `display:flex;align-items:center;justify-content:center;position:relative;height:${ch}px;width:${cw}px;${mono};background:${bg};color:${fg};${extra || ''}`;
+    const K = {
+      D: { t: 'D', bg: 'var(--color-accent-100)', fg: 'var(--color-accent-800)' },
+      E: { t: 'E', bg: 'var(--color-accent-300)', fg: 'var(--color-accent-900)' },
+      N: { t: 'N', bg: 'var(--color-accent-700)', fg: 'var(--color-bg)' },
+      O: { t: '休', bg: 'transparent', fg: 'color-mix(in srgb,var(--color-text) 38%,transparent)' },
+      L: { t: '例', bg: 'var(--color-neutral-200)', fg: 'var(--color-neutral-700)' },
+      R: { t: '假', bg: 'repeating-linear-gradient(45deg,var(--color-neutral-300) 0 3px,transparent 3px 6px)', fg: 'var(--color-neutral-800)' }
+    };
+    const wd = ['日', '一', '二', '三', '四', '五', '六'];
+    const days = [], dow0 = 2;
+    for (let i = 0; i < nDays; i++) {
+      const dw = (dow0 + i) % 7, we = dw === 0 || dw === 6;
+      days.push({
+        dd: String(i + 1).padStart(2, '0'), wd: wd[dw], we,
+        th: `width:${cw}px;padding:2px 0 4px;text-align:center;${we ? 'background:color-mix(in srgb,var(--color-text) 6%,transparent);' : ''}`
+      });
+    }
+    const nurses = [
+      ['王淑芬', 'N4'], ['李佩君', 'N3'], ['陳雅婷', 'N3'], ['張家瑜', 'N2'], ['林怡君', 'N4'],
+      ['黃思涵', 'N2'], ['吳孟儒', 'N1'], ['蔡宜玲', 'N3'], ['鄭曉琪', 'N2'], ['劉巧薇', 'N1']
+    ];
+    const seq = ['D', 'D', 'D', 'O', 'E', 'E', 'E', 'O', 'N', 'N', 'N', 'O', 'L', 'D'];
+    const leaves = { '2-9': 1, '2-10': 1, '5-3': 1, '8-12': 1 };
+    const vio = { '4-6': '班距', '6-11': '連上 7', '9-2': '例假' };
+    const rows = nurses.map(([name, level], i) => {
+      let nc = 0, hrs = 0;
+      const cells = days.map((d, j) => {
+        let code = seq[(j + i * 3) % seq.length];
+        if (leaves[i + '-' + j]) code = 'R';
+        const k = K[code];
+        if (code === 'N') nc++;
+        if ('DEN'.includes(code)) hrs += 8;
+        const warn = showV && vio[i + '-' + j];
+        return {
+          t: k.t, m: warn ? '!' : '',
+          s: cell(k.bg, k.fg, warn ? 'outline:1.5px solid var(--color-text);outline-offset:-1.5px;' : ''),
+          ms: warn ? `position:absolute;top:0;right:1px;font:700 8px/1 Barlow,sans-serif;color:var(--color-text)` : 'display:none'
+        };
+      });
+      const over = hrs > 8 * Math.round(nDays * 0.72);
+      return { name, level, cells, n: nc, h: hrs, hs: over ? 'color:var(--color-accent);text-decoration:underline' : '' };
+    });
+    const cover = days.map((d, j) => {
+      const short = j === 6 || j === 11;
+      return {
+        t: short ? '9' : '10',
+        s: cell(short ? 'repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px)' : 'transparent',
+          short ? 'var(--color-accent-900)' : 'color-mix(in srgb,var(--color-text) 45%,transparent)',
+          'height:20px;border:1px solid var(--color-divider);')
+      };
+    });
+    const legend = [['D', '白班 08–16'], ['E', '小夜 16–24'], ['N', '大夜 00–08'], ['O', '休'], ['L', '例假'], ['R', '請假']]
+      .map(([c, label]) => ({ t: K[c].t, label, s: cell(K[c].bg, K[c].fg, 'height:17px;width:22px;font-size:10px;') }));
+    const bar = (pct, h, col) => `height:${h}px;width:${pct}%;background:${col || 'var(--color-accent)'}`;
+    const scoreBars = [
+      ['人力覆蓋', '100%', 100], ['偏好滿足', '82%', 82], ['公平性', '0.91', 91], ['連續性', '76%', 76]
+    ].map(([label, val, p]) => ({ label, val, s: bar(p, 3) }));
+    const issues = [
+      { kind: '軟', title: '週末班分配不均：黃思涵 4 / 吳孟儒 1', who: 'S3 週末公平 · 扣 6.0', act: '重排' },
+      { kind: '軟', title: '花花班：張家瑜 09/04 D → 09/05 N', who: 'S2 班別跳動 · 扣 3.5', act: '調整' },
+      { kind: '軟', title: '偏好未滿足：林怡君 申請避開大夜', who: 'S1 個人偏好 · 扣 2.0', act: '檢視' },
+      { kind: '註', title: '09/07、09/12 白班僅 9 人（下限 9）', who: '無違規，但無備援', act: '通知' }
+    ].map(v => ({ ...v, badge: `${mono};padding:3px 5px;border:1px solid var(--color-divider);color:var(--color-accent-800);background:var(--color-accent-100)` }));
+    const setNav = ['病房與班別', '人力下限', '硬約束', '軟約束權重', '假別與額度', '求解器', '通知'].map((t, i) => ({
+      t, s: `padding:7px 9px;font-size:12.5px;${i === 2 ? 'background:color-mix(in srgb,var(--color-accent) 13%,transparent);color:var(--color-accent-800);font-weight:500;border-left:2px solid var(--color-accent)' : 'border-left:2px solid transparent;color:color-mix(in srgb,var(--color-text) 70%,transparent)'}`
+    }));
+    const hard = [
+      ['H1', '每班最低人力', ['白 9', '小夜 6', '大夜 5'], '院內人力標準', '啟用'],
+      ['H2', '一人一日僅一班', ['—'], '勞基法', '鎖定'],
+      ['H3', '班間間隔', ['≥ 11 小時'], '勞基法 §34', '鎖定'],
+      ['H4', '連續上班天數', ['≤ 6 天'], '勞基法 §36', '鎖定'],
+      ['H5', '每 7 日至少 1 例假', ['1 / 7 天'], '勞基法 §36', '鎖定'],
+      ['H6', '已核准假別不得排班', ['所有假別'], '院內規則', '啟用'],
+      ['H7', '每班至少 1 位資深 (N3+)', ['N3 以上 ≥ 1'], '病房規則', '啟用']
+    ].map(([id, name, params, src, state]) => ({
+      id, name, params, src, state,
+      badge: `${mono};padding:3px 8px;${state === '鎖定' ? 'border:1px solid var(--color-divider);color:color-mix(in srgb,var(--color-text) 60%,transparent)' : 'background:var(--color-accent);color:var(--color-bg)'}`
+    }));
+    const soft = [
+      ['S1', '個人偏好班別', 80, '護理師登記的偏好／避開班別'],
+      ['S2', '避免花花班', 70, '同一人班別跳動的次數'],
+      ['S3', '週末班公平', 65, '以人為單位的週末班標準差'],
+      ['S4', '大夜次數平均', 60, '每月大夜數的最大－最小差'],
+      ['S5', '連假需求', 45, '休假日盡量相連（2 天以上）'],
+      ['S6', '搭配偏好', 30, '新人與 preceptor 同班'],
+      ['S7', '加班時數上限', 55, '超過 176h 開始扣分'],
+      ['S8', '固定班型申請', 40, '長期夜班 / 固定白班的申請']
+    ].map(([id, name, w, note]) => ({
+      id, name, w, note,
+      bar: `position:absolute;left:0;top:0;height:6px;width:${w}%;background:var(--color-accent)`,
+      knob: `position:absolute;top:-3px;left:calc(${w}% - 5px);width:10px;height:12px;background:var(--color-bg);border:1.5px solid var(--color-accent)`
+    }));
+    const hm = (seed, dark) => {
+      const out = [];
+      for (let i = 0; i < 96; i++) {
+        const v = (Math.sin(i * seed) * 10000) % 1;
+        const a = Math.abs(v);
+        const c = a > 0.72 ? 'var(--color-accent-700)' : a > 0.46 ? 'var(--color-accent-400)' : a > 0.22 ? 'var(--color-accent-200)' : 'transparent';
+        out.push(`background:${c};border:.5px solid color-mix(in srgb,var(--color-text) 7%,transparent)`);
+      }
+      return out;
+    };
+    const vDefs = [
+      ['變體 A', '人力優先', 86.2, '把人力備援拉滿：每班多 1 人備援，代價是加班時數集中在 4 位資深護理師。', false, [['硬違規', '0', 100], ['偏好滿足', '74%', 74], ['公平性', '0.83', 83], ['加班', '38h', 62], ['求解', '4.1s', 40]], 2.1],
+      ['變體 B', '推薦', 88.4, '整體最平衡：偏好滿足與公平性同時在前 20%，只有 3 個軟約束扣分。', true, [['硬違規', '0', 100], ['偏好滿足', '82%', 82], ['公平性', '0.91', 91], ['加班', '22h', 82], ['求解', '12.4s', 78]], 1.3],
+      ['變體 C', '公平優先', 84.7, '大夜與週末班攤到最平，但 6 人的偏好被犧牲，花花班變多。', false, [['硬違規', '0', 100], ['偏好滿足', '61%', 61], ['公平性', '0.96', 96], ['加班', '18h', 88], ['求解', '9.8s', 60]], 3.4]
+    ];
+    const variants = vDefs.map(([name, tag, score, desc, sel, ms, gap], i) => ({
+      name, tag, score, desc, sel,
+      wrap: `flex:1;position:relative;padding:14px 15px;border:1px solid ${sel ? 'var(--color-accent)' : 'var(--color-divider)'};${sel ? 'background:color-mix(in srgb,var(--color-accent) 6%,transparent);' : ''}`,
+      tagS: `${mono};padding:3px 7px;${sel ? 'background:var(--color-accent);color:var(--color-bg)' : 'border:1px solid var(--color-divider);color:color-mix(in srgb,var(--color-text) 60%,transparent)'}`,
+      hmWrap: 'display:grid;grid-template-columns:repeat(16,1fr);gap:1px;height:66px',
+      hm: hm(1.7 + i * 0.9),
+      metrics: ms.map(([k, v, p]) => ({ k, v, s: bar(p, 4) })),
+      btn: sel ? '✓ 已選定' : '選定此變體',
+      btnS: sel
+        ? "flex:1;height:32px;border:1px solid var(--color-accent);background:var(--color-accent);color:var(--color-bg);font:600 13px 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer"
+        : "flex:1;height:32px;border:1px solid var(--color-divider);background:transparent;font:600 13px 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer"
+    }));
+    const myWeek = [
+      ['09/07', '一', 'N', '00:00 – 08:00', ''], ['09/08', '二', 'O', '休', ''], ['09/09', '三', 'D', '08:00 – 16:00', ''],
+      ['09/10', '四', 'D', '08:00 – 16:00', '代 李佩君'], ['09/11', '五', 'E', '16:00 – 24:00', ''],
+      ['09/12', '六', 'L', '例假', ''], ['09/13', '日', 'E', '16:00 – 24:00', '加班 +2h']
+    ].map(([date, w, c, time, note]) => ({
+      date, wd: w, code: K[c].t, time, note,
+      chip: cell(K[c].bg, K[c].fg, 'height:19px;width:24px;font-size:10.5px;flex:none;')
+    }));
+    const precheck = [
+      ['✓', '09/18 白班仍符合人力下限（9 → 9），可核准'],
+      ['!', '09/19 為你的例假前一天，核准後需重排 1 人'],
+      ['✓', '年假餘額足夠：4.5 天 → 2.5 天']
+    ].map(([mark, text]) => ({
+      mark, text,
+      icon: `${mono};width:14px;height:14px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px;${mark === '✓' ? 'color:var(--color-bg);background:var(--color-accent)' : 'color:var(--color-text);border:1px solid var(--color-text)'}`
+    }));
+    const leaveLog = [
+      ['08/22', '事假', '林護理長', '已核准'], ['08/05', '年假', '林護理長', '已核准'], ['07/28', '年假', '—', '已駁回']
+    ].map(([date, type, by, state]) => ({
+      date, type, by, state,
+      badge: `${mono};margin-left:auto;padding:2px 7px;${state === '已核准' ? 'background:var(--color-accent-100);color:var(--color-accent-800)' : 'border:1px solid var(--color-divider);color:color-mix(in srgb,var(--color-text) 55%,transparent)'}`
+    }));
+    const pool = [
+      ['王淑芬', 'N4 · 本月 152h · 大夜 5', '最佳', 1], ['蔡宜玲', 'N3 · 本月 160h · 大夜 6', '可', 1],
+      ['吳孟儒', 'N1 · 本月 144h · 需帶班', '可', 1], ['張家瑜', 'N2 · 本月 168h · 大夜 7', '勉強', 0],
+      ['鄭曉琪', 'N2 · 09/08 已排小夜', '違規', -1], ['劉巧薇', 'N1 · 連續上班 6 天', '違規', -1]
+    ].map(([name, meta, fit, ok]) => ({
+      name, meta, fit,
+      mark: ok === 1 ? 'background:var(--color-accent)' : ok === 0 ? 'background:var(--color-accent-300)' : 'background:repeating-linear-gradient(45deg,var(--color-neutral-400) 0 2px,transparent 2px 4px)'
+    }));
+    const shiftRows = [['白班 D', '08–16'], ['小夜 E', '16–24'], ['大夜 N', '00–08']].map(([name, time]) => ({ name, time }));
+    const colDefs = [
+      ['09/07 一', false, [['9/9', 0, ['王淑芬', '李佩君', '＋7']], ['6/6', 0, ['林怡君', '黃思涵', '＋4']], ['5/5', 0, ['陳雅婷', '吳孟儒', '＋3']]]],
+      ['09/08 二', false, [['9/9', 0, ['蔡宜玲', '張家瑜', '＋7']], ['5/6', 1, ['鄭曉琪', '劉巧薇', '＋3']], ['5/5', 0, ['王淑芬', '林怡君', '＋3']]]],
+      ['09/09 三', false, [['8/9', 1, ['李佩君', '陳雅婷', '＋6']], ['6/6', 0, ['黃思涵', '蔡宜玲', '＋4']], ['5/5', 0, ['張家瑜', '吳孟儒', '＋3']]]],
+      ['09/10 四', false, [['9/9', 0, ['王淑芬', '鄭曉琪', '＋7']], ['6/6', 0, ['劉巧薇', '林怡君', '＋4']], ['4/5', 1, ['李佩君', '＋3']]]],
+      ['09/11 五', true, [['9/9', 0, ['陳雅婷', '黃思涵', '＋7']], ['6/6', 0, ['張家瑜', '蔡宜玲', '＋4']], ['5/5', 0, ['吳孟儒', '王淑芬', '＋3']]]]
+    ];
+    const cols = colDefs.map(([day, we, slots]) => ({
+      day,
+      head: `height:26px;display:flex;align-items:center;justify-content:center;font:600 12px 'Barlow Condensed','Noto Sans TC',sans-serif;border-bottom:1px solid var(--color-divider);${we ? 'background:color-mix(in srgb,var(--color-text) 6%,transparent);' : ''}`,
+      slots: slots.map(([count, short, people]) => ({
+        count, warn: short ? '缺 1' : '',
+        box: `height:112px;padding:6px 7px;border:1px solid ${short ? 'var(--color-accent)' : 'var(--color-divider)'};${short ? 'background:repeating-linear-gradient(45deg,color-mix(in srgb,var(--color-accent) 10%,transparent) 0 4px,transparent 4px 8px);' : ''}`,
+        gauge: `width:16px;height:4px;background:${short ? 'repeating-linear-gradient(90deg,var(--color-accent) 0 3px,transparent 3px 4px)' : 'var(--color-accent)'}`,
+        warnS: short ? `margin-left:auto;${mono};color:var(--color-accent-800);padding:1px 4px;background:var(--color-accent-200)` : 'display:none',
+        people: people.map(t => ({
+          t,
+          s: `font-size:10.5px;line-height:1.45;padding:2px 5px;margin-bottom:2px;border:1px solid ${t.startsWith('＋') ? 'transparent' : 'var(--color-divider)'};${t.startsWith('＋') ? 'color:color-mix(in srgb,var(--color-text) 50%,transparent);padding-left:0' : 'background:var(--color-bg)'}`
+        }))
+      }))
+    }));
+    const mWd = wd.slice(1).concat(wd[0]);
+    const mCells = [];
+    for (let i = 0; i < 35; i++) {
+      const dn = i;
+      const inM = dn >= 1 && dn <= 30;
+      const code = inM ? seq[(dn + 6) % seq.length] : null;
+      const k = code ? K[code] : null;
+      const today = dn === 7;
+      mCells.push({
+        d: inM ? dn : '', t: k ? k.t : '',
+        s: `height:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;${k ? `background:${k.bg};color:${k.fg};` : ''}border:1px solid ${today ? 'var(--color-text)' : 'color-mix(in srgb,var(--color-text) 8%,transparent)'};${inM ? '' : 'opacity:.25;'}`
+      });
+    }
+    const market = [
+      ['E', '09/15 小夜', '張家瑜 想換', '想換成白班 · 你當日休假', '接手'],
+      ['N', '09/21 大夜', '徵求代班', '護理長公告 · +2h 加班費', '應徵'],
+      ['D', '09/24 白班', '你的班', '已有 1 人想接手', '審視']
+    ].map(([c, date, who, note, act]) => ({
+      code: K[c].t, date, who, note, act,
+      chip: cell(K[c].bg, K[c].fg, 'height:22px;width:22px;flex:none;'),
+      btn: `${mono};padding:5px 8px;border:1px solid var(--color-accent);color:var(--color-accent)`
+    }));
+    const tabs = ['班表', '請假', '換班', '我'].map((t, i) => ({
+      t, s: `flex:1;text-align:center;padding:11px 0;font-size:11.5px;${i === 0 ? 'color:var(--color-accent);border-top:2px solid var(--color-accent);font-weight:500' : 'color:color-mix(in srgb,var(--color-text) 50%,transparent);border-top:2px solid transparent'}`
+    }));
+    const leaveKinds = [['年假', '餘 4.5d'], ['事假', '不計薪'], ['病假', '需證明'], ['補休', '餘 8h']].map(([t, bal], i) => ({
+      t, bal,
+      s: `padding:10px 11px;font:600 14px 'Barlow Condensed','Noto Sans TC',sans-serif;border:1px solid ${i === 0 ? 'var(--color-accent)' : 'var(--color-divider)'};${i === 0 ? 'background:color-mix(in srgb,var(--color-accent) 12%,transparent);' : ''}`
+    }));
+    const pickCells = [];
+    for (let i = 0; i < 21; i++) {
+      const d = 8 + i;
+      const sel = d === 18 || d === 19;
+      const sched = [8, 9, 12, 13, 15, 16, 20, 22, 23, 26].includes(d);
+      const full = d === 25;
+      pickCells.push({
+        d,
+        s: `height:30px;display:flex;align-items:center;justify-content:center;${mono};font-size:11px;border:1px solid ${sel ? 'var(--color-accent)' : 'color-mix(in srgb,var(--color-text) 10%,transparent)'};${sel ? 'background:var(--color-accent);color:var(--color-bg);' : sched ? 'background:repeating-linear-gradient(45deg,var(--color-neutral-300) 0 3px,transparent 3px 6px);' : full ? 'color:color-mix(in srgb,var(--color-text) 25%,transparent);' : ''}`
+      });
+    }
+    return Object.assign({ days, rows, cover, legend, scoreBars, issues, setNav, hard, soft, variants, myWeek, precheck, leaveLog, pool, shiftRows, cols, mWd, mCells, market, tabs, leaveKinds, pickCells }, this.areaModel());
+  }
+
+  // 整份班表只算一次，快取在 global 上；每次 render 都回傳同一份物件
+  areaModel() {
+    const P = this.props || {};
+    const ym = (this.state && this.state.ym) || { y: 2026, m: 9 };
+    const key = `${P.pointWeekday || 1}|${P.pointHoliday || 2}|${ym.y}-${ym.m}`;
+    const G = globalThis;
+    if (!G.__nspModel || G.__nspKey !== key) { G.__nspModel = this.buildModel(ym); G.__nspKey = key; }
+    return G.__nspModel;
+  }
+
+  buildModel(ym) {
+    const YM = ym || { y: 2026, m: 9 };
+    const MM = String(YM.m).padStart(2, '0');
+    const P = this.props || {};
+    const wD = Math.max(1, P.pointWeekday ?? 1), wH = Math.max(1, P.pointHoliday ?? 2);
+    const mono = "font:600 11px/1 'Barlow Condensed',sans-serif";
+    const dim = a => `color-mix(in srgb,var(--color-text) ${a}%,transparent)`;
+    const wdn = ['日', '一', '二', '三', '四', '五', '六'];
+    const nD = new Date(YM.y, YM.m, 0).getDate(), dow0 = new Date(YM.y, YM.m - 1, 1).getDay();
+    const cw = 26, chh = 24;
+    const a2days = [];
+    for (let i = 0; i < nD; i++) {
+      const dw = (dow0 + i) % 7, he = dw === 0 || dw === 6;
+      a2days.push({
+        dd: String(i + 1).padStart(2, '0'), wd: wdn[dw], he, p: he ? wH : wD,
+        th: `width:${cw}px;flex:none;padding:3px 0 4px;text-align:center;${he ? `background:${dim(7)};` : ''}`,
+        wdS: `display:block;font:600 9px/1 'Barlow Condensed',sans-serif;color:${dim(50)}`,
+        ddS: `display:block;font:600 11px/1.35 'Barlow Condensed',sans-serif`,
+        pS: `display:block;${mono};font-size:8px;color:${he ? 'var(--color-accent-700)' : dim(32)}`
+      });
+    }
+    const restGap = 3; // 值班後須間隔 2 天 → 同一人最快每 3 天一班（值休休）
+    const LV = {
+      N1: { tint: 'var(--color-neutral-200)', fg: 'var(--color-neutral-800)', cap: 14 },
+      N2: { tint: 'var(--color-accent-100)', fg: 'var(--color-accent-800)', cap: 14 },
+      N3: { tint: 'var(--color-accent-300)', fg: 'var(--color-accent-900)', cap: 14 },
+      N4: { tint: 'var(--color-accent-700)', fg: 'var(--color-bg)', cap: 15 }
+    };
+    const owner = { A: 'N2', B: 'N1', C: 'N3', D: 'N4', E: 'N4' };
+    const lvIdx = { N1: 1, N2: 2, N3: 3, N4: 4 };
+    const canWork = (lv, t) => { const o = lvIdx[owner[t]]; return o === lvIdx[lv] || o === lvIdx[lv] - 1; };
+    const names = {
+      N1: ['洪于婷', '簡佑軒', '高柏勳', '賴思妤', '邱柏睿', '周妍希', '何雨潔', '郭宥安', '童俊宏'],
+      N2: ['鄭曉琪', '許庭語', '曾柏翰', '林宜臻', '王詩涵', '李冠霖', '陳建宏', '張又瑄', '黃郁婷', '吳承翰', '劉家豪', '蔡侑霖', '楊子萱', '謝欣穎', '溫雅琪'],
+      N3: ['李佩君', '陳雅婷', '蔡宜玲', '賴宥辰', '邱怡安', '郭品妤', '周昱安', '何冠廷', '劉巧薇', '吳孟儒', '張家瑜', '黃思涵'],
+      N4: ['王淑芬', '林怡君', '洪佩琪', '簡孟蓉', '高詩涵', '陳美玲', '李雅雯', '張惠婷', '黃秀珠', '吳佳蓉', '劉素貞', '蔡明珠', '鄭麗華', '許春美', '曾麗美']
+    };
+    const people = [], byName = {};
+    ['N1', 'N2', 'N3', 'N4'].forEach(lv => names[lv].forEach((n, i) => {
+      const p = { name: n, ab: n.slice(0, 2), lv, cap: LV[lv].cap, pts: 0, hol: 0, idx: i, days: [], last: -99 };
+      people.push(p); byName[n] = p;
+    }));
+    const types = [
+      { c: 'A', n: '病房照護區', m: 4 }, { c: 'B', n: '門診支援', m: 2 },
+      { c: 'C', n: '急診檢傷', m: 3 }, { c: 'D', n: '開刀房', m: 2 }, { c: 'E', n: '加護病房', m: 2 }
+    ];
+    const areas = [];
+    types.forEach(t => { for (let k = 1; k <= t.m; k++) areas.push({ id: t.c + k, type: t.c }); });
+    const forceVac = { 'A4-12': 1, 'C1-25': 1 };
+    const holCap = 8;
+    const poolSize = {};
+    types.forEach(t => poolSize[t.c] = people.filter(p => canWork(p.lv, t.c)).length);
+    // 最受限的區域先排：D/E 只有 N4 可值，若讓 C 先抽走 N4 就會產生空缺
+    const order = areas.map((a, i) => ({ a, i })).sort((x, y) => poolSize[x.a.type] - poolSize[y.a.type] || x.i - y.i).map(o => o.a);
+    const own = (p, t) => lvIdx[owner[t]] === lvIdx[p.lv] ? 0 : 1;
+    const assign = {};
+    for (let j = 0; j < nD; j++) {
+      const used = {}, he = a2days[j].he, w = he ? wH : wD;
+      order.forEach(a => {
+        const key = a.id + '-' + j;
+        if (forceVac[key]) { assign[key] = null; return; }
+        const cand = people.filter(p => canWork(p.lv, a.type) && !used[p.name] && p.pts + w <= p.cap && !(he && p.hol >= holCap) && j - p.last >= restGap);
+        let pick = null;
+        // 休息間隔剛好滿足時讓同一人回到同一區域（值休休循環），但每三個循環放開一次以輪替人力
+        const prev = assign[a.id + '-' + (j - restGap)];
+        if (prev && Math.floor(j / restGap) % 3 !== 0) pick = cand.find(p => p.name === prev) || null;
+        // 輪替循環：避免又抽到同一人，讓大家有機會跨區域（S7）
+        if (!pick) {
+          cand.sort((x, y) => own(x, a.type) - own(y, a.type) || (x.name === prev ? 1 : 0) - (y.name === prev ? 1 : 0) || (x.pts / x.cap) - (y.pts / y.cap) || x.idx - y.idx);
+          pick = cand[0] || null;
+        }
+        if (pick) { used[pick.name] = 1; pick.pts += w; pick.last = j; if (he) pick.hol++; pick.days.push({ j, area: a.id, he }); }
+        assign[key] = pick ? pick.name : null;
+      });
+    }
+    const cellS = (lv, he) => `width:${cw}px;height:${chh}px;flex:none;display:flex;align-items:center;justify-content:center;font:500 9.5px/1 "Noto Sans TC",sans-serif;background:${LV[lv].tint};color:${LV[lv].fg};border-right:1px solid ${he ? dim(20) : dim(7)};border-bottom:1px solid ${dim(7)};`;
+    const vacS = `width:${cw}px;height:${chh}px;flex:none;display:flex;align-items:center;justify-content:center;${mono};font-size:9.5px;color:var(--color-accent-900);background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);border:1.5px solid var(--color-accent);border-bottom-color:var(--color-accent)`;
+    const supOf = t => lvIdx[owner[t]] < 4 ? 'N' + (lvIdx[owner[t]] + 1) : null;
+    const a2groups = types.map(t => ({
+      code: t.c, name: t.n,
+      meta: `${t.m} 區 · 每區每日 1 人 · 主責 ${owner[t.c]}${supOf(t.c) ? `（含 ${supOf(t.c)} 支援）` : '（無上級可支援）'}`,
+      badge: `${mono};padding:2px 6px;background:${LV[owner[t.c]].tint};color:${LV[owner[t.c]].fg}`,
+      rows: areas.filter(a => a.type === t.c).map(a => {
+        let filled = 0;
+        const cells = a2days.map((d, j) => {
+          const nm = assign[a.id + '-' + j];
+          if (!nm) return { t: '缺', nm: '', s: vacS };
+          filled++;
+          return { t: byName[nm].ab, nm, s: cellS(byName[nm].lv, d.he) };
+        });
+        return { id: a.id, cells, stat: filled + '/' + nD, statS: `width:44px;flex:none;text-align:right;${mono};font-size:10px;color:${filled < nD ? 'var(--color-accent)' : dim(45)}` };
+      })
+    }));
+    const fill = a2days.map((d, j) => {
+      const miss = areas.filter(a => !assign[a.id + '-' + j]).length;
+      return {
+        t: miss ? String(areas.length - miss) : String(areas.length),
+        s: `width:${cw}px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;${miss ? 'background:var(--color-accent-200);color:var(--color-accent-900);' : `color:${dim(40)};`}border-right:1px solid ${dim(6)}`
+      };
+    });
+    const a2legend = ['N1', 'N2', 'N3', 'N4'].map(lv => ({
+      t: lv, label: `主責 ${types.filter(t => owner[t.c] === lv).map(t => t.c).join('/') || '—'}`,
+      s: `${mono};font-size:9px;padding:3px 6px;background:${LV[lv].tint};color:${LV[lv].fg}`
+    }));
+    const board = people.map(p => {
+      const pct = Math.min(100, Math.round(p.pts / p.cap * 100));
+      return {
+        name: p.name, lv: p.lv, pts: p.pts, cap: p.cap, hol: p.hol, pct: pct + '%',
+        on: () => this.hl(p.name), off: () => this.hl(null),
+        lvS: `${mono};font-size:9px;padding:2px 4px;flex:none;background:${LV[p.lv].tint};color:${LV[p.lv].fg}`,
+        bar: `height:5px;width:${pct}%;background:${pct >= 95 ? 'repeating-linear-gradient(45deg,var(--color-accent-800) 0 3px,var(--color-accent-400) 3px 6px)' : 'var(--color-accent)'}`
+      };
+    });
+    const util = ['N1', 'N2', 'N3', 'N4'].map(lv => {
+      const ps = people.filter(p => p.lv === lv);
+      const u = ps.reduce((s, p) => s + p.pts, 0), c = ps.reduce((s, p) => s + p.cap, 0);
+      const pct = Math.round(u / c * 100);
+      return { lv, txt: `${u} / ${c} 點`, pct: pct + '%', s: `height:4px;width:${pct}%;background:${pct >= 92 ? 'var(--color-accent-800)' : 'var(--color-accent)'}` };
+    });
+    const hot = people.slice().sort((a, b) => b.pts / b.cap - a.pts / a.cap)[0];
+    const holSort = people.slice().sort((a, b) => b.hol - a.hol);
+    const n4 = util[3];
+    const vacList = [];
+    areas.forEach(a => a2days.forEach((d, j) => { if (!assign[a.id + '-' + j]) vacList.push(`${a.id} ${MM}/${d.dd}`); }));
+    const a2alerts = [
+      ['硬', `${vacList.length} 個區域-日無合格人員可排：${vacList.slice(0, 3).join('、')}`, 'H1 不可空缺 · 需人工指派或臨時放寬資格', '處理'],
+      ['警', `N4 職級容量利用率 ${n4.pct}（${n4.txt}）`, `D/E 共 ${areas.filter(a => a.type === 'D' || a.type === 'E').length} 區需 4 人/日，${people.filter(p => p.lv === 'N4').length} 位 N4 在 H8 下每日僅約 ${Math.floor(people.filter(p => p.lv === 'N4').length / restGap)} 人可用 · 資格矩陣禁止 N3 支援，要放寬需增聘或改分類`, '建議'],
+      ['軟', `點數接近上限：${hot.name} ${hot.pts}/${hot.cap} 點`, 'S1 點數平均 · 下半月請優先排他人', '調整'],
+      ['警', `H8 休息間隔：每人每月最多值 ${Math.floor(nD / restGap)} 班`, `${areas.length} 區 × ${nD} 日 = ${areas.length * nD} 班 → 至少需 ${Math.ceil(areas.length * nD / Math.floor(nD / restGap))} 人，目前 ${people.length} 人`, '檢視'],
+      ['軟', `假日班不均：${holSort[0].name} ${holSort[0].hol} 班 / ${holSort[holSort.length - 1].name} ${holSort[holSort.length - 1].hol} 班`, 'S2 假日公平 · 扣 5.5', '重排']
+    ].map(([kind, title, who, act]) => ({
+      kind, title, who, act,
+      badge: `${mono};padding:3px 5px;flex:none;${kind === '硬' ? 'background:var(--color-accent);color:var(--color-bg)' : kind === '警' ? 'background:var(--color-accent-200);color:var(--color-accent-900)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`
+    }));
+    const areaSpec = types.map(t => ({
+      code: t.c, name: t.n, m: String(t.m),
+      list: areas.filter(a => a.type === t.c).map(a => a.id),
+      ownerLv: owner[t.c], support: supOf(t.c) || '無',
+      badge: `${mono};padding:2px 6px;background:${LV[owner[t.c]].tint};color:${LV[owner[t.c]].fg}`
+    }));
+    const ptRule = ['N1', 'N2', 'N3', 'N4'].map(lv => {
+      const own = types.filter(t => owner[t.c] === lv).map(t => t.c);
+      const able = types.filter(t => canWork(lv, t.c));
+      return {
+        lv, own: own.join(' / ') || '—',
+        able: able.map(t => t.c).join(' / '),
+        areaN: String(able.reduce((s, t) => s + t.m, 0)),
+        cap: String(LV[lv].cap),
+        lvS: `${mono};padding:2px 6px;background:${LV[lv].tint};color:${LV[lv].fg}`
+      };
+    });
+    const elig = ['N4', 'N3', 'N2', 'N1'].map(lv => ({
+      lv,
+      lvS: `${mono};padding:2px 6px;background:${LV[lv].tint};color:${LV[lv].fg}`,
+      cells: types.map(t => {
+        const own = owner[t.c] === lv, sup = !own && canWork(lv, t.c);
+        return {
+          t: own ? '主責' : sup ? '支援' : '—',
+          s: `flex:1;height:30px;display:flex;align-items:center;justify-content:center;font:600 11px 'Barlow Condensed','Noto Sans TC',sans-serif;border:1px solid ${own || sup ? 'var(--color-accent)' : dim(10)};${own ? 'background:var(--color-accent);color:var(--color-bg);' : sup ? 'background:color-mix(in srgb,var(--color-accent) 14%,transparent);color:var(--color-accent-900);' : `color:${dim(30)};`}`
+        };
+      })
+    }));
+    const hard2 = [
+      ['H1', '每個區域每日必須有 1 人', [`${areas.length} 區 × ${nD} 日`], '不可空缺'],
+      ['H2', '一人一日最多一個區域', ['—'], '不可重複'],
+      ['H3', '資格限制：本職級 a 與 a−1 的區域', ['自動由資格矩陣推導'], '鎖定'],
+      ['H4', '月點數不得超過職級上限', [`平日 ${wD} 點`, `假日 ${wH} 點`], '鎖定'],
+      ['H5', '已核准假別不排班', ['所有假別'], '啟用'],
+      ['H6', '每 7 日值班上限', [`≤ ${Math.floor(7 / restGap) + 1} 班 / 7 日`], '啟用'],
+      ['H7', '每人每月假日班上限', [`≤ ${holCap} 班`], '啟用'],
+      ['H8', '值班後須間隔 2 天（值休休）', [`同一人間隔 ≥ ${restGap} 天`], '鎖定']
+    ].map(([id, name, params, state]) => ({
+      id, name, params, state,
+      badge: `${mono};letter-spacing:.06em;width:52px;text-align:right;color:${state === '鎖定' ? dim(45) : 'var(--color-accent-700)'}`
+    }));
+    const soft2 = [
+      ['S1', '點數平均', 85, '同職級點數標準差最小'],
+      ['S2', '假日班公平', 75, '每人假日班數差距 ≤ 1'],
+      ['S3', '區域熟悉度', 60, '同一人盡量固定同一區域'],
+      ['S4', '避免連續兩個週末', 55, '同一人相鄰兩個週末都被排到會扣分'],
+      ['S5', '偏好區域', 50, '個人登記的偏好／避開區域'],
+      ['S6', '偏好日期', 45, '非正式請假的軟性避開'],
+      ['S7', '跨區域輪替', 30, '培訓需求：每季至少 2 種區域'],
+      ['S8', '高職級保留備援', 40, 'N4 不排滿，留機動人力']
+    ].map(([id, name, w, note]) => ({
+      id, name, w, note,
+      bar: `position:absolute;left:0;top:0;height:6px;width:${w}%;background:var(--color-accent)`,
+      knob: `position:absolute;top:-3px;left:calc(${w}% - 5px);width:10px;height:12px;background:var(--color-bg);border:1.5px solid var(--color-accent)`
+    }));
+    const variants2 = [
+      ['變體 A', '零空缺優先', 84.1, '放寬 S3 區域熟悉度，把 3 個空缺補滿，代價是 6 人跨區域次數增加。', false, [['空缺', '0', 100], ['資格違規', '0', 100], ['點數公平', '0.86', 86], ['假日公平', '0.79', 79], ['熟悉度', '58%', 58]]],
+      ['變體 B', '推薦', 87.6, '留 1 個空缺待人工指派，其餘指標最平衡；N4 利用率降到 91%。', true, [['空缺', '1', 92], ['資格違規', '0', 100], ['點數公平', '0.93', 93], ['假日公平', '0.88', 88], ['熟悉度', '81%', 81]]],
+      ['變體 C', '點數最平均', 85.2, '點數幾乎完全打平，但假日班集中在 N1／N2，且 3 個空缺未解。', false, [['空缺', '3', 76], ['資格違規', '0', 100], ['點數公平', '0.98', 98], ['假日公平', '0.66', 66], ['熟悉度', '72%', 72]]]
+    ].map(([name, tag, score, desc, sel, ms], i) => ({
+      name, tag, score, desc, sel,
+      wrap: `flex:1;position:relative;padding:14px 15px;border:1px solid ${sel ? 'var(--color-accent)' : dim(16)};${sel ? 'background:color-mix(in srgb,var(--color-accent) 6%,transparent);' : ''}`,
+      tagS: `${mono};padding:3px 7px;${sel ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`,
+      metrics: ms.map(([k, v, p]) => ({ k, v, s: `height:4px;width:${p}%;background:var(--color-accent)` })),
+      btn: sel ? '✓ 已選定' : '選定此變體',
+      btnS: `flex:1;height:32px;font:600 13px 'Barlow Condensed','Noto Sans TC',sans-serif;cursor:pointer;border:1px solid ${sel ? 'var(--color-accent)' : dim(16)};${sel ? 'background:var(--color-accent);color:var(--color-bg)' : 'background:transparent'}`,
+      hmWrap: 'display:grid;grid-template-columns:repeat(15,1fr);gap:1px;height:52px',
+      hm: (() => {
+        const out = [];
+        for (let k = 0; k < 90; k++) {
+          const a = Math.abs((Math.sin(k * (1.4 + i * 0.7)) * 10000) % 1);
+          const c = a > 0.74 ? 'var(--color-accent-700)' : a > 0.48 ? 'var(--color-accent-300)' : a > 0.2 ? 'var(--color-accent-100)' : 'transparent';
+          out.push(`background:${c};border:.5px solid ${dim(6)}`);
+        }
+        return out;
+      })()
+    }));
+    const me = byName['陳雅婷'];
+    const meDays = {};
+    me.days.forEach(d => meDays[d.j] = d);
+    const mCells2 = [];
+    for (let i = 0; i < 35; i++) {
+      const dn = i, inM = dn >= 1 && dn <= nD;
+      const d = inM ? meDays[dn - 1] : null;
+      const today = dn === 8;
+      mCells2.push({
+        d: inM ? String(dn) : '', t: d ? d.area : inM ? '休' : '',
+        s: `height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;${d ? `background:${d.he ? 'var(--color-accent-300)' : 'var(--color-accent-100)'};color:var(--color-accent-900);` : ''}border:1px solid ${today ? 'var(--color-text)' : dim(8)};${inM ? '' : 'opacity:.2;'}`,
+        dS: `font-size:8.5px;opacity:.55`,
+        tS: `${mono};font-size:10px`
+      });
+    }
+    const meAreas = {};
+    me.days.forEach(d => { meAreas[d.area] = (meAreas[d.area] || 0) + 1; });
+    const meAreaList = Object.keys(meAreas).sort((a, b) => meAreas[b] - meAreas[a]).map(k => ({
+      id: k, n: meAreas[k] + ' 天',
+      s: `${mono};font-size:10px;padding:3px 7px;border:1px solid ${dim(16)}`
+    }));
+    const mePct = Math.round(me.pts / me.cap * 100);
+    const meStat = {
+      name: me.name, lv: me.lv, pts: me.pts, cap: me.cap, hol: me.hol, pct: mePct + '%',
+      bar: `height:8px;width:${mePct}%;background:var(--color-accent)`,
+      lvS: `${mono};padding:3px 7px;background:${LV[me.lv].tint};color:${LV[me.lv].fg}`,
+      left: String(me.cap - me.pts)
+    };
+    const meNext = me.days.slice(3, 9).map(d => ({
+      date: `${MM}/${String(d.j + 1).padStart(2, '0')}`,
+      wd: a2days[d.j].wd, area: d.area,
+      kind: d.he ? '假日' : '平日', pt: (d.he ? wH : wD) + ' 點',
+      chip: `${mono};font-size:10px;padding:4px 7px;flex:none;background:${d.he ? 'var(--color-accent-300)' : 'var(--color-accent-100)'};color:var(--color-accent-900)`
+    }));
+    const dLabel = j => MM + '/' + String(j + 1).padStart(2, '0');
+    const midIdx = Math.max(0, me.days.findIndex(d => d.j >= 14));
+    const selDuty = [me.days[midIdx], me.days[midIdx + 1] || me.days[midIdx]];
+    const selJ = selDuty.map(d => d.j);
+    const subFor = (j, area) => {
+      const t = area[0], he = a2days[j].he, w = he ? wH : wD, busy = {};
+      areas.forEach(a => { const n = assign[a.id + '-' + j]; if (n) busy[n] = 1; });
+      const c = people.filter(p => p.name !== me.name && canWork(p.lv, t) && !busy[p.name] && p.pts + w <= p.cap && !(he && p.hol >= holCap));
+      c.sort((x, y) => (x.pts / x.cap) - (y.pts / y.cap) || x.idx - y.idx);
+      return c[0] ? c[0].name : null;
+    };
+    const okIcon = ok => `${mono};width:14px;height:14px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px;${ok ? 'color:var(--color-bg);background:var(--color-accent)' : 'color:var(--color-text);border:1px solid var(--color-text)'}`;
+    const preLines = selDuty.map(d => {
+      const sub = subFor(d.j, d.area), pt = d.he ? wH : wD;
+      return {
+        mark: sub ? '✓' : '!', icon: okIcon(!!sub),
+        text: `${dLabel(d.j)}（${d.he ? '假日' : '平日'} ${pt} 點）你被排在 ${d.area}，${sub ? sub + ' 可接手' : '無其他合格人員可接手 · 將產生空缺'}`
+      };
+    });
+    const preDelta = selDuty.reduce((s, d) => s + (d.he ? wH : wD), 0);
+    const preHol = selDuty.filter(d => d.he).length;
+    preLines.push({
+      mark: '✓', icon: okIcon(true),
+      text: `本月點數 ${me.pts} → ${me.pts - preDelta} 點（上限 ${me.cap}）${preHol ? ` · 假日班 ${me.hol} → ${me.hol - preHol} 班` : ''}`
+    });
+    const pre = {
+      range: `${dLabel(selJ[0])} – ${dLabel(selJ[1])}`,
+      lines: preLines,
+      ok: preLines.every(l => l.mark === '✓'),
+      tag: preLines.some(l => l.mark === '!') ? '核准後會產生空缺' : '可核准',
+      tagS: `${mono};padding:3px 8px;margin-left:auto;${preLines.some(l => l.mark === '!') ? 'background:var(--color-accent-200);color:var(--color-accent-900)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`
+    };
+    const pickCells2 = [];
+    for (let i = 0; i < 21; i++) {
+      const d = 8 + i, j = d - 1, sel = selJ.indexOf(j) >= 0, duty = !!meDays[j];
+      pickCells2.push({
+        d: String(d), t: duty ? meDays[j].area : '',
+        s: `height:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;${mono};font-size:10.5px;border:1px solid ${sel ? 'var(--color-accent)' : dim(10)};${sel ? 'background:var(--color-accent);color:var(--color-bg);' : duty ? 'background:repeating-linear-gradient(45deg,var(--color-neutral-300) 0 3px,transparent 3px 6px);' : ''}`,
+        tS: `font-size:8px;letter-spacing:.04em;opacity:${sel ? '.8' : '.55'}`
+      });
+    }
+    const preSel = [16, 17, 26], preLimit = 5;
+    const preCells = [];
+    for (let i = 0; i < 35; i++) {
+      const dn = i, inM = dn >= 1 && dn <= nD;
+      const dw = inM ? (dow0 + dn - 1) % 7 : -1, he = dw === 0 || dw === 6;
+      const sel = inM && preSel.indexOf(dn) >= 0;
+      preCells.push({
+        d: inM ? String(dn) : '',
+        s: `height:34px;display:flex;align-items:center;justify-content:center;${mono};font-size:11px;border:1px solid ${sel ? 'var(--color-accent)' : dim(8)};${sel ? 'background:var(--color-accent);color:var(--color-bg);' : he ? `background:${dim(6)};` : ''}${inM ? '' : 'opacity:.2;'}`
+      });
+    }
+    const preHolN = preSel.filter(d => { const dw = (2 + d - 1) % 7; return dw === 0 || dw === 6; }).length;
+    const preSum = `已登記 ${preSel.length} 天（含假日 ${preHolN} 天）· 本月上限 ${preLimit} 天`;
+    const leaveKinds2 = ['年假', '事假', '病假', '其他'].map((t, i) => ({
+      t, s: `flex:1;text-align:center;padding:8px 0;font:600 13px 'Barlow Condensed','Noto Sans TC',sans-serif;border:1px solid ${i === 0 ? 'var(--color-accent)' : dim(16)};${i === 0 ? 'background:color-mix(in srgb,var(--color-accent) 12%,transparent);' : ''}`
+    }));
+    const roles = [
+      ['排班者', '護理長 / 副護理長', '設定約束、產生與比較變體、發布班表', true],
+      ['被排班者', '護理師（依職級 N1–N4）', '看班表、登記請假、申請換班', false]
+    ].map(([t, sub, desc, on]) => ({
+      t, sub, desc, on,
+      s: `padding:11px 12px;border:1px solid ${on ? 'var(--color-accent)' : dim(16)};${on ? 'background:color-mix(in srgb,var(--color-accent) 12%,transparent);' : ''}`
+    }));
+    // 日 × 人 檢視（案主指定格式）：列＝日期，欄＝人員，欄依職級分組
+    const lvOrder = ['N4', 'N3', 'N2', 'N1'];
+    const dpPeople = [];
+    lvOrder.forEach(lv => people.filter(p => p.lv === lv).forEach(p => dpPeople.push(p)));
+    const pMap = {};
+    people.forEach(p => { pMap[p.name] = {}; p.days.forEach(d => pMap[p.name][d.j] = d.area); });
+    const leaveMap = {};
+    dpPeople.forEach((p, i) => {
+      leaveMap[p.name] = {};
+      const st = (i * 5 + 3) % (nD - 4);
+      for (let k = 0; k < 3; k++) { const j = st + k; if (!pMap[p.name][j]) leaveMap[p.name][j] = 1; }
+    });
+    // 排班衝突：被排到自己登記的不值班日 → 格子上以警示底色標示（API 10 violations 的 cellKey）
+    const conflict = {};
+    [2, 9, 20, 33].forEach(i => { const p = dpPeople[i]; if (!p) return; const d = p.days[2] || p.days[0]; if (d) conflict[p.name + '-' + d.j] = 1; });
+    const dpw = 23, dph = 21;
+    const dpEmp = n => 'D' + n.charCodeAt(0).toString(36).slice(-2).toUpperCase() + (n.charCodeAt(1) % 90 + 10);
+    const dpGroups = lvOrder.map(lv => {
+      const n = people.filter(p => p.lv === lv).length;
+      return {
+        label: `${lv} · ${n} 人`,
+        s: `width:${n * dpw}px;flex:none;text-align:center;font:600 10px/1 'Barlow Condensed',sans-serif;letter-spacing:.1em;padding:5px 0;background:${LV[lv].tint};color:${LV[lv].fg};border-right:1px solid var(--color-bg)`
+      };
+    });
+    const dpHead = dpPeople.map(p => ({
+      name: p.name, emp: dpEmp(p.name),
+      on: () => this.hl(p.name), off: () => this.hl(null),
+      s: `width:${dpw}px;flex:none;height:86px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(8)};border-bottom:1px solid ${dim(8)}`,
+      nS: `writing-mode:vertical-rl;text-orientation:upright;font:500 11px/1 "Noto Sans TC",sans-serif;letter-spacing:.06em`,
+      eS: `width:${dpw}px;flex:none;height:46px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(8)};border-bottom:1px solid ${dim(14)};writing-mode:vertical-rl;font:600 9px/1 ui-monospace,Menlo,monospace;color:${dim(55)};letter-spacing:.04em`
+    }));
+    const dpRows = a2days.map((d, j) => {
+      const vac = areas.filter(a => !assign[a.id + '-' + j]).map(a => a.id);
+      return {
+      d: String(j + 1), wd: d.wd,
+      vac: vac.length ? vac.join('、') : '—',
+      vacS: `width:56px;flex:none;height:${dph}px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;border-left:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)};${vac.length ? 'background:repeating-linear-gradient(45deg,var(--color-accent-300) 0 3px,transparent 3px 6px);color:var(--color-accent-900)' : `color:${dim(32)}`}`,
+      labS: `width:44px;flex:none;height:${dph}px;display:flex;align-items:center;gap:4px;padding-left:5px;${mono};font-size:10px;border-right:1px solid ${dim(14)};border-bottom:1px solid ${dim(7)};${d.he ? `background:${dim(9)};` : ''}`,
+      wdS: `font-size:8.5px;color:${dim(48)}`,
+      cells: dpPeople.map(p => {
+        const a = pMap[p.name][j];
+        const base = `width:${dpw}px;flex:none;height:${dph}px;display:flex;align-items:center;justify-content:center;border-right:1px solid ${dim(7)};border-bottom:1px solid ${dim(7)};`;
+        if (a) {
+          if (conflict[p.name + '-' + j]) return { t: a, nm: p.name, s: `${base}${mono};font-size:9.5px;background:repeating-linear-gradient(45deg,var(--color-accent-800) 0 2px,var(--color-accent-400) 2px 5px);color:var(--color-bg);box-shadow:inset 0 0 0 1.5px var(--color-accent-900)` };
+          return { t: a, nm: p.name, s: `${base}${mono};font-size:9.5px;background:${d.he ? 'var(--color-accent-300)' : 'var(--color-accent-100)'};color:var(--color-accent-900)` };
+        }
+        if (leaveMap[p.name][j]) return { t: '', nm: p.name, s: `${base}background:repeating-linear-gradient(45deg,${dim(22)} 0 1px,transparent 1px 4px)` };
+        return { t: '', nm: p.name, s: `${base}${d.he ? `background:${dim(9)};` : ''}` };
+      })
+      };
+    });
+    const dpFoot = dpPeople.map(p => ({
+      n: String(p.days.length), pt: String(p.pts),
+      s: `width:${dpw}px;flex:none;height:19px;display:flex;align-items:center;justify-content:center;${mono};font-size:9.5px;border-right:1px solid ${dim(7)};border-top:1px solid ${dim(14)}`,
+      pS: `width:${dpw}px;flex:none;height:17px;display:flex;align-items:center;justify-content:center;${mono};font-size:9px;color:${dim(52)};border-right:1px solid ${dim(7)}`
+    }));
+    const tName = {}; types.forEach(t => tName[t.c] = t.n);
+    const ddAll = a2days.map((d, j) => {
+      const rows = areas.map(a => {
+        const nm = assign[a.id + '-' + j], p = nm ? byName[nm] : null;
+        return {
+          area: a.id, type: tName[a.type], name: nm || '未填補',
+          lv: p ? p.lv : '—', pt: p ? `${d.he ? wH : wD} 點` : '—',
+          load: p ? `${p.pts} / ${p.cap} 點 · 假日 ${p.hol} 班` : '無合格人員可排（H1）',
+          role: p ? (lvIdx[owner[a.type]] === lvIdx[p.lv] ? '主責' : '支援') : '空缺',
+          lvS: `${mono};font-size:9.5px;padding:3px 6px;flex:none;${p ? `background:${LV[p.lv].tint};color:${LV[p.lv].fg}` : 'background:var(--color-accent);color:var(--color-bg)'}`,
+          s: `display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${p ? dim(12) : 'var(--color-accent)'};${p ? '' : 'background:repeating-linear-gradient(45deg,var(--color-accent-100) 0 4px,transparent 4px 8px);'}`,
+          roleS: `${mono};font-size:9.5px;padding:2px 6px;flex:none;${p ? `border:1px solid ${dim(14)};color:${dim(58)}` : 'background:var(--color-accent-200);color:var(--color-accent-900)'}`
+        };
+      });
+      const vacN = rows.filter(r => r.name === '未填補').length;
+      return {
+        label: `${YM.y} / ${MM} / ${String(j + 1).padStart(2, '0')}`,
+        sub: `星期${d.wd}${d.he ? ' · 假日（1 班 ' + wH + ' 點）' : ' · 平日（1 班 ' + wD + ' 點）'}`,
+        stat: `已填補 ${areas.length - vacN} / ${areas.length} 區`,
+        statS: `${mono};padding:3px 8px;${vacN ? 'background:var(--color-accent);color:var(--color-bg)' : `border:1px solid ${dim(16)};color:${dim(60)}`}`,
+        rows
+      };
+    });
+    const nbPeople = dpPeople.map(p => ({ name: p.name, lv: p.lv, emp: dpEmp(p.name), tint: LV[p.lv].tint, fg: LV[p.lv].fg }));
+    const staffAll = dpPeople.map(p => ({
+      name: p.name, emp: dpEmp(p.name), lv: p.lv, cap: p.cap, pts: p.pts, hol: p.hol, days: p.days.length,
+      tint: LV[p.lv].tint, fg: LV[p.lv].fg,
+      able: types.filter(t => canWork(p.lv, t.c)).map(t => t.c).join(' / '),
+      own: types.filter(t => owner[t.c] === p.lv).map(t => t.c).join(' / ') || '—'
+    }));
+    const perCol = Math.ceil(board.length / 4);
+    const boardCols = [0, 1, 2, 3].map(i => board.slice(i * perCol, (i + 1) * perCol));
+    return { nDays: String(nD), assignN: String(areas.length * nD), staffAll, nbPeople, dpGroups, dpHead, dpRows, dpFoot, ddAll, mWd: ['一', '二', '三', '四', '五', '六', '日'], boardCols, restGap: String(restGap), maxShifts: String(Math.floor(nD / restGap)), preCells, preSum, leaveKinds2, preLimit: String(preLimit), pre, pickCells2, alertTag: `硬 ${vacList.length} · 軟 3`, holCap: String(holCap), a2days, a2groups, fill, a2legend, board, util, a2alerts, areaSpec, ptRule, elig, hard2, soft2, variants2, mCells2, meAreaList, meStat, meNext, roles, wD: String(wD), wH: String(wH), typeCount: String(types.length), areaCount: String(areas.length), peopleCount: String(people.length), a2types: types.map(t => ({ c: t.c, n: t.n })) };
+  }
+}
+
+</script>
+</body>
+</html>

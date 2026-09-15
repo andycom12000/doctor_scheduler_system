@@ -5,6 +5,11 @@
  *
  * 年月切換器只在路由有 `:ym` 時顯示在標題左側（issue #52）；`/settings/*`、`/staff`
  * 沒有 `:ym`，不顯示。全域導覽已移到 `App.vue` 的頂部橫列，這裡不重複。
+ *
+ * `fill`（issue #62）：SCREEN 01 V02 月份空狀態要求整頁不捲動，本體改成
+ * `overflow:hidden; display:flex`，讓子元素以 `flex:1; min-height:0` 撐滿。連 padding
+ * 也一併歸零——空狀態自己算 16px 留白（規格 §3 釘死的數字，跟這裡的 `--space-4` 對不上），
+ * 不疊兩層 padding。只有傳 `fill` 的頁面受影響，其餘頁面（`overflow:auto` + 原本 padding）不變。
  */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -13,6 +18,7 @@ import YearMonthSwitcher from '@/components/YearMonthSwitcher.vue'
 defineProps<{
   title: string
   subtitle?: string
+  fill?: boolean
 }>()
 
 const route = useRoute()
@@ -31,7 +37,7 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
         <slot name="actions" />
       </div>
     </header>
-    <div class="page-layout__body">
+    <div class="page-layout__body" :class="{ 'page-layout__body--fill': fill }">
       <slot />
     </div>
   </div>
@@ -86,5 +92,11 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
   min-height: 0;
   overflow: auto;
   padding: var(--space-4);
+}
+
+.page-layout__body--fill {
+  overflow: hidden;
+  display: flex;
+  padding: 0;
 }
 </style>
