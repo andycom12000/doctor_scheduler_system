@@ -6,8 +6,6 @@
  * 年月切換器只在路由有 `:ym` 時顯示在標題左側（issue #52）；`/settings/*`、`/staff`
  * 沒有 `:ym`，不顯示。全域導覽已移到 `App.vue` 的頂部橫列，這裡不重複。
  *
- * `title-extra` slot：標題右邊的小東西（例如排班主表的草稿／已發布 badge）。
- *
  * `fill`（issue #62）：SCREEN 01 V02 月份空狀態要求整頁不捲動，本體改成
  * `overflow:hidden; display:flex`，讓子元素以 `flex:1; min-height:0` 撐滿。連 padding
  * 也一併歸零——空狀態自己算 16px 留白（規格 §3 釘死的數字，跟這裡的 `--space-4` 對不上），
@@ -32,10 +30,7 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
     <header class="page-layout__header">
       <YearMonthSwitcher v-if="showYearMonth" class="page-layout__ym" />
       <div class="page-layout__heading">
-        <div class="page-layout__title-row">
-          <h1 class="page-layout__title">{{ title }}</h1>
-          <slot name="title-extra" />
-        </div>
+        <h1 class="page-layout__title">{{ title }}</h1>
         <p v-if="subtitle" class="page-layout__subtitle">{{ subtitle }}</p>
       </div>
       <div class="page-layout__actions">
@@ -72,12 +67,6 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
 .page-layout__heading {
   margin-right: auto;
   min-width: 0;
-}
-
-.page-layout__title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .page-layout__title {

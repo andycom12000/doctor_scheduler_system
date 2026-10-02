@@ -21,7 +21,6 @@ import { describeError } from '@/api/errors'
 import type { CellRef, Violation } from '@/api/types'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
-import ScheduleStatusBadge from '@/components/ScheduleStatusBadge.vue'
 import { rememberJobId } from '../variants/jobStorage'
 import { extractBusyJobId } from './lib/solverKickoff'
 import EmptyState from './EmptyState.vue'
@@ -126,7 +125,7 @@ const areaTypeNameByCode = computed(
   () => new Map((areaSettings.data.value?.areaTypes ?? []).map((t) => [t.code, t.name])),
 )
 
-// -- 標題列：副標「5 區 · N 人」，狀態（草稿／已發布 vN）是標題旁的 badge -----------------------------------------------
+// -- 標題列：副標「5 區 · N 人」，狀態（草稿／已發布 vN）由年月切換器的 badge 顯示 ----------------------------------
 // 空狀態不重複顯示年月——左邊的 YearMonthSwitcher 本身已經是「2026 年 11 月班表」大字，
 // PageLayout 副標再印一次「年月：2026-11」是純重複資訊（PR #63 審查回饋）。
 const subtitle = computed(() => {
@@ -420,13 +419,6 @@ const emptyStateLoading = computed(
 
 <template>
   <PageLayout title="排班主表" :subtitle="subtitle" :fill="isEmptyMonth">
-    <template #title-extra>
-      <ScheduleStatusBadge
-        v-if="!isEmptyMonth && schedule.data.value"
-        :status="schedule.data.value.status"
-        :published-version="schedule.data.value.publishedVersion"
-      />
-    </template>
     <template #actions>
       <nav
         v-if="!isEmptyMonth && !scheduleErrorMessage && schedule.data.value"

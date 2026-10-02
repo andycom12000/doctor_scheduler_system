@@ -6,7 +6,7 @@
  * 目前年月前後各 12 個月，加上所有有值班表的月份。
  *
  * 標籤格式（issue #62）：大字改成「{YYYY} 年 {M} 月班表」＋ 下拉箭頭，狀態不再塞進標籤
- * 字串，改用標籤右側的狀態 badge（草稿／已發布 vN 用 `ScheduleStatusBadge`，與排班主表標題列同一套顏色；
+ * 字串，改用標籤右側的狀態 badge（草稿／已發布 vN 用 `ScheduleStatusBadge`，全站唯一一顆狀態 badge；
  * 尚無班表仍是 `.tag.tag-outline`）。原生 `<select>` 關閉時一定會照原樣顯示「選到那個
  * option 的文字」，沒辦法讓觸發器文字跟下拉選單裡的文字不同——這裡疊一層：可見的大字標籤
  * 只是裝飾用 `<span>`（`pointer-events:none`），底下蓋一個文字透明、鋪滿同一個框的 `<select>`
