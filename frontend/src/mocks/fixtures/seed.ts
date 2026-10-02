@@ -65,6 +65,7 @@ export function buildSeedSchedules(store: MockStore): void {
   august.duties = augustDuties
   august.status = 'published'
   august.revision = 1
+  august.publishedVersion = 1
   august.publishedAt = '2026-08-31T10:00:00.000Z'
 
   store.carryOver.set(nextYearMonth(AUGUST), computeCarryOverEntries(store, AUGUST))

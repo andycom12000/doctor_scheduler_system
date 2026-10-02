@@ -68,6 +68,7 @@ function toScheduleResponse(schedule: ReturnType<typeof ensureSchedule>): Schedu
     yearMonth: schedule.yearMonth,
     status: schedule.status,
     revision: schedule.revision,
+    publishedVersion: schedule.publishedVersion,
     publishedAt: schedule.publishedAt,
     dayCount: datesOfYearMonth(schedule.yearMonth).length,
     staffCount: store.staff.filter((s) => s.status === 'active').length,
@@ -137,6 +138,7 @@ const scheduleHandlers = [
         yearMonth: schedule.yearMonth,
         status: schedule.status,
         revision: schedule.revision,
+        publishedVersion: schedule.publishedVersion,
         publishedAt: schedule.publishedAt,
         hardViolationCount: computeViolations(store, schedule.yearMonth).filter((v) => v.severity === 'hard').length,
       }))
@@ -230,6 +232,7 @@ const scheduleHandlers = [
 
     schedule.status = 'published'
     schedule.revision++
+    schedule.publishedVersion++
     schedule.publishedAt = new Date().toISOString()
     const carryOver = computeCarryOverEntries(store, ym)
     store.carryOver.set(nextYearMonth(ym), carryOver)
@@ -238,6 +241,7 @@ const scheduleHandlers = [
       status: schedule.status,
       publishedAt: schedule.publishedAt,
       revision: schedule.revision,
+      publishedVersion: schedule.publishedVersion,
       carryOver,
     })
   }),
