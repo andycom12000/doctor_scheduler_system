@@ -479,6 +479,29 @@ async function main() {
       const dutyAt = (s: { duties: Array<{ areaId: string; date: string; staffId: string }> }, areaId: string, date: string) =>
         s.duties.find((d) => d.areaId === areaId && d.date === date)?.staffId ?? null
 
+      type Cell = { areaId: string; date: string }
+      /** 某人 d1 在 X 區、d2 在 Y 區：a = (X, d1)、b = d2 的另一區（不是 Y）。優先挑 X === Y。 */
+      const findCrossDateConflict = (s: { duties: Array<{ areaId: string; date: string; staffId: string | null }> }) => {
+        const areas = [...new Set(s.duties.map((d) => d.areaId))]
+        const assigned = s.duties.filter((d) => d.staffId)
+        let fallback: { a: Cell; b: Cell; label: string } | null = null
+        for (const x of assigned) {
+          for (const y of assigned) {
+            if (y.staffId !== x.staffId || y.date === x.date) continue
+            const z = areas.find((id) => id !== y.areaId)
+            if (!z) continue
+            const pick = {
+              a: { areaId: x.areaId, date: x.date },
+              b: { areaId: z, date: y.date },
+              label: x.areaId === y.areaId ? '同區別天' : '別區別天',
+            }
+            if (x.areaId === y.areaId) return pick
+            fallback ??= pick
+          }
+        }
+        return fallback
+      }
+
       // setDuty 一格 → 清空：清空的格子要帶回 staffId: null
       const before = await scheduleBody()
       assert(before.status === 'draft', '2026-09 起始為 draft')
@@ -496,6 +519,36 @@ async function main() {
         clearedBody.violations.some((v: { code: string }) => v.code === 'H1_AREA_COVERAGE'),
         '清空後出現 H1 空缺違規（發布會因此被擋）',
       )
+
+      // swap 跨日衝突：某人 d1 在 X 區、d2 在 Y 區，把 (X, d1) 拖到 d2 的另一區 → 409。
+      // 同區別天（X === Y）是 mock 曾經漏擋的情境（只比區域就把它當成來源格），優先挑它。
+      const beforeConflict = await scheduleBody()
+      const conflict = findCrossDateConflict(beforeConflict)
+      assert(conflict !== null, '找得到跨日對調會撞到同人同日的格子')
+      if (conflict) {
+        const res = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
+          method: 'POST',
+          headers: json,
+          body: JSON.stringify({ a: conflict.a, b: conflict.b }),
+        })
+        assert(res.status === 409, `跨日對調撞同人同日 → 409（${conflict.label}）`)
+        const err = await res.json()
+        assert(err.error?.code === 'STAFF_ALREADY_ON_DUTY', '錯誤碼是 STAFF_ALREADY_ON_DUTY')
+        const unchanged = await scheduleBody()
+        assert(
+          unchanged.revision === beforeConflict.revision &&
+            dutyAt(unchanged, conflict.b.areaId, conflict.b.date) ===
+              dutyAt(beforeConflict, conflict.b.areaId, conflict.b.date),
+          '409 不留痕',
+        )
+      }
+
+      const sameCell = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ a: { areaId: 'area-a', date: '2026-09-04' }, b: { areaId: 'area-a', date: '2026-09-04' } }),
+      })
+      assert(sameCell.status === 422, '對調同一格 → 422')
 
       // swap：同一天兩區對調
       const staffA = dutyAt(before, 'area-a', '2026-09-04')

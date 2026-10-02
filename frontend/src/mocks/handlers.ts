@@ -191,15 +191,21 @@ const scheduleHandlers = [
     const staffA = schedule.duties.get(keyA)
     const staffB = schedule.duties.get(keyB)
 
+    if (body.a.areaId === body.b.areaId && body.a.date === body.b.date) {
+      return errorResponse(422, 'INVALID_REQUEST', '對調的兩格是同一格')
+    }
+
     // 對調後 A 的人落到 b 格、B 的人落到 a 格；日期不同時可能撞到同人同日另一區。
-    // 兩格互為對方的來源，檢查時把對方那格排除。
+    // 只有同一天時對方那格才會在同一天出現，而那時根本不檢查；日期不同時 b 日的任何
+    // 其他區都是衝突——不能只比區域就把「同區、別天」的格子當成來源格放行（後端 SwapAsync
+    // 是比區域＋日期，跟它對齊）。
     if (staffA && body.a.date !== body.b.date) {
       const other = otherAreaOnDate(schedule, staffA, body.b.date, body.b.areaId)
-      if (other && other !== body.a.areaId) return staffAlreadyOnDuty(staffA, body.b.date, other)
+      if (other) return staffAlreadyOnDuty(staffA, body.b.date, other)
     }
     if (staffB && body.a.date !== body.b.date) {
       const other = otherAreaOnDate(schedule, staffB, body.a.date, body.a.areaId)
-      if (other && other !== body.b.areaId) return staffAlreadyOnDuty(staffB, body.a.date, other)
+      if (other) return staffAlreadyOnDuty(staffB, body.a.date, other)
     }
 
     if (staffB) schedule.duties.set(keyA, staffB)
