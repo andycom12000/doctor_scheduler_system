@@ -9,6 +9,7 @@ public sealed record ScheduleSummary(
     YearMonth YearMonth,
     ScheduleStatus Status,
     int Revision,
+    int PublishedVersion,
     DateTimeOffset? PublishedAt,
     int HardViolationCount);
 
@@ -17,6 +18,7 @@ public sealed record ScheduleView(
     YearMonth YearMonth,
     ScheduleStatus Status,
     int Revision,
+    int PublishedVersion,
     DateTimeOffset? PublishedAt,
     int DayCount,
     int StaffCount,

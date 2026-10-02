@@ -15,12 +15,14 @@ public enum ScheduleStatus
 /// </summary>
 /// <param name="Revision">修改次數計數器，供 UI 顯示與快取失效，不是併發控制。</param>
 /// <param name="PublishedAt">最近一次發布的時間；草稿為 null。第一次發布後不會再變回 null。</param>
+/// <param name="PublishedVersion">定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。與 Revision 無關。</param>
 public sealed record ScheduleHeader(
     YearMonth YearMonth,
     ScheduleStatus Status,
     int Revision,
-    DateTimeOffset? PublishedAt)
+    DateTimeOffset? PublishedAt,
+    int PublishedVersion)
 {
     public static ScheduleHeader NewDraft(YearMonth yearMonth) =>
-        new(yearMonth, ScheduleStatus.Draft, Revision: 0, PublishedAt: null);
+        new(yearMonth, ScheduleStatus.Draft, Revision: 0, PublishedAt: null, PublishedVersion: 0);
 }

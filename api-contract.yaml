@@ -1226,17 +1226,24 @@ components:
 
     ScheduleSummary:
       type: object
-      required: [yearMonth, status, revision]
+      required: [yearMonth, status, revision, publishedVersion]
       properties:
         yearMonth: { type: string, examples: ['2026-09'] }
         status: { $ref: '#/components/schemas/ScheduleStatus' }
         revision: { type: integer }
+        publishedVersion:
+          type: integer
+          minimum: 0
+          description: |
+            定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。畫面標題列的
+            「已發布 v2」就是它。與 `revision` 不同：`revision` 是每次改格都會動的
+            修改次數計數器，`publishedVersion` 只在發布時動，改格、套用變體都不影響它。
         publishedAt: { type: [string, 'null'], format: date-time }
         hardViolationCount: { type: integer }
 
     Schedule:
       type: object
-      required: [yearMonth, status, revision, dayCount, areas, duties]
+      required: [yearMonth, status, revision, publishedVersion, dayCount, areas, duties]
       properties:
         yearMonth: { type: string, examples: ['2026-09'] }
         status: { $ref: '#/components/schemas/ScheduleStatus' }
@@ -1245,6 +1252,14 @@ components:
           description: |
             被改過幾次。供 UI 顯示（「草稿 v2」）與前端快取失效，
             **不是併發控制**——單一使用者、單一 process，不存在併發寫入。
+            **不是版本號**，給使用者看的版本是 `publishedVersion`。
+        publishedVersion:
+          type: integer
+          minimum: 0
+          description: |
+            定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。畫面標題列的
+            「已發布 v2」就是它。與 `revision` 不同：`revision` 是每次改格都會動的
+            修改次數計數器，`publishedVersion` 只在發布時動，改格、套用變體都不影響它。
         publishedAt: { type: [string, 'null'], format: date-time }
         dayCount: { type: integer }
         staffCount: { type: integer }
@@ -1339,11 +1354,15 @@ components:
 
     PublishResult:
       type: object
-      required: [status, publishedAt, revision]
+      required: [status, publishedAt, revision, publishedVersion]
       properties:
         status: { $ref: '#/components/schemas/ScheduleStatus' }
         publishedAt: { type: string, format: date-time }
         revision: { type: integer }
+        publishedVersion:
+          type: integer
+          minimum: 0
+          description: 發布後的定版版本號，每次發布（含重新發布）+1。語意見 `Schedule.publishedVersion`。
         carryOver:
           type: array
           description: 本次發布結算出的月結轉，供下個月的公平性目標當起始偏移。重複發布時覆寫

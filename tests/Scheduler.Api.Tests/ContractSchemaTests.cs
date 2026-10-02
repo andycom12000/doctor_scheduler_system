@@ -19,7 +19,7 @@ public sealed class ContractSchemaTests
     public void ref_到元件的巢狀結構有被驗到()
     {
         var body = JsonNode.Parse("""
-            {"yearMonth":"2026-09","status":"draft","revision":1,"dayCount":30,"areas":[{"id":"a"}],"duties":[]}
+            {"yearMonth":"2026-09","status":"draft","revision":1,"publishedVersion":0,"dayCount":30,"areas":[{"id":"a"}],"duties":[]}
             """);
         var errors = ContractSchema.Current.Validate("getSchedule", 200, body);
         Assert.Contains(errors, e => e.StartsWith("/areas/0"));

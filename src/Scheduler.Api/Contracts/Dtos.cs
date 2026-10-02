@@ -20,12 +20,13 @@ public sealed record ErrorBodyDto(
 
 public sealed record ScheduleListDto(IReadOnlyList<ScheduleSummaryDto> Months);
 
-public sealed record ScheduleSummaryDto(string YearMonth, string Status, int Revision, DateTimeOffset? PublishedAt, int HardViolationCount);
+public sealed record ScheduleSummaryDto(string YearMonth, string Status, int Revision, int PublishedVersion, DateTimeOffset? PublishedAt, int HardViolationCount);
 
 public sealed record ScheduleDto(
     string YearMonth,
     string Status,
     int Revision,
+    int PublishedVersion,
     DateTimeOffset? PublishedAt,
     int DayCount,
     int StaffCount,
@@ -207,7 +208,7 @@ public sealed record MutationResultDto(int Revision, IReadOnlyList<MutatedCellDt
 
 public sealed record MutatedCellDto(string AreaId, DateOnly Date, string? StaffId, string CellKey);
 
-public sealed record PublishResultDto(string Status, DateTimeOffset PublishedAt, int Revision, IReadOnlyList<CarryOverEntryDto> CarryOver);
+public sealed record PublishResultDto(string Status, DateTimeOffset PublishedAt, int Revision, int PublishedVersion, IReadOnlyList<CarryOverEntryDto> CarryOver);
 
 public sealed record CarryOverEntryDto(string StaffId, int Points);
 

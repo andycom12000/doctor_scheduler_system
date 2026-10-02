@@ -10,6 +10,7 @@ public sealed class ScheduleEntity
     public int Month { get; set; }
     public string Status { get; set; } = "";
     public int Revision { get; set; }
+    public int PublishedVersion { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
 }
 

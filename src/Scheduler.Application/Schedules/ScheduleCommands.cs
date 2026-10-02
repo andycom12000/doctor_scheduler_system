@@ -17,7 +17,7 @@ public sealed record MutatedCell(string AreaId, DateOnly Date, string? StaffId, 
 public sealed record MutationResult(int Revision, IReadOnlyList<MutatedCell> Cells, IReadOnlyList<Violation> Violations);
 
 /// <summary>契約 <c>PublishResult</c>。</summary>
-public sealed record PublishResult(ScheduleStatus Status, DateTimeOffset PublishedAt, int Revision, IReadOnlyList<CarryOverEntry> CarryOver);
+public sealed record PublishResult(ScheduleStatus Status, DateTimeOffset PublishedAt, int Revision, int PublishedVersion, IReadOnlyList<CarryOverEntry> CarryOver);
 
 /// <summary>
 /// 值班表的寫入路徑：指派／清空一格、對調兩格、發布。
@@ -149,7 +149,7 @@ public sealed class ScheduleCommands
         var header = loaded.Header!;
         var firstPublish = header.PublishedAt is null;
         var now = _clock.GetUtcNow();
-        var published = header with { Status = ScheduleStatus.Published, Revision = header.Revision + 1, PublishedAt = now };
+        var published = header with { Status = ScheduleStatus.Published, Revision = header.Revision + 1, PublishedAt = now, PublishedVersion = header.PublishedVersion + 1 };
         var carryOver = CarryOverSettlement.Settle(loaded.Context);
 
         await _schedules.UpsertAsync(published, cancellationToken);
@@ -160,7 +160,7 @@ public sealed class ScheduleCommands
         }
 
         await _unitOfWork.CommitAsync(cancellationToken);
-        return new PublishResult(published.Status, now, published.Revision, carryOver);
+        return new PublishResult(published.Status, now, published.Revision, published.PublishedVersion, carryOver);
     }
 
     /// <summary>
@@ -203,7 +203,7 @@ public sealed class ScheduleCommands
 
         var ctx = loaded.Context;
         return new ScheduleView(
-            month, header.Status, header.Revision, header.PublishedAt, month.DayCount,
+            month, header.Status, header.Revision, header.PublishedVersion, header.PublishedAt, month.DayCount,
             ctx.Staff.Count(s => s.Status == StaffStatus.Active),
             ctx.Areas,
             variant.Duties
