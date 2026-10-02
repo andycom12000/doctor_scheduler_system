@@ -191,15 +191,25 @@ const scheduleHandlers = [
     const staffA = schedule.duties.get(keyA)
     const staffB = schedule.duties.get(keyB)
 
-    // 對調後 A 的人落到 b 格、B 的人落到 a 格；日期不同時可能撞到同人同日另一區。
-    // 兩格互為對方的來源，檢查時把對方那格排除。
-    if (staffA && body.a.date !== body.b.date) {
-      const other = otherAreaOnDate(schedule, staffA, body.b.date, body.b.areaId)
-      if (other && other !== body.a.areaId) return staffAlreadyOnDuty(staffA, body.b.date, other)
+    if (body.a.areaId === body.b.areaId && body.a.date === body.b.date) {
+      return errorResponse(422, 'INVALID_REQUEST', '對調的兩格是同一格')
     }
-    if (staffB && body.a.date !== body.b.date) {
-      const other = otherAreaOnDate(schedule, staffB, body.a.date, body.a.areaId)
-      if (other && other !== body.b.areaId) return staffAlreadyOnDuty(staffB, body.a.date, other)
+
+    // 對調後 A 的人落到 b 格、B 的人落到 a 格，不能撞到同人同日另一區。照後端 SwapAsync：
+    // 先把 a、b 兩格（區域＋日期）一起排除，再找目標日的其他區，同日跨日都檢查。
+    // 不能只比區域——那會把「同區、別天」的格子當成來源格放行（案主驗收 #65 時踩到）。
+    const isSwapCell = (areaId: string, date: string) =>
+      (areaId === body.a.areaId && date === body.a.date) || (areaId === body.b.areaId && date === body.b.date)
+    const onDutyElsewhere = (staffId: string, date: string): string | null =>
+      store.areas.find((area) => !isSwapCell(area.id, date) && schedule.duties.get(dutyKey(area.id, date)) === staffId)
+        ?.id ?? null
+    if (staffA) {
+      const other = onDutyElsewhere(staffA, body.b.date)
+      if (other) return staffAlreadyOnDuty(staffA, body.b.date, other)
+    }
+    if (staffB) {
+      const other = onDutyElsewhere(staffB, body.a.date)
+      if (other) return staffAlreadyOnDuty(staffB, body.a.date, other)
     }
 
     if (staffB) schedule.duties.set(keyA, staffB)
