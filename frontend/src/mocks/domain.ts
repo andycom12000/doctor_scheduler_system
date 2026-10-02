@@ -89,13 +89,15 @@ export interface ScheduleState {
   yearMonth: string
   status: 'draft' | 'published'
   revision: number
+  /** 定版版本號：只有發布才 +1，0 = 從未發布。 */
+  publishedVersion: number
   publishedAt: string | null
   /** key: `${areaId}|${date}`。未指派的格子不出現在這裡。 */
   duties: Map<string, string>
 }
 
 export function newScheduleState(yearMonth: string): ScheduleState {
-  return { yearMonth, status: 'draft', revision: 0, publishedAt: null, duties: new Map() }
+  return { yearMonth, status: 'draft', revision: 0, publishedVersion: 0, publishedAt: null, duties: new Map() }
 }
 
 /** 該月尚無值班表時自動建立一份空草稿——`setDuty`／`swapDuties`／`applyVariant` 的入口語意。 */

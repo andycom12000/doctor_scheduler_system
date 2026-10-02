@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
-import type { StaffDirectoryEntry } from './scheduleGrid'
 import {
-  describeCarryOver,
   exportFileName,
   exportLayoutFor,
   isHardViolationsPresent,
   needsPublishedEditConfirm,
   parseSwapCellKey,
-  shiftedCarryOver,
   swapCellKey,
 } from './writeFlow'
 
@@ -64,33 +61,6 @@ describe('exportFileName', () => {
   })
 })
 
-describe('describeCarryOver', () => {
-  const directory = new Map<string, StaffDirectoryEntry>([
-    ['staff-001', { name: '王小明', groupIndex: 0 } as StaffDirectoryEntry],
-    ['staff-002', { name: '李小華', groupIndex: 0 } as StaffDirectoryEntry],
-  ])
-
-  it('補上姓名，偏移大的在前，同分依 staffId', () => {
-    const lines = describeCarryOver(
-      [
-        { staffId: 'staff-002', points: 0 },
-        { staffId: 'staff-001', points: 3 },
-        { staffId: 'staff-009', points: 3 },
-      ],
-      directory,
-    )
-    expect(lines.map((l) => [l.name, l.points])).toEqual([
-      ['王小明', 3],
-      ['009', 3],
-      ['李小華', 0],
-    ])
-  })
-
-  it('沒有 carryOver（可省略欄位）回空陣列', () => {
-    expect(describeCarryOver(undefined, directory)).toEqual([])
-  })
-})
-
 describe('swapCellKey', () => {
   it('組合與解析互為反函式', () => {
     expect(parseSwapCellKey(swapCellKey('area-a', '2026-09-05'))).toEqual({ areaId: 'area-a', date: '2026-09-05' })
@@ -100,17 +70,5 @@ describe('swapCellKey', () => {
     expect(parseSwapCellKey('nope')).toBeNull()
     expect(parseSwapCellKey('|2026-09-05')).toBeNull()
     expect(parseSwapCellKey('a|')).toBeNull()
-  })
-})
-
-describe('shiftedCarryOver', () => {
-  it('只留 points > 0 的人，順序不變', () => {
-    const lines = [
-      { staffId: 'a', name: 'A', points: 3 },
-      { staffId: 'b', name: 'B', points: 0 },
-      { staffId: 'c', name: 'C', points: 1 },
-    ]
-    expect(shiftedCarryOver(lines).map((l) => l.staffId)).toEqual(['a', 'c'])
-    expect(shiftedCarryOver([])).toEqual([])
   })
 })

@@ -111,6 +111,7 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
         var body = await PostAsync("/api/schedules/2027-05/publish", """{"acknowledgeViolations":true}""", "publishSchedule");
         Assert.Equal("published", body["status"]!.GetValue<string>());
         Assert.Equal(2, body["revision"]!.GetValue<int>());
+        Assert.Equal(1, body["publishedVersion"]!.GetValue<int>());
         var carryOver = body["carryOver"]!.AsArray();
         // 資深組：s-r4 上限 6 值了一個平日剩 5、s-r5 上限 5 沒值剩 5 → 平手都是 0
         // 中階組：s-r2 剩 8、s-r3 剩 7 → s-r3 差 1；低年級組：s-pgy1 剩 10、s-r1 剩 9 → s-r1 差 1
@@ -118,6 +119,7 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
         Assert.Equal(new Dictionary<string, int> { ["s-r4"] = 0, ["s-r5"] = 0, ["s-r2"] = 0, ["s-r3"] = 1, ["s-pgy1"] = 0, ["s-r1"] = 1 }, points);
 
         var schedule = await _api.GetAsync("/api/schedules/2027-05", "getSchedule");
+        Assert.Equal(1, schedule["publishedVersion"]!.GetValue<int>());
         Assert.Equal("published", schedule["status"]!.GetValue<string>());
         // 契約守法只開 format: date 的檢查，date-time 的形狀在這裡守：UTC、可解析
         var publishedAt = DateTimeOffset.Parse(schedule["publishedAt"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture);

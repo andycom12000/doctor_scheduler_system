@@ -22,13 +22,14 @@ internal static class ContractMapper
     // -- 值班表 -------------------------------------------------------------
 
     public static ScheduleListDto ToContract(this IReadOnlyList<ScheduleSummary> months) =>
-        new(months.Select(m => new ScheduleSummaryDto(m.YearMonth.ToString(), ContractNames.Of(m.Status), m.Revision, m.PublishedAt, m.HardViolationCount)).ToArray());
+        new(months.Select(m => new ScheduleSummaryDto(m.YearMonth.ToString(), ContractNames.Of(m.Status), m.Revision, m.PublishedVersion, m.PublishedAt, m.HardViolationCount)).ToArray());
 
     public static ScheduleDto ToContract(this ScheduleView s) =>
         new(
             s.YearMonth.ToString(),
             ContractNames.Of(s.Status),
             s.Revision,
+            s.PublishedVersion,
             s.PublishedAt,
             s.DayCount,
             s.StaffCount,
@@ -51,7 +52,7 @@ internal static class ContractMapper
             r.Violations.Select(ToContract).ToArray());
 
     public static PublishResultDto ToContract(this PublishResult r) =>
-        new(ContractNames.Of(r.Status), r.PublishedAt, r.Revision, r.CarryOver.Select(e => new CarryOverEntryDto(e.StaffId, e.Points)).ToArray());
+        new(ContractNames.Of(r.Status), r.PublishedAt, r.Revision, r.PublishedVersion, r.CarryOver.Select(e => new CarryOverEntryDto(e.StaffId, e.Points)).ToArray());
 
     // -- 檢視 ---------------------------------------------------------------
 

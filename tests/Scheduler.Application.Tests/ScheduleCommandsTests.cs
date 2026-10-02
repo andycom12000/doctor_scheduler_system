@@ -191,6 +191,7 @@ public class ScheduleCommandsTests
         Assert.Equal(ScheduleStatus.Published, result.Status);
         Assert.Equal(Now, result.PublishedAt);
         Assert.Equal(1, result.Revision);
+        Assert.Equal(1, result.PublishedVersion);
         Assert.Equal(1, result.CarryOver.Single(e => e.StaffId == "s-r4").Points);
         Assert.Equal(0, result.CarryOver.Single(e => e.StaffId == "s-r5").Points);
         Assert.Equal(result.CarryOver, store.CarryOver[Oct]);
@@ -217,8 +218,33 @@ public class ScheduleCommandsTests
 
         Assert.Equal(new[] { new CarryOverEntry("s-r4", 2) }, store.CarryOverApplied[Oct]);
         Assert.Equal(3, again.Revision);
+        Assert.Equal(2, again.PublishedVersion);
         // s-r4 剩 6−0−2=4，s-r5 剩 5−1=4 → 平手
         Assert.All(again.CarryOver, e => Assert.Equal(0, e.Points));
+    }
+
+    [Fact]
+    public async Task publishedVersion_只有發布才加一_改格與套用不動它_revision_照舊遞增()
+    {
+        var store = new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithDraft(Oct);
+        var commands = CommandsOf(store);
+        Assert.Equal(0, store.Headers[Oct].PublishedVersion);
+
+        var set1 = await commands.SetDutyAsync(Oct, new CellRef("area-icu", D(5)), "s1");
+        Assert.Equal(0, store.Headers[Oct].PublishedVersion);
+
+        var first = await commands.PublishAsync(Oct, acknowledgeViolations: true);
+        Assert.Equal(1, first.PublishedVersion);
+        Assert.Equal(set1.Revision + 1, first.Revision);
+
+        // 發布後改格：revision 遞增，定版版本號不變
+        var set2 = await commands.SetDutyAsync(Oct, new CellRef("area-icu", D(6)), "s1");
+        Assert.Equal(first.Revision + 1, set2.Revision);
+        Assert.Equal(1, store.Headers[Oct].PublishedVersion);
+
+        var second = await commands.PublishAsync(Oct, acknowledgeViolations: true);
+        Assert.Equal(2, second.PublishedVersion);
+        Assert.Equal(2, store.Headers[Oct].PublishedVersion);
     }
 
     [Fact]

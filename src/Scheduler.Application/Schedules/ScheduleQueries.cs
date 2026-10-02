@@ -32,7 +32,7 @@ public sealed class ScheduleQueries
         {
             var loaded = await _loader.LoadAsync(header.YearMonth, cancellationToken);
             var validation = new ViolationChecker(loaded.Context).Check(loaded.Constraints);
-            result.Add(new ScheduleSummary(header.YearMonth, header.Status, header.Revision, header.PublishedAt, validation.HardCount));
+            result.Add(new ScheduleSummary(header.YearMonth, header.Status, header.Revision, header.PublishedVersion, header.PublishedAt, validation.HardCount));
         }
 
         return result;
@@ -47,6 +47,7 @@ public sealed class ScheduleQueries
             month,
             header.Status,
             header.Revision,
+            header.PublishedVersion,
             header.PublishedAt,
             month.DayCount,
             ctx.Staff.Count(s => s.Status == StaffStatus.Active),

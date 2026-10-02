@@ -197,6 +197,7 @@ async function main() {
       assert(list.status === 200, 'GET /schedules → 200')
       const body = await list.json()
       assert(Array.isArray(body.months), 'months 是陣列')
+      assert(body.months.every((m: { publishedVersion: unknown }) => typeof m.publishedVersion === 'number'), '每個月份都帶 publishedVersion')
       if (isMock) {
         assert(body.months.some((m: { yearMonth: string }) => m.yearMonth === '2026-08'), '清單含 2026-08')
         assert(body.months.some((m: { yearMonth: string }) => m.yearMonth === '2026-09'), '清單含 2026-09')
@@ -212,6 +213,7 @@ async function main() {
       assert(res.status === 200, 'GET /schedules/2026-09 → 200')
       const body = await res.json()
       assert(body.status === 'draft', '2026-09 初始狀態為 draft')
+      assert(body.publishedVersion === 0, '草稿 publishedVersion = 0')
       assert(body.duties.length > 100, 'duties 數量合理（> 100）')
       revision = body.revision
     })
@@ -534,6 +536,24 @@ async function main() {
       assert(publishedBody.status === 'published', '發布後 status = published')
       assert(Array.isArray(publishedBody.carryOver) && publishedBody.carryOver.length > 0, '發布回月結轉清單')
       assert((await scheduleBody()).status === 'published', 'GET 值班表也是 published')
+
+      // publishedVersion：草稿是 0、發布 +1、發布後改格不動、重新發布再 +1（revision 另算）
+      assert(publishedBody.publishedVersion === 1, '第一次發布 publishedVersion = 1')
+      assert((await scheduleBody()).publishedVersion === 1, 'GET 值班表 publishedVersion = 1')
+      const reswap = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ a: { areaId: 'area-a', date: '2026-09-04' }, b: { areaId: 'area-b', date: '2026-09-04' } }),
+      })
+      assert(reswap.status === 200, '發布後 swap → 200')
+      assert((await scheduleBody()).publishedVersion === 1, '發布後改格 publishedVersion 不變')
+      const republished = await fetch(`${BASE}/schedules/2026-09/publish`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ acknowledgeViolations: true }),
+      })
+      assert(republished.status === 200, '重新發布 → 200')
+      assert((await republished.json()).publishedVersion === 2, '重新發布 publishedVersion = 2')
 
       // export：已發布也能匯出，位元組長度 > 0
       const exported = await fetch(`${BASE}/schedules/2026-09/export?layout=area-by-day`)

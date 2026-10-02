@@ -31,8 +31,8 @@ info:
     - 年月一律 `YYYY-MM` 字串（例：`2026-09`），日期一律 `YYYY-MM-DD`
     - 值班表的識別子就是年月，**沒有代理鍵**：`/api/schedules/2026-09`
     - 無認證、無角色、無 `If-Match`。單一使用者、單一 process，不存在併發寫入
-    - `revision` 是「這份值班表被改過幾次」的計數器，供 UI 顯示與前端快取失效，
-      **不是併發控制**
+    - `revision` 是「這份值班表被改過幾次」的計數器，供前端快取失效，
+      **不是併發控制、也不是版本號**；給使用者看的版本是 `publishedVersion`（只有發布才 +1）
     - 違規只帶 `code` 與 `severity`，**不帶渲染指示**；上色規則由前端擁有
     - 違規是**讀取時衍生**的，不儲存。`Violation.id` 為確定性雜湊，同一個違規每次讀都同 id
     - **跨月邊界**：值休休、NP 連續天數、連值週六三條規則都跨月。求解與驗證都以
@@ -1226,25 +1226,40 @@ components:
 
     ScheduleSummary:
       type: object
-      required: [yearMonth, status, revision]
+      required: [yearMonth, status, revision, publishedVersion]
       properties:
         yearMonth: { type: string, examples: ['2026-09'] }
         status: { $ref: '#/components/schemas/ScheduleStatus' }
         revision: { type: integer }
+        publishedVersion:
+          type: integer
+          minimum: 0
+          description: |
+            定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。畫面標題列的
+            「已發布 v2」就是它。與 `revision` 不同：`revision` 是每次改格都會動的
+            修改次數計數器，`publishedVersion` 只在發布時動，改格、套用變體都不影響它。
         publishedAt: { type: [string, 'null'], format: date-time }
         hardViolationCount: { type: integer }
 
     Schedule:
       type: object
-      required: [yearMonth, status, revision, dayCount, areas, duties]
+      required: [yearMonth, status, revision, publishedVersion, dayCount, areas, duties]
       properties:
         yearMonth: { type: string, examples: ['2026-09'] }
         status: { $ref: '#/components/schemas/ScheduleStatus' }
         revision:
           type: integer
           description: |
-            被改過幾次。供 UI 顯示（「草稿 v2」）與前端快取失效，
+            修改次數計數器，每次改格都會 +1。供前端快取失效用，
             **不是併發控制**——單一使用者、單一 process，不存在併發寫入。
+            **不是版本號**，給使用者看的版本是 `publishedVersion`。
+        publishedVersion:
+          type: integer
+          minimum: 0
+          description: |
+            定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。畫面標題列的
+            「已發布 v2」就是它。與 `revision` 不同：`revision` 是每次改格都會動的
+            修改次數計數器，`publishedVersion` 只在發布時動，改格、套用變體都不影響它。
         publishedAt: { type: [string, 'null'], format: date-time }
         dayCount: { type: integer }
         staffCount: { type: integer }
@@ -1339,11 +1354,15 @@ components:
 
     PublishResult:
       type: object
-      required: [status, publishedAt, revision]
+      required: [status, publishedAt, revision, publishedVersion]
       properties:
         status: { $ref: '#/components/schemas/ScheduleStatus' }
         publishedAt: { type: string, format: date-time }
         revision: { type: integer }
+        publishedVersion:
+          type: integer
+          minimum: 0
+          description: 發布後的定版版本號，每次發布（含重新發布）+1。語意見 `Schedule.publishedVersion`。
         carryOver:
           type: array
           description: 本次發布結算出的月結轉，供下個月的公平性目標當起始偏移。重複發布時覆寫

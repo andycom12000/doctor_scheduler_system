@@ -137,7 +137,8 @@ const wardSqueezeHint = computed(() => (feasibility.value ? evaluateWardSqueezeH
 // 狀態字樣（草稿／已發布／尚無班表）已經是 YearMonthSwitcher 的 `.tag.tag-outline`，
 // 這裡不重複印，改印登記筆數這種切換器不會顯示的資訊（PR #63 審查回饋）。
 const scheduleBadge = computed(() => {
-  if (schedule.value) return `已登記 ${totalCount.value} 筆 · v${schedule.value.revision}`
+  // 狀態與版本由 YearMonthSwitcher 的 ScheduleStatusBadge 顯示，這裡只印登記筆數。
+  if (schedule.value) return `已登記 ${totalCount.value} 筆`
   if (scheduleError.value instanceof ApiError && scheduleError.value.status === 404) return `已登記 ${totalCount.value} 筆`
   return undefined
 })
