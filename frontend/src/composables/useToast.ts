@@ -3,7 +3,7 @@
  * `useToast().show(...)` 都是同一組。
  *
  * 一般訊息（`info`）幾秒後自動消失；錯誤（`error`）不自動消失，要使用者自己關，
- * 避免一閃而過讀不到。兩者都可以手動關。
+ * 避免一閃而過讀不到。兩者都可以手動關。同時最多只留一則 error，新的取代舊的。
  */
 import { ref, type Ref } from 'vue'
 
@@ -34,7 +34,12 @@ export function dismissToast(id: number): void {
   toasts.value = toasts.value.filter((t) => t.id !== id)
 }
 
-/** 測試與換頁清場用：關掉全部。 */
+/** 關掉目前所有 error（動作開始前清掉上一次的錯誤）。 */
+export function clearErrorToasts(): void {
+  for (const t of toasts.value) if (t.kind === 'error') dismissToast(t.id)
+}
+
+/** 換月份、測試清場用：關掉全部。 */
 export function clearToasts(): void {
   for (const timer of timers.values()) clearTimeout(timer)
   timers.clear()
@@ -46,10 +51,15 @@ export interface UseToastResult {
   info: (text: string) => number
   /** 錯誤：不自動消失。 */
   error: (text: string) => number
+  /** 清掉目前的 error（info 不動）。 */
+  clearErrors: () => void
+  /** 清掉全部。 */
+  clear: () => void
   dismiss: (id: number) => void
 }
 
 function push(kind: ToastKind, text: string): number {
+  if (kind === 'error') clearErrorToasts()
   const id = nextId++
   toasts.value = [...toasts.value, { id, kind, text }]
   if (kind === 'info') timers.set(id, setTimeout(() => dismissToast(id), TOAST_AUTO_DISMISS_MS))
@@ -61,5 +71,7 @@ export function useToast(): UseToastResult {
     info: (text) => push('info', text),
     error: (text) => push('error', text),
     dismiss: dismissToast,
+    clearErrors: clearErrorToasts,
+    clear: clearToasts,
   }
 }

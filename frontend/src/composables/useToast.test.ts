@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TOAST_AUTO_DISMISS_MS, clearToasts, dismissToast, useToast, useToastList } from './useToast'
+import { TOAST_AUTO_DISMISS_MS, clearErrorToasts, clearToasts, dismissToast, useToast, useToastList } from './useToast'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -49,5 +49,28 @@ describe('useToast', () => {
 
     vi.advanceTimersByTime(TOAST_AUTO_DISMISS_MS - 1)
     expect(useToastList().value.map((t) => t.text)).toEqual(['第二則'])
+  })
+
+  it('同時最多一則 error，新的取代舊的；info 不受影響', () => {
+    const { info, error } = useToast()
+    info('甲')
+    error('錯誤一')
+    error('錯誤二')
+
+    expect(useToastList().value.map((t) => t.text)).toEqual(['甲', '錯誤二'])
+  })
+
+  it('clearErrors 只清 error；clear 全清', () => {
+    const { info, error, clearErrors, clear } = useToast()
+    info('甲')
+    error('乙')
+
+    clearErrors()
+    expect(useToastList().value.map((t) => t.text)).toEqual(['甲'])
+    error('丙')
+    clearErrorToasts()
+    expect(useToastList().value.map((t) => t.kind)).toEqual(['info'])
+    clear()
+    expect(useToastList().value).toHaveLength(0)
   })
 })

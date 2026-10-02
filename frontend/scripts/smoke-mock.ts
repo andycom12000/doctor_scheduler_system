@@ -552,6 +552,7 @@ async function main() {
         headers: json,
         body: JSON.stringify({ acknowledgeViolations: true }),
       })
+      assert(republished.status === 200, '重新發布 → 200')
       assert((await republished.json()).publishedVersion === 2, '重新發布 publishedVersion = 2')
 
       // export：已發布也能匯出，位元組長度 > 0

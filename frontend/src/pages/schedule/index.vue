@@ -175,6 +175,7 @@ const { confirm } = useConfirm()
 const publishedEditConfirmed = ref(false)
 watch(ym, () => {
   publishedEditConfirmed.value = false
+  toast.clear() // 換月份：上一個月的訊息不跟過來
 })
 
 async function confirmPublishedEdit(): Promise<boolean> {
@@ -246,6 +247,7 @@ const swapping = ref(false)
 
 async function onSwap(a: CellRef, b: CellRef): Promise<void> {
   if (swapping.value) return
+  toast.clearErrors()
   const month = ym.value
   swapping.value = true
   try {
@@ -265,6 +267,7 @@ const validating = ref(false)
 
 async function runValidate(): Promise<void> {
   if (validating.value) return
+  toast.clearErrors()
   const month = ym.value
   validating.value = true
   try {
@@ -287,6 +290,7 @@ const publishing = ref(false)
 /** 回傳是否發布成功（匯出「先發布再匯出」要接著用）。失敗與取消都是 false，訊息已經顯示。 */
 async function runPublish(month = ym.value): Promise<boolean> {
   if (publishing.value) return false
+  toast.clearErrors()
   publishing.value = true
   try {
     let result
@@ -324,6 +328,7 @@ async function downloadExport(month: string): Promise<void> {
 
 async function runExport(): Promise<void> {
   if (exporting.value) return
+  toast.clearErrors()
   const month = ym.value
   exporting.value = true
   try {
@@ -342,6 +347,7 @@ async function runExport(): Promise<void> {
 
 // -- 列印：只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
 async function runPrint(): Promise<void> {
+  toast.clearErrors()
   const month = ym.value
   if (!isPublished.value) {
     const decision = await promptDraftOutput('列印')
