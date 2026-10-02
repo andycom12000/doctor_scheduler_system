@@ -25,6 +25,10 @@ function onConfirm(): void {
   settlePendingConfirm(true)
 }
 
+function onAlternate(): void {
+  settlePendingConfirm('alternate')
+}
+
 function onCancel(): void {
   settlePendingConfirm(false)
 }
@@ -38,6 +42,9 @@ function onCancel(): void {
       <div class="confirm-dialog__actions">
         <button type="button" class="btn btn-secondary" @click="onCancel">
           {{ pending.cancelText ?? '取消' }}
+        </button>
+        <button v-if="pending.alternateText" type="button" class="btn btn-secondary" @click="onAlternate">
+          {{ pending.alternateText }}
         </button>
         <button type="button" class="btn btn-primary" @click="onConfirm">
           {{ pending.confirmText ?? '確認' }}

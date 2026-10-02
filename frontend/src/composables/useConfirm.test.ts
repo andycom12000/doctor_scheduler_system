@@ -46,3 +46,30 @@ describe('useConfirm', () => {
     expect(usePendingConfirm().value).toBeNull()
   })
 })
+
+describe('useConfirm().choose', () => {
+  it('三個出口各自 resolve 成對應的字串', async () => {
+    const { choose } = useConfirm()
+    const base = { title: '標題', message: '內容', alternateText: '直接匯出' }
+
+    const a = choose(base)
+    expect(usePendingConfirm().value?.alternateText).toBe('直接匯出')
+    settlePendingConfirm(true)
+    await expect(a).resolves.toBe('confirm')
+
+    const b = choose(base)
+    settlePendingConfirm('alternate')
+    await expect(b).resolves.toBe('alternate')
+
+    const c = choose(base)
+    settlePendingConfirm(false)
+    await expect(c).resolves.toBe('cancel')
+  })
+
+  it('confirm() 遇到 alternate 以外的出口行為不變：只有確認才是 true', async () => {
+    const { confirm } = useConfirm()
+    const result = confirm({ title: '標題', message: '內容' })
+    settlePendingConfirm('alternate')
+    await expect(result).resolves.toBe(false)
+  })
+})
