@@ -3,8 +3,7 @@
  * 流程本身（呼叫 API、跳確認）在 index.vue，這裡只放能脫離 DOM 與網路單獨測的判斷。
  */
 import { ApiError } from '@/api/client'
-import type { CarryOverEntry, ExportLayout, ScheduleStatus } from '@/api/types'
-import { shortStaffCode, type StaffDirectoryEntry } from './scheduleGrid'
+import type { ExportLayout, ScheduleStatus } from '@/api/types'
 
 /** `ApiError` 且本體是契約的 `ErrorResponse`、`error.code` 吻合時為 true。 */
 function hasErrorCode(err: unknown, status: number, code: string): boolean {
@@ -45,27 +44,6 @@ export function exportFileName(responseFilename: string | null, ym: string): str
   }
 }
 
-export interface CarryOverLine {
-  staffId: string
-  name: string
-  /** 額度點數的起始偏移（`CarryOverEntry.points` = 組內最大剩餘額度 − 本人剩餘額度），不是公平性點數。 */
-  points: number
-}
-
-/** 發布成功後的月結轉摘要：偏移大的在前（要被少排的人），查不到姓名退回 staffId 短碼。 */
-export function describeCarryOver(
-  entries: readonly CarryOverEntry[] | undefined,
-  directory: ReadonlyMap<string, StaffDirectoryEntry>,
-): CarryOverLine[] {
-  return (entries ?? [])
-    .map((entry) => ({
-      staffId: entry.staffId,
-      name: directory.get(entry.staffId)?.name ?? shortStaffCode(entry.staffId),
-      points: entry.points,
-    }))
-    .sort((a, b) => b.points - a.points || a.staffId.localeCompare(b.staffId))
-}
-
 /** 拖拉用的格子鍵：區域 × 日的一格就是 CellRef（areaId + date）。 */
 export function swapCellKey(areaId: string, date: string): string {
   return `${areaId}|${date}`
@@ -75,9 +53,4 @@ export function parseSwapCellKey(key: string): { areaId: string; date: string } 
   const separator = key.lastIndexOf('|')
   if (separator <= 0 || separator === key.length - 1) return null
   return { areaId: key.slice(0, separator), date: key.slice(separator + 1) }
-}
-
-/** 月結轉摘要只列真的有偏移的人（points > 0），其餘以人數帶過。 */
-export function shiftedCarryOver(lines: readonly CarryOverLine[]): CarryOverLine[] {
-  return lines.filter((line) => line.points > 0)
 }

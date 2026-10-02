@@ -7,6 +7,7 @@
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ToastHost from '@/components/ToastHost.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
 
 const route = useRoute()
@@ -56,6 +57,7 @@ const currentName = computed(() => route.name?.toString())
     </main>
 
     <ConfirmDialog />
+    <ToastHost />
   </div>
 </template>
 

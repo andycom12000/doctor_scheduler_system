@@ -6,13 +6,15 @@
  * 目前年月前後各 12 個月，加上所有有值班表的月份。
  *
  * 標籤格式（issue #62）：大字改成「{YYYY} 年 {M} 月班表」＋ 下拉箭頭，狀態不再塞進標籤
- * 字串，改用標籤右側的 `.tag.tag-outline`。原生 `<select>` 關閉時一定會照原樣顯示「選到那個
+ * 字串，改用標籤右側的狀態 badge（草稿／已發布 vN 用 `ScheduleStatusBadge`，與排班主表標題列同一套顏色；
+ * 尚無班表仍是 `.tag.tag-outline`）。原生 `<select>` 關閉時一定會照原樣顯示「選到那個
  * option 的文字」，沒辦法讓觸發器文字跟下拉選單裡的文字不同——這裡疊一層：可見的大字標籤
  * 只是裝飾用 `<span>`（`pointer-events:none`），底下蓋一個文字透明、鋪滿同一個框的 `<select>`
  * 接收點擊與鍵盤操作，選單裡的每個 `<option>` 仍是 `YYYY-MM · 狀態`（原生下拉清單是瀏覽器畫的
  * 獨立圖層，不受上層 `opacity:0` 影響）。
  */
 import { computed, ref } from 'vue'
+import ScheduleStatusBadge from '@/components/ScheduleStatusBadge.vue'
 import { listSchedules } from '@/api/schedules'
 import { shiftYearMonth, useYearMonth, yearMonthOptions } from '@/composables/useYearMonth'
 import { useResource } from '@/composables/useResource'
@@ -51,7 +53,8 @@ const bigLabel = computed(() => {
 // `GET /schedules` 清單載入失敗時 `data` 是 null，這時候不知道 `ym` 真正的狀態，
 // 「尚無班表」是 statusLabelOf 查不到資料時的預設值，不能拿它當「確定沒有班表」的結論
 // ——寧可不顯示這顆 tag，也不要顯示一個可能是錯的狀態。
-const currentStatusTag = computed(() => (error.value ? null : statusLabelOf(ym.value)))
+const currentStatus = computed(() => (error.value ? null : (monthStatus.value.get(ym.value) ?? 'none')))
+const currentVersion = computed(() => data.value?.months.find((m) => m.yearMonth === ym.value)?.publishedVersion)
 
 function shift(delta: number): void {
   setYearMonth(shiftYearMonth(ym.value, delta))
@@ -73,7 +76,13 @@ function onSelect(event: Event): void {
       </select>
     </div>
     <button type="button" class="ym-switcher__step" aria-label="下一個月" @click="shift(1)">›</button>
-    <span v-if="currentStatusTag" class="tag tag-outline ym-switcher__tag">{{ currentStatusTag }}</span>
+    <ScheduleStatusBadge
+      v-if="currentStatus === 'draft' || currentStatus === 'published'"
+      class="ym-switcher__tag"
+      :status="currentStatus"
+      :published-version="currentVersion"
+    />
+    <span v-else-if="currentStatus === 'none'" class="tag tag-outline ym-switcher__tag">尚無班表</span>
   </div>
 </template>
 
