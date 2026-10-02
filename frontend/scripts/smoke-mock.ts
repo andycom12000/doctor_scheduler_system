@@ -484,7 +484,7 @@ async function main() {
       const findCrossDateConflict = (s: { duties: Array<{ areaId: string; date: string; staffId: string | null }> }) => {
         const areas = [...new Set(s.duties.map((d) => d.areaId))]
         const assigned = s.duties.filter((d) => d.staffId)
-        let fallback: { a: Cell; b: Cell; label: string } | null = null
+        let fallback: { a: Cell; b: Cell; label: string; staffId: string; clashArea: string } | null = null
         for (const x of assigned) {
           for (const y of assigned) {
             if (y.staffId !== x.staffId || y.date === x.date) continue
@@ -494,6 +494,8 @@ async function main() {
               a: { areaId: x.areaId, date: x.date },
               b: { areaId: z, date: y.date },
               label: x.areaId === y.areaId ? '同區別天' : '別區別天',
+              staffId: x.staffId as string,
+              clashArea: y.areaId,
             }
             if (x.areaId === y.areaId) return pick
             fallback ??= pick
@@ -526,6 +528,8 @@ async function main() {
       const conflict = findCrossDateConflict(beforeConflict)
       assert(conflict !== null, '找得到跨日對調會撞到同人同日的格子')
       if (conflict) {
+        // 退到「別區別天」測試照樣會過，但就不再守原本那個 bug——種子變了要知道。
+        assert(conflict.label === '同區別天', '挑到的是同區別天（原本漏擋的情境）')
         const res = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
           method: 'POST',
           headers: json,
@@ -534,7 +538,13 @@ async function main() {
         assert(res.status === 409, `跨日對調撞同人同日 → 409（${conflict.label}）`)
         const err = await res.json()
         assert(err.error?.code === 'STAFF_ALREADY_ON_DUTY', '錯誤碼是 STAFF_ALREADY_ON_DUTY')
+        // 撞到的是被拖的那個人在目標日原本的那一區，不是對方那格的人碰巧撞到。
+        assert(
+          err.error?.details?.staffId === conflict.staffId && err.error?.details?.areaId === conflict.clashArea,
+          'details 指向被拖的人與他當天原本的那一區',
+        )
         const unchanged = await scheduleBody()
+        // mock 任何寫入都會 revision++，revision 沒變就代表兩格都沒動；b 格再比一次當保險。
         assert(
           unchanged.revision === beforeConflict.revision &&
             dutyAt(unchanged, conflict.b.areaId, conflict.b.date) ===
