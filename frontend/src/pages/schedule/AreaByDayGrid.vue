@@ -4,6 +4,10 @@
  * 欄＝天。值班格底色照該員身分組（`--group-1..4`，PR #44 review：身分組圖例四色塊
  * 不能全同色）；假日值班在值班格上疊一層外框，不再用另一種底色蓋掉組別顏色。
  * 空缺／違規疊上 `lib/cellStyle.ts` 算出的優先序，一律蓋過值班／假日的底色。
+ *
+ * 拖拉對調（issue #34）：值班格按住拖到另一格（空格也行，等於搬移）放開即 emit `swap`；
+ * 來源格與目標格有預覽樣式、Esc 取消、位移很小仍是點擊（開候選人面板）。
+ * 格子鍵就是 CellRef（`areaId|date`），本元件不呼叫 API，由 index.vue 接 `swap`。
  */
 import { computed } from 'vue'
 import type { Area, AreaType, PointBoardGroup } from '@/api/types'
@@ -18,6 +22,8 @@ import {
 import { cellKindOf, groupColorIndex } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
+import { parseSwapCellKey, swapCellKey } from './lib/writeFlow'
+import { usePointerDragSwap } from '@/composables/usePointerDragSwap'
 
 const props = defineProps<{
   areaTypes: AreaType[]
@@ -28,9 +34,30 @@ const props = defineProps<{
   cellRenderIndex: Map<string, CellRenderKind>
   vacancyCounts: Map<string, number>
   pointBoardGroups: PointBoardGroup[]
+  /** 寫入進行中：不接受新的拖拉起手（避免同時兩筆對調）。 */
+  swapDisabled?: boolean
 }>()
 
-const emit = defineEmits<{ cellClick: [areaId: string, date: string] }>()
+const emit = defineEmits<{
+  cellClick: [areaId: string, date: string]
+  swap: [a: { areaId: string; date: string }, b: { areaId: string; date: string }]
+}>()
+
+const dragSwap = usePointerDragSwap({
+  // 只有有人的格子能當來源；空格拖不起來，點它仍是開候選人面板。
+  canStart: (key) => !props.swapDisabled && props.dutyMap.has(key),
+  onDrop: (sourceKey, targetKey) => {
+    const a = parseSwapCellKey(sourceKey)
+    const b = parseSwapCellKey(targetKey)
+    if (a && b) emit('swap', a, b)
+  },
+})
+
+function onCellClick(areaId: string, date: string): void {
+  // 剛拖過（放下或 Esc 取消）之後瀏覽器仍會補一個 click，吞掉才不會開出候選人面板。
+  if (dragSwap.consumeClickSuppression()) return
+  emit('cellClick', areaId, date)
+}
 
 interface GroupedAreas {
   areaType: AreaType
@@ -72,6 +99,10 @@ function cellClass(areaId: string, date: string, isHoliday: boolean): Record<str
   if ((kind === 'duty' || kind === 'duty-holiday') && groupIndex !== null && groupIndex !== undefined) {
     classes[`ad-grid__cell--group-${groupColorIndex(groupIndex)}`] = true
   }
+  const drag = dragSwap.state.value
+  const key = swapCellKey(areaId, date)
+  if (drag?.sourceKey === key) classes['ad-grid__cell--drag-source'] = true
+  if (drag?.overKey === key) classes['ad-grid__cell--drag-over'] = true
   return classes
 }
 
@@ -90,7 +121,14 @@ function filled(areaId: string): number {
 
 <template>
   <div class="area-by-day">
-    <div class="ad-grid" :style="{ gridTemplateColumns: `132px repeat(${days.length}, 26px) 44px` }">
+    <div
+      class="ad-grid"
+      :class="{ 'ad-grid--dragging': dragSwap.state.value !== null }"
+      :style="{ gridTemplateColumns: `132px repeat(${days.length}, 26px) 44px` }"
+      @pointermove="dragSwap.onPointerMove"
+      @pointerup="dragSwap.onPointerUp"
+      @pointercancel="dragSwap.onPointerCancel"
+    >
       <div class="ad-grid__corner">區域 / 日期</div>
       <div v-for="day in days" :key="day.date" class="ad-grid__head" :class="{ 'ad-grid__head--holiday': day.isHoliday }">
         <span class="ad-grid__wd">{{ day.weekday }}</span>
@@ -114,7 +152,9 @@ function filled(areaId: string): number {
             type="button"
             class="ad-grid__cell"
             :class="cellClass(area.id, day.date, day.isHoliday)"
-            @click="emit('cellClick', area.id, day.date)"
+            :data-swap-key="swapCellKey(area.id, day.date)"
+            @pointerdown="dragSwap.onCellPointerDown($event, swapCellKey(area.id, day.date))"
+            @click="onCellClick(area.id, day.date)"
           >
             {{ cellText(area.id, day.date) }}
           </button>
@@ -265,6 +305,25 @@ function filled(areaId: string): number {
   cursor: pointer;
   font: 500 9.5px 'Microsoft JhengHei UI', sans-serif;
   color: var(--color-accent-900);
+}
+
+.ad-grid__cell {
+  user-select: none;
+}
+
+/* 拖拉預覽：來源格半透明、目標格虛線外框；拖曳中整個矩陣游標改成 grabbing。 */
+.ad-grid--dragging,
+.ad-grid--dragging .ad-grid__cell {
+  cursor: grabbing;
+}
+
+.ad-grid__cell--drag-source {
+  opacity: 0.45;
+}
+
+.ad-grid__cell--drag-over {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: -2px;
 }
 
 .ad-grid__cell:hover {
