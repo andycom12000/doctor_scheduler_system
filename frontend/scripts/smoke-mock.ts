@@ -468,6 +468,79 @@ async function main() {
       const bytes = new Uint8Array(await res.arrayBuffer())
       assert(bytes.length > 0, '本體非空') // mock 回的是 CSV 佔位；真 xlsx 的位元組在 Api 測試裡驗
     })
+
+    // 15. 值班表寫入流程（issue #34）。放在最後：會把 2026-09 發布，前面那些段落斷言的
+    // 是草稿狀態的種子資料。打真後端會留下資料（發布無法復原），所以 mock-only。
+    await mockOnly('15. 值班表寫入：setDuty／swap／validate／publish／export', '會把真後端的 2026-09 發布', async () => {
+      const json = { 'Content-Type': 'application/json' }
+      const scheduleBody = async () => (await fetch(`${BASE}/schedules/2026-09`)).json()
+      const dutyAt = (s: { duties: Array<{ areaId: string; date: string; staffId: string }> }, areaId: string, date: string) =>
+        s.duties.find((d) => d.areaId === areaId && d.date === date)?.staffId ?? null
+
+      // setDuty 一格 → 清空：清空的格子要帶回 staffId: null
+      const before = await scheduleBody()
+      assert(before.status === 'draft', '2026-09 起始為 draft')
+      const original = dutyAt(before, 'area-a', '2026-09-03')
+      assert(original !== null, '2026-09-03 area-a 有人')
+      const cleared = await fetch(`${BASE}/schedules/2026-09/duties`, {
+        method: 'PATCH',
+        headers: json,
+        body: JSON.stringify({ areaId: 'area-a', date: '2026-09-03', staffId: null }),
+      })
+      assert(cleared.status === 200, 'setDuty 清空 → 200')
+      const clearedBody = await cleared.json()
+      assert(clearedBody.duties[0].staffId === null, '清空的格子帶回 staffId: null')
+      assert(
+        clearedBody.violations.some((v: { code: string }) => v.code === 'H1_AREA_COVERAGE'),
+        '清空後出現 H1 空缺違規（發布會因此被擋）',
+      )
+
+      // swap：同一天兩區對調
+      const staffA = dutyAt(before, 'area-a', '2026-09-04')
+      const staffB = dutyAt(before, 'area-b', '2026-09-04')
+      assert(staffA !== null && staffB !== null, '2026-09-04 area-a／area-b 都有人')
+      const swapped = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ a: { areaId: 'area-a', date: '2026-09-04' }, b: { areaId: 'area-b', date: '2026-09-04' } }),
+      })
+      assert(swapped.status === 200, 'swap → 200')
+      const swappedBody = await swapped.json()
+      assert(swappedBody.duties.length === 2, 'swap 回兩格')
+      const after = await scheduleBody()
+      assert(dutyAt(after, 'area-a', '2026-09-04') === staffB && dutyAt(after, 'area-b', '2026-09-04') === staffA, '兩格人員互換')
+
+      // validate：結構與 summary
+      const validated = await fetch(`${BASE}/schedules/2026-09/validate`, { method: 'POST' })
+      assert(validated.status === 200, 'validate → 200')
+      const validatedBody = await validated.json()
+      assert(validatedBody.ok === false && validatedBody.summary.hard > 0, 'validate：有硬違規 → ok=false')
+
+      // publish：先 409，帶 acknowledgeViolations 才成功
+      const blocked = await fetch(`${BASE}/schedules/2026-09/publish`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ acknowledgeViolations: false }),
+      })
+      assert(blocked.status === 409, '有硬違規發布 → 409')
+      assert((await blocked.json()).error?.code === 'HARD_VIOLATIONS_PRESENT', '錯誤碼 HARD_VIOLATIONS_PRESENT')
+      const published = await fetch(`${BASE}/schedules/2026-09/publish`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ acknowledgeViolations: true }),
+      })
+      assert(published.status === 200, '帶 acknowledgeViolations 發布 → 200')
+      const publishedBody = await published.json()
+      assert(publishedBody.status === 'published', '發布後 status = published')
+      assert(Array.isArray(publishedBody.carryOver) && publishedBody.carryOver.length > 0, '發布回月結轉清單')
+      assert((await scheduleBody()).status === 'published', 'GET 值班表也是 published')
+
+      // export：已發布也能匯出，位元組長度 > 0
+      const exported = await fetch(`${BASE}/schedules/2026-09/export?layout=area-by-day`)
+      assert(exported.status === 200, '匯出 → 200')
+      const bytes = new Uint8Array(await exported.arrayBuffer())
+      assert(bytes.length > 0, '匯出位元組長度 > 0')
+    })
   } finally {
     server?.close()
   }
