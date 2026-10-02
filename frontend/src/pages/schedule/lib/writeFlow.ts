@@ -48,7 +48,7 @@ export function exportFileName(responseFilename: string | null, ym: string): str
 export interface CarryOverLine {
   staffId: string
   name: string
-  /** 公平性點數的起始偏移（`CarryOverEntry.points`），不是額度點數。 */
+  /** 額度點數的起始偏移（`CarryOverEntry.points` = 組內最大剩餘額度 − 本人剩餘額度），不是公平性點數。 */
   points: number
 }
 
@@ -75,4 +75,9 @@ export function parseSwapCellKey(key: string): { areaId: string; date: string } 
   const separator = key.lastIndexOf('|')
   if (separator <= 0 || separator === key.length - 1) return null
   return { areaId: key.slice(0, separator), date: key.slice(separator + 1) }
+}
+
+/** 月結轉摘要只列真的有偏移的人（points > 0），其餘以人數帶過。 */
+export function shiftedCarryOver(lines: readonly CarryOverLine[]): CarryOverLine[] {
+  return lines.filter((line) => line.points > 0)
 }

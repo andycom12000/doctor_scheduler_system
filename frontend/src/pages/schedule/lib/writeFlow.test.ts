@@ -8,6 +8,7 @@ import {
   isHardViolationsPresent,
   needsPublishedEditConfirm,
   parseSwapCellKey,
+  shiftedCarryOver,
   swapCellKey,
 } from './writeFlow'
 
@@ -99,5 +100,17 @@ describe('swapCellKey', () => {
     expect(parseSwapCellKey('nope')).toBeNull()
     expect(parseSwapCellKey('|2026-09-05')).toBeNull()
     expect(parseSwapCellKey('a|')).toBeNull()
+  })
+})
+
+describe('shiftedCarryOver', () => {
+  it('只留 points > 0 的人，順序不變', () => {
+    const lines = [
+      { staffId: 'a', name: 'A', points: 3 },
+      { staffId: 'b', name: 'B', points: 0 },
+      { staffId: 'c', name: 'C', points: 1 },
+    ]
+    expect(shiftedCarryOver(lines).map((l) => l.staffId)).toEqual(['a', 'c'])
+    expect(shiftedCarryOver([])).toEqual([])
   })
 })

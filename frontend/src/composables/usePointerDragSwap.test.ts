@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createDragSession, DRAG_THRESHOLD_PX } from './usePointerDragSwap'
+import { createClickSuppression, createDragSession, DRAG_THRESHOLD_PX } from './usePointerDragSwap'
 
 describe('createDragSession', () => {
   it('位移沒超過門檻就放開：算點擊，不是拖', () => {
@@ -79,5 +79,66 @@ describe('createDragSession', () => {
     session.start('c|2026-09-03', 0, 0)
     expect(session.dragging).toBe(false)
     expect(session.end(0, 0, null)).toEqual({ kind: 'click' })
+  })
+})
+
+describe('createClickSuppression', () => {
+  it('放下：放開後 TTL 內的 click 被吞一次，之後不吞', () => {
+    const s = createClickSuppression(100)
+    s.suppressFor(1000)
+    expect(s.consume(1010)).toBe(true)
+    expect(s.consume(1020)).toBe(false)
+  })
+
+  it('放下後 click 沒來，TTL 過了就失效（不誤吞之後的鍵盤 Enter）', () => {
+    const s = createClickSuppression(100)
+    s.suppressFor(1000)
+    expect(s.consume(1200)).toBe(false)
+  })
+
+  it('Esc → 隔 500ms 才放開 → click 被吞', () => {
+    const s = createClickSuppression(100)
+    s.suppressAfterRelease() // t=0 按 Esc
+    expect(s.consume(300)).toBe(false) // 還按著，沒有 click
+    s.released(500) // t=500 放開
+    expect(s.consume(510)).toBe(true)
+  })
+
+  it('Esc 之後的下一次真點擊不被吞', () => {
+    const s = createClickSuppression(100)
+    s.suppressAfterRelease()
+    s.released(500)
+    expect(s.consume(510)).toBe(true)
+    s.clear() // 下一次 pointerdown
+    s.released(2000) // 一般點擊的 pointerup，不在等放開
+    expect(s.consume(2005)).toBe(false)
+  })
+
+  it('Esc 後沒等到放開就按下新的 pointerdown：旗標作廢，不影響新點擊', () => {
+    const s = createClickSuppression(100)
+    s.suppressAfterRelease()
+    s.clear()
+    s.released(700)
+    expect(s.consume(705)).toBe(false)
+  })
+
+  it('一般點擊（沒拖）的 pointerup 不會開啟抑制', () => {
+    const s = createClickSuppression(100)
+    s.released(100)
+    expect(s.consume(101)).toBe(false)
+  })
+})
+
+describe('createDragSession.active', () => {
+  it('起手後為 true（還沒超過門檻也算），結束或取消後為 false', () => {
+    const session = createDragSession()
+    expect(session.active).toBe(false)
+    session.start('a|2026-09-01', 0, 0)
+    expect(session.active).toBe(true)
+    session.cancel()
+    expect(session.active).toBe(false)
+    session.start('a|2026-09-01', 0, 0)
+    session.end(0, 0, null)
+    expect(session.active).toBe(false)
   })
 })

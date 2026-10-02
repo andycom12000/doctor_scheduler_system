@@ -39,6 +39,7 @@ import {
   exportFileName,
   exportLayoutFor,
   isHardViolationsPresent,
+  shiftedCarryOver,
   needsPublishedEditConfirm,
   type CarryOverLine,
 } from './lib/writeFlow'
@@ -202,7 +203,16 @@ interface Notice {
 }
 const notice = ref<Notice | null>(null)
 
-function fail(err: unknown): void {
+/**
+ * 寫入進行中使用者可能已經切到別的月份：回應回來時只有「還在同一個月」才寫畫面狀態
+ * （訊息、發布摘要），否則會把 A 月的結果顯示在 B 月上。快取失效不受影響，照做。
+ */
+function isStale(month: string): boolean {
+  return ym.value !== month
+}
+
+function fail(month: string, err: unknown): void {
+  if (isStale(month)) return
   notice.value = { kind: 'error', text: describeError(err) }
 }
 
@@ -248,14 +258,15 @@ const swapping = ref(false)
 
 async function onSwap(a: CellRef, b: CellRef): Promise<void> {
   if (swapping.value) return
+  const month = ym.value
   swapping.value = true
   notice.value = null
   try {
     if (!(await confirmPublishedEdit())) return
-    await swapDuties(ym.value, { a, b })
+    await swapDuties(month, { a, b })
     await invalidateAfterWrite()
   } catch (err) {
-    fail(err)
+    fail(month, err)
   } finally {
     swapping.value = false
   }
@@ -267,11 +278,13 @@ const validating = ref(false)
 
 async function runValidate(): Promise<void> {
   if (validating.value) return
+  const month = ym.value
   validating.value = true
   notice.value = null
   try {
-    const result = await validateSchedule(ym.value)
-    await invalidate(`schedules/${ym.value}/violations`)
+    const result = await validateSchedule(month)
+    await invalidate(`schedules/${month}/violations`)
+    if (isStale(month)) return
     const hard = result.summary.hard ?? 0
     const soft = result.summary.soft ?? 0
     notice.value = {
@@ -279,7 +292,7 @@ async function runValidate(): Promise<void> {
       text: result.ok ? `驗證完成：沒有硬違規（軟違規 ${soft}）。` : `驗證完成：${hard} 項硬違規、${soft} 項軟違規。`,
     }
   } catch (err) {
-    fail(err)
+    fail(month, err)
   } finally {
     validating.value = false
   }
@@ -292,17 +305,17 @@ interface PublishSummary {
   lines: CarryOverLine[]
 }
 const publishSummary = ref<PublishSummary | null>(null)
-const carryOverShifted = computed(() => publishSummary.value?.lines.filter((l) => l.points > 0).length ?? 0)
+const carryOverShifted = computed(() => shiftedCarryOver(publishSummary.value?.lines ?? []))
 
 /** 回傳是否發布成功（匯出「先發布再匯出」要接著用）。失敗與取消都是 false，訊息已經顯示。 */
-async function runPublish(): Promise<boolean> {
+async function runPublish(month = ym.value): Promise<boolean> {
   if (publishing.value) return false
   publishing.value = true
   notice.value = null
   try {
     let result
     try {
-      result = await publishSchedule(ym.value)
+      result = await publishSchedule(month)
     } catch (err) {
       if (!isHardViolationsPresent(err)) throw err
       const ok = await confirm({
@@ -311,16 +324,20 @@ async function runPublish(): Promise<boolean> {
         confirmText: '仍要發布',
       })
       if (!ok) return false
-      result = await publishSchedule(ym.value, true)
+      result = await publishSchedule(month, true)
     }
-    publishSummary.value = {
-      revision: result.revision,
-      lines: describeCarryOver(result.carryOver, staffDirectory.value),
+    // 人員目錄跟月份無關（點數看板有的人加上全院名冊），換月份後算摘要的姓名仍正確；
+    // 但摘要只屬於發布的那個月，換月份了就不顯示。
+    if (!isStale(month)) {
+      publishSummary.value = {
+        revision: result.revision,
+        lines: describeCarryOver(result.carryOver, staffDirectory.value),
+      }
     }
     await invalidateAfterWrite()
     return true
   } catch (err) {
-    fail(err)
+    fail(month, err)
     return false
   } finally {
     publishing.value = false
@@ -330,24 +347,25 @@ async function runPublish(): Promise<boolean> {
 // -- 匯出 Excel：版面跟著目前檢視；草稿先問要不要發布 ----------------------------------------
 const exporting = ref(false)
 
-async function downloadExport(): Promise<void> {
-  const { blob, filename } = await exportSchedule(ym.value, exportLayoutFor(activeTab.value))
-  downloadBlob(blob, exportFileName(filename, ym.value))
+async function downloadExport(month: string): Promise<void> {
+  const { blob, filename } = await exportSchedule(month, exportLayoutFor(activeTab.value))
+  downloadBlob(blob, exportFileName(filename, month))
 }
 
 async function runExport(): Promise<void> {
   if (exporting.value) return
+  const month = ym.value
   exporting.value = true
   notice.value = null
   try {
     if (!isPublished.value) {
       const decision = await promptDraftOutput('匯出')
       if (decision === 'cancel') return
-      if (decision === 'publish-first' && !(await runPublish())) return
+      if (decision === 'publish-first' && !(await runPublish(month))) return
     }
-    await downloadExport()
+    await downloadExport(month)
   } catch (err) {
-    fail(err)
+    fail(month, err)
   } finally {
     exporting.value = false
   }
@@ -355,12 +373,15 @@ async function runExport(): Promise<void> {
 
 // -- 列印：只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
 async function runPrint(): Promise<void> {
+  const month = ym.value
   notice.value = null
   if (!isPublished.value) {
     const decision = await promptDraftOutput('列印')
     if (decision === 'cancel') return
-    if (decision === 'publish-first' && !(await runPublish())) return
+    if (decision === 'publish-first' && !(await runPublish(month))) return
   }
+  // 等待期間換了月份，畫面已不是使用者要印的那個月。
+  if (isStale(month)) return
   window.print()
 }
 
@@ -470,7 +491,7 @@ const emptyStateLoading = computed(
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runPrint">列印</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runValidate">驗證約束</button>
         <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
-        <button type="button" class="btn btn-primary" :disabled="writeBusy" @click="runPublish">
+        <button type="button" class="btn btn-primary" :disabled="writeBusy" @click="runPublish()">
           {{ publishLabel }}
         </button>
       </template>
@@ -502,19 +523,19 @@ const emptyStateLoading = computed(
         <div class="schedule__publish-head">
           <strong>已發布（v{{ publishSummary.revision }}）</strong>
           <span>
-            月結轉：公平性點數的起始偏移，共 {{ publishSummary.lines.length }} 人，其中 {{ carryOverShifted }} 人有偏移，
-            供下個月的公平性目標使用。
+            月結轉：額度點數的起始偏移（組內最大剩餘額度 − 本人剩餘額度），共 {{ publishSummary.lines.length }} 人，
+            其中 {{ carryOverShifted.length }} 人有偏移，供下個月的公平性目標使用。
           </span>
           <button type="button" class="schedule__notice-close" aria-label="關閉摘要" @click="publishSummary = null">
             ×
           </button>
         </div>
-        <ul v-if="publishSummary.lines.length > 0" class="schedule__carry-list">
-          <li v-for="line in publishSummary.lines" :key="line.staffId">
+        <ul v-if="carryOverShifted.length > 0" class="schedule__carry-list">
+          <li v-for="line in carryOverShifted" :key="line.staffId">
             <span>{{ line.name }}</span><span class="schedule__carry-points">+{{ line.points }}</span>
           </li>
         </ul>
-        <p v-else class="schedule__carry-empty">這次發布沒有產生月結轉。</p>
+        <p v-else class="schedule__carry-empty">這次發布沒有人有偏移。</p>
       </section>
       <div class="schedule__content">
         <div class="schedule__main">

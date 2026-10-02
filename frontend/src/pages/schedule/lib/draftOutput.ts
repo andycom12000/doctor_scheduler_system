@@ -20,6 +20,8 @@ export async function promptDraftOutput(label: string): Promise<DraftOutputDecis
   return 'cancel'
 }
 
+const REVOKE_DELAY_MS = 1000
+
 /** 把位元組交給瀏覽器下載：隱藏的 `<a download>` + object URL，用完立刻 revoke。 */
 export function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob)
@@ -30,5 +32,6 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  URL.revokeObjectURL(url)
+  // 延後 revoke：WebView2 的下載是非同步取用這個 URL，立刻收回可能讀到空的。
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS)
 }

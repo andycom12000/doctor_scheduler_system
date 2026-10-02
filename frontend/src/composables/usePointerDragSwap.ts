@@ -42,6 +42,8 @@ export interface DragSession {
   readonly state: DragState | null
   /** 位移已超過門檻（Esc 取消前為 true，取消後歸 false）。 */
   readonly dragging: boolean
+  /** 有起手但還沒結束（含還沒超過門檻）。 */
+  readonly active: boolean
 }
 
 export function createDragSession(threshold = DRAG_THRESHOLD_PX): DragSession {
@@ -91,6 +93,55 @@ export function createDragSession(threshold = DRAG_THRESHOLD_PX): DragSession {
     get dragging() {
       return dragging
     },
+    get active() {
+      return sourceKey !== null
+    },
+  }
+}
+
+/** 拖過之後 click 若沒有在這段時間內來，抑制自己過期，避免之後的鍵盤 Enter／Space 被誤吞。 */
+export const CLICK_SUPPRESSION_MS = 100
+
+export interface ClickSuppression {
+  /** 放下／放在格子外：放開當下就知道 click 馬上來，從 `now` 起算 TTL。 */
+  suppressFor: (now: number) => void
+  /** Esc 取消：使用者可能還按著，click 要等放開那一下才來，所以先只標記「等 pointerup」。 */
+  suppressAfterRelease: () => void
+  /** 收到 pointerup／pointercancel；若在等放開，TTL 從這一刻起算（不是從 Esc 起算）。 */
+  released: (now: number) => void
+  /** 新的 pointerdown：前一次的抑制作廢。 */
+  clear: () => void
+  /** 格子的 `@click` 問；吞掉就清旗標，所以只吞一次。 */
+  consume: (now: number) => boolean
+}
+
+/** 純邏輯、時間由呼叫端傳入（不用計時器），好測 Esc 隔很久才放開的情境。 */
+export function createClickSuppression(ttlMs = CLICK_SUPPRESSION_MS): ClickSuppression {
+  let awaitingRelease = false
+  let until = 0
+  return {
+    suppressFor(now) {
+      awaitingRelease = false
+      until = now + ttlMs
+    },
+    suppressAfterRelease() {
+      awaitingRelease = true
+      until = 0
+    },
+    released(now) {
+      if (!awaitingRelease) return
+      awaitingRelease = false
+      until = now + ttlMs
+    },
+    clear() {
+      awaitingRelease = false
+      until = 0
+    },
+    consume(now) {
+      if (now >= until) return false
+      until = 0
+      return true
+    },
   }
 }
 
@@ -115,21 +166,11 @@ export interface PointerDragSwapHandlers {
   consumeClickSuppression: () => boolean
 }
 
-/** 拖過之後 click 若沒有在這段時間內來，旗標自己過期，避免之後的鍵盤 Enter／Space 被誤吞。 */
-const CLICK_SUPPRESSION_MS = 100
-
 export function usePointerDragSwap(options: UsePointerDragSwapOptions): PointerDragSwapHandlers {
   const attribute = options.attribute ?? 'data-swap-key'
   const session = createDragSession(options.threshold)
   const state = shallowRef<DragState | null>(null)
-  let suppressClick = false
-  let suppressTimer: ReturnType<typeof setTimeout> | null = null
-
-  function setSuppressClick(on: boolean): void {
-    suppressClick = on
-    if (suppressTimer) clearTimeout(suppressTimer)
-    suppressTimer = on ? setTimeout(() => (suppressClick = false), CLICK_SUPPRESSION_MS) : null
-  }
+  const suppression = createClickSuppression()
 
   function hoverKeyAt(x: number, y: number): string | null {
     return resolvePaintKey(document.elementFromPoint(x, y), attribute)
@@ -141,8 +182,9 @@ export function usePointerDragSwap(options: UsePointerDragSwapOptions): PointerD
     session.cancel()
     state.value = null
     removeKeyListener()
-    // 取消拖曳之後使用者放開滑鼠仍會產生 click，不能讓它開出候選人面板。
-    if (wasDragging) setSuppressClick(true)
+    // 取消拖曳之後使用者放開滑鼠仍會產生 click，不能讓它開出候選人面板；
+    // 但使用者可能還按著很久才放，抑制要等 finish() 收到那次放開才開始算。
+    if (wasDragging) suppression.suppressAfterRelease()
   }
 
   function addKeyListener(): void {
@@ -156,13 +198,14 @@ export function usePointerDragSwap(options: UsePointerDragSwapOptions): PointerD
   function onCellPointerDown(event: PointerEvent, key: string): void {
     if (event.button !== 0 || !event.isPrimary) return
     if (!options.canStart(key)) return
-    setSuppressClick(false)
+    suppression.clear()
     session.start(key, event.clientX, event.clientY)
     ;(event.currentTarget as Element | null)?.setPointerCapture?.(event.pointerId)
     addKeyListener()
   }
 
   function onPointerMove(event: PointerEvent): void {
+    if (!session.active) return
     const next = session.move(event.clientX, event.clientY, hoverKeyAt(event.clientX, event.clientY))
     // 只在內容真的變了才換物件，避免每個 pointermove 都觸發重繪。
     const prev = state.value
@@ -177,13 +220,13 @@ export function usePointerDragSwap(options: UsePointerDragSwapOptions): PointerD
     )
     state.value = null
     removeKeyListener()
-    if (result.kind === 'drop' || result.kind === 'abort') setSuppressClick(true)
+    if (result.kind === 'drop' || result.kind === 'abort') suppression.suppressFor(performance.now())
+    else suppression.released(performance.now())
     if (result.kind === 'drop') options.onDrop(result.sourceKey, result.targetKey)
   }
 
   onBeforeUnmount(() => {
     removeKeyListener()
-    if (suppressTimer) clearTimeout(suppressTimer)
   })
 
   return {
@@ -194,9 +237,7 @@ export function usePointerDragSwap(options: UsePointerDragSwapOptions): PointerD
     // 被系統手勢搶走（pointercancel）一律當取消，不對調。
     onPointerCancel: (event) => finish(event, false),
     consumeClickSuppression() {
-      const was = suppressClick
-      setSuppressClick(false)
-      return was
+      return suppression.consume(performance.now())
     },
   }
 }
