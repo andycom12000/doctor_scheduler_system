@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * SCREEN 01 排班主表原型（issue #31）：三個檢視分頁、點數看板、點格指派。
- * 只做原型範圍——發布、匯出、拖拉對調、已發布確認在 #34。
+ * SCREEN 01 排班主表：三個檢視分頁、點數看板、點格指派（issue #31），
+ * 加上寫入流程（issue #34）：發布／重新發布、驗證約束、匯出、拖拉對調、已發布確認。
+ * 列印按鈕只留位置（`window.print()` ＋草稿提示），列印樣式在 #32。
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -9,7 +10,7 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
 import { useResource, invalidate } from '@/composables/useResource'
 import { useCalendar } from '@/composables/useCalendar'
-import { getSchedule } from '@/api/schedules'
+import { exportSchedule, getSchedule, publishSchedule, swapDuties, validateSchedule } from '@/api/schedules'
 import { getDayDetail, getPointBoard, listVacancies, listViolations } from '@/api/views'
 import { getAreaSettings, getConstraints, getRankSettings } from '@/api/settings'
 import { getBlockedDays } from '@/api/blockedDays'
@@ -17,7 +18,8 @@ import { listStaff } from '@/api/staff'
 import { createSolverJob } from '@/api/solver'
 import { ApiError } from '@/api/client'
 import { describeError } from '@/api/errors'
-import type { Violation } from '@/api/types'
+import type { CellRef, Violation } from '@/api/types'
+import { useConfirm } from '@/composables/useConfirm'
 import { rememberJobId } from '../variants/jobStorage'
 import { extractBusyJobId } from './lib/solverKickoff'
 import EmptyState from './EmptyState.vue'
@@ -31,6 +33,16 @@ import CandidatePanel from './CandidatePanel.vue'
 import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancyCountMap } from './lib/scheduleGrid'
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
+import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
+import {
+  describeCarryOver,
+  exportFileName,
+  exportLayoutFor,
+  isHardViolationsPresent,
+  shiftedCarryOver,
+  needsPublishedEditConfirm,
+  type CarryOverLine,
+} from './lib/writeFlow'
 
 const { ym } = useYearMonth()
 const router = useRouter()
@@ -55,11 +67,13 @@ const scheduleErrorMessage = computed(() =>
 // 那時候 schedule 還在 loading、`isEmptyMonth` 必然還是 false，光看它一樣會在真正的空月份
 // 誤打一次。改成也擋 `schedule.loading`：還不知道是不是空月份時先不打，schedule 落地後
 // 才決定要不要打（是空月份就永遠不打，不是空月份就這時候才打，比原本「跟 schedule 平行打」
-// 慢一點點，換來空月份真的一次都不打）。
-const areaSettingsKey = computed(() => (schedule.loading.value || isEmptyMonth.value ? null : 'settings/areas'))
+// 慢一點點，換來空月份真的一次都不打）。已經有資料時（寫入後的重抓）不算「還不知道」，
+// 否則每次寫入後這兩支會短暫關掉、整個格線閃一下空白（issue #34）。
+const scheduleSettling = computed(() => schedule.loading.value && !schedule.data.value)
+const areaSettingsKey = computed(() => (scheduleSettling.value || isEmptyMonth.value ? null : 'settings/areas'))
 const areaSettings = useResource(areaSettingsKey, () => getAreaSettings())
 
-const constraintsKey = computed(() => (schedule.loading.value || isEmptyMonth.value ? null : 'settings/constraints'))
+const constraintsKey = computed(() => (scheduleSettling.value || isEmptyMonth.value ? null : 'settings/constraints'))
 const constraints = useResource(constraintsKey, () => getConstraints())
 const fairOn = computed(
   () => (constraints.data.value?.soft.find((s) => s.code === 'S7_FAIRNESS_POINT')?.weight ?? 0) > 0,
@@ -128,7 +142,8 @@ const subtitle = computed(() => {
   const statusLabel = s.status === 'published' ? '已發布' : '草稿'
   return `${s.areas.length} 區 · ${s.staffCount ?? 0} 人 · ${statusLabel} v${s.revision}`
 })
-const publishLabel = computed(() => (schedule.data.value?.status === 'published' ? '重新發布' : '發布'))
+const isPublished = computed(() => schedule.data.value?.status === 'published')
+const publishLabel = computed(() => (isPublished.value ? '重新發布' : '發布'))
 
 // -- 分頁 ---------------------------------------------------------------------------
 type ScheduleTab = 'area-by-day' | 'day-by-staff' | 'day-detail'
@@ -154,6 +169,53 @@ const dayDetailKey = computed(() =>
 const dayDetailRes = useResource(dayDetailKey, () => getDayDetail(ym.value, effectiveDate.value as string))
 const dayDetailErrorMessage = computed(() => (dayDetailRes.error.value ? describeError(dayDetailRes.error.value) : null))
 
+// -- 寫入共用：快取失效、已發布確認、錯誤／結果訊息 --------------------------------------
+// 失效整個 `schedules` 字首：值班表、違規、點數看板、空缺、單日詳表、候選人，
+// 以及年月切換器讀的 `GET /schedules` 列表（狀態 tag 草稿 → 已發布）。
+async function invalidateAfterWrite(): Promise<void> {
+  await invalidate('schedules')
+}
+
+const { confirm } = useConfirm()
+
+/** 已發布值班表：本次進入畫面後第一次修改要確認一次，確認過就不再問；換月份重置。 */
+const publishedEditConfirmed = ref(false)
+watch(ym, () => {
+  publishedEditConfirmed.value = false
+  notice.value = null
+  publishSummary.value = null
+})
+
+async function confirmPublishedEdit(): Promise<boolean> {
+  if (!needsPublishedEditConfirm(schedule.data.value?.status, publishedEditConfirmed.value)) return true
+  const ok = await confirm({
+    title: '修改已發布的值班表',
+    message: '這份值班表已經發布。修改後不會自動重新發布，已匯出或列印的版本也不會跟著變。確定要修改嗎？',
+    confirmText: '確定修改',
+  })
+  if (ok) publishedEditConfirmed.value = true
+  return ok
+}
+
+interface Notice {
+  kind: 'error' | 'info'
+  text: string
+}
+const notice = ref<Notice | null>(null)
+
+/**
+ * 寫入進行中使用者可能已經切到別的月份：回應回來時只有「還在同一個月」才寫畫面狀態
+ * （訊息、發布摘要），否則會把 A 月的結果顯示在 B 月上。快取失效不受影響，照做。
+ */
+function isStale(month: string): boolean {
+  return ym.value !== month
+}
+
+function fail(month: string, err: unknown): void {
+  if (isStale(month)) return
+  notice.value = { kind: 'error', text: describeError(err) }
+}
+
 // -- 候選人面板 -------------------------------------------------------------------
 const candidateTarget = ref<{ areaId: string; date: string } | null>(null)
 
@@ -176,7 +238,7 @@ function closeCandidatePanel(): void {
 }
 
 async function onAssigned(): Promise<void> {
-  await invalidate(`schedules/${ym.value}`)
+  await invalidateAfterWrite()
   candidateTarget.value = null
 }
 
@@ -191,7 +253,141 @@ async function jumpToViolation(violation: Violation): Promise<void> {
   if (target.domId) document.getElementById(target.domId)?.scrollIntoView({ block: 'center', inline: 'center' })
 }
 
-// -- 工具列：只有「重新求解」有作用；其餘停用等 #34 -----------------------------------
+// -- 拖拉對調（區域 × 日）-------------------------------------------------------------
+const swapping = ref(false)
+
+async function onSwap(a: CellRef, b: CellRef): Promise<void> {
+  if (swapping.value) return
+  const month = ym.value
+  swapping.value = true
+  notice.value = null
+  try {
+    if (!(await confirmPublishedEdit())) return
+    await swapDuties(month, { a, b })
+    await invalidateAfterWrite()
+  } catch (err) {
+    fail(month, err)
+  } finally {
+    swapping.value = false
+  }
+}
+
+// -- 驗證約束：POST validate 之後刷新違規側欄。違規側欄只有一條資料路徑（GET violations 的快取），
+// 寫入與驗證都用失效重抓餵它，跟點格指派一致，不另外把回應塞進狀態。
+const validating = ref(false)
+
+async function runValidate(): Promise<void> {
+  if (validating.value) return
+  const month = ym.value
+  validating.value = true
+  notice.value = null
+  try {
+    const result = await validateSchedule(month)
+    await invalidate(`schedules/${month}/violations`)
+    if (isStale(month)) return
+    const hard = result.summary.hard ?? 0
+    const soft = result.summary.soft ?? 0
+    notice.value = {
+      kind: 'info',
+      text: result.ok ? `驗證完成：沒有硬違規（軟違規 ${soft}）。` : `驗證完成：${hard} 項硬違規、${soft} 項軟違規。`,
+    }
+  } catch (err) {
+    fail(month, err)
+  } finally {
+    validating.value = false
+  }
+}
+
+// -- 發布／重新發布：409 HARD_VIOLATIONS_PRESENT → 確認 → 帶 acknowledgeViolations 重發 -----
+const publishing = ref(false)
+interface PublishSummary {
+  revision: number
+  lines: CarryOverLine[]
+}
+const publishSummary = ref<PublishSummary | null>(null)
+const carryOverShifted = computed(() => shiftedCarryOver(publishSummary.value?.lines ?? []))
+
+/** 回傳是否發布成功（匯出「先發布再匯出」要接著用）。失敗與取消都是 false，訊息已經顯示。 */
+async function runPublish(month = ym.value): Promise<boolean> {
+  if (publishing.value) return false
+  publishing.value = true
+  notice.value = null
+  try {
+    let result
+    try {
+      result = await publishSchedule(month)
+    } catch (err) {
+      if (!isHardViolationsPresent(err)) throw err
+      const ok = await confirm({
+        title: '仍有硬約束違規',
+        message: '值班表還有硬約束違規。確定要在已知違規的情況下發布嗎？',
+        confirmText: '仍要發布',
+      })
+      if (!ok) return false
+      result = await publishSchedule(month, true)
+    }
+    // 人員目錄跟月份無關（點數看板有的人加上全院名冊），換月份後算摘要的姓名仍正確；
+    // 但摘要只屬於發布的那個月，換月份了就不顯示。
+    if (!isStale(month)) {
+      publishSummary.value = {
+        revision: result.revision,
+        lines: describeCarryOver(result.carryOver, staffDirectory.value),
+      }
+    }
+    await invalidateAfterWrite()
+    return true
+  } catch (err) {
+    fail(month, err)
+    return false
+  } finally {
+    publishing.value = false
+  }
+}
+
+// -- 匯出 Excel：版面跟著目前檢視；草稿先問要不要發布 ----------------------------------------
+const exporting = ref(false)
+
+async function downloadExport(month: string): Promise<void> {
+  const { blob, filename } = await exportSchedule(month, exportLayoutFor(activeTab.value))
+  downloadBlob(blob, exportFileName(filename, month))
+}
+
+async function runExport(): Promise<void> {
+  if (exporting.value) return
+  const month = ym.value
+  exporting.value = true
+  notice.value = null
+  try {
+    if (!isPublished.value) {
+      const decision = await promptDraftOutput('匯出')
+      if (decision === 'cancel') return
+      if (decision === 'publish-first' && !(await runPublish(month))) return
+    }
+    await downloadExport(month)
+  } catch (err) {
+    fail(month, err)
+  } finally {
+    exporting.value = false
+  }
+}
+
+// -- 列印：只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
+async function runPrint(): Promise<void> {
+  const month = ym.value
+  notice.value = null
+  if (!isPublished.value) {
+    const decision = await promptDraftOutput('列印')
+    if (decision === 'cancel') return
+    if (decision === 'publish-first' && !(await runPublish(month))) return
+  }
+  // 等待期間換了月份，畫面已不是使用者要印的那個月。
+  if (isStale(month)) return
+  window.print()
+}
+
+const writeBusy = computed(() => swapping.value || validating.value || publishing.value || exporting.value)
+
+// -- 工具列：重新求解導去變體頁；其餘寫入流程見上 ------------------------------------------
 // 任務指示與空月份的「求解」連結都導向 /variants/{ym}；issue 內文另寫「SCREEN 05」，
 // 兩者不一致時取任務指示與空月份連結一致的那個（PR 說明有記錄）。
 function goToVariants(): void {
@@ -291,10 +487,13 @@ const emptyStateLoading = computed(
            （規格 §3）。「尚無班表」的狀態標籤改由 YearMonthSwitcher 自己的 .tag.tag-outline
            負責（issue #62 段落 B），這裡不重複畫一顆。 -->
       <template v-if="!isEmptyMonth">
-        <button type="button" class="btn btn-secondary" disabled title="#34">匯出 Excel</button>
-        <button type="button" class="btn btn-secondary" disabled title="#34">驗證約束</button>
+        <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runExport">匯出 Excel</button>
+        <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runPrint">列印</button>
+        <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runValidate">驗證約束</button>
         <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
-        <button type="button" class="btn btn-primary" disabled title="#34">{{ publishLabel }}</button>
+        <button type="button" class="btn btn-primary" :disabled="writeBusy" @click="runPublish()">
+          {{ publishLabel }}
+        </button>
       </template>
     </template>
 
@@ -316,6 +515,28 @@ const emptyStateLoading = computed(
     />
 
     <div v-else class="schedule">
+      <p v-if="notice" class="schedule__notice" :class="`schedule__notice--${notice.kind}`" role="status">
+        {{ notice.text }}
+        <button type="button" class="schedule__notice-close" aria-label="關閉訊息" @click="notice = null">×</button>
+      </p>
+      <section v-if="publishSummary" class="schedule__publish-summary" role="status">
+        <div class="schedule__publish-head">
+          <strong>已發布（v{{ publishSummary.revision }}）</strong>
+          <span>
+            月結轉：額度點數的起始偏移（組內最大剩餘額度 − 本人剩餘額度），共 {{ publishSummary.lines.length }} 人，
+            其中 {{ carryOverShifted.length }} 人有偏移，供下個月的公平性目標使用。
+          </span>
+          <button type="button" class="schedule__notice-close" aria-label="關閉摘要" @click="publishSummary = null">
+            ×
+          </button>
+        </div>
+        <ul v-if="carryOverShifted.length > 0" class="schedule__carry-list">
+          <li v-for="line in carryOverShifted" :key="line.staffId">
+            <span>{{ line.name }}</span><span class="schedule__carry-points">+{{ line.points }}</span>
+          </li>
+        </ul>
+        <p v-else class="schedule__carry-empty">這次發布沒有人有偏移。</p>
+      </section>
       <div class="schedule__content">
         <div class="schedule__main">
           <AreaByDayGrid
@@ -328,7 +549,9 @@ const emptyStateLoading = computed(
             :cell-render-index="areaByDayRenderIndex"
             :vacancy-counts="vacancyCounts"
             :point-board-groups="pointBoardGroups"
+            :swap-disabled="writeBusy"
             @cell-click="openCell"
+            @swap="onSwap"
           />
           <DayByStaffGrid
             v-else-if="activeTab === 'day-by-staff'"
@@ -380,6 +603,7 @@ const emptyStateLoading = computed(
       :area-label="candidateAreaLabel"
       :date="candidateTarget.date"
       :current-staff-id="candidateCurrentStaffId"
+      :before-write="confirmPublishedEdit"
       @close="closeCandidatePanel"
       @assigned="onAssigned"
     />
@@ -424,6 +648,74 @@ const emptyStateLoading = computed(
   color: var(--color-accent);
   border-color: var(--color-accent);
   background: var(--color-accent-100);
+}
+
+.schedule__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: 12.5px;
+  border: 1px solid var(--color-divider);
+}
+
+.schedule__notice--error {
+  background: var(--color-accent-100);
+  color: var(--color-accent-900);
+  border-color: var(--color-accent);
+}
+
+.schedule__notice-close {
+  margin-left: auto;
+  flex: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+}
+
+.schedule__publish-summary {
+  padding: var(--space-2) var(--space-3);
+  font-size: 12.5px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
+}
+
+.schedule__publish-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.schedule__carry-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 96px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.schedule__carry-list li {
+  display: flex;
+  gap: 4px;
+}
+
+.schedule__carry-points {
+  font: 600 11px ui-monospace, Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.schedule__carry-empty {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .schedule__content {

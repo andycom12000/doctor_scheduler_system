@@ -11,7 +11,7 @@
 import { computed } from 'vue'
 import type { CalendarDay } from '@/api/types'
 import type { BlockedDayGroupView } from './logic'
-import { usePointerPaint } from './usePointerPaint'
+import { usePointerPaint } from '@/composables/usePointerPaint'
 
 const props = defineProps<{
   groups: BlockedDayGroupView[]

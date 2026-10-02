@@ -21,6 +21,8 @@ const props = defineProps<{
   date: string
   /** 目前這一格已指派的人（若有），用於「清空此格」判斷是否要顯示。 */
   currentStaffId: string | null
+  /** 寫入前的關卡（已發布值班表第一次修改要確認，issue #34）；回 false 就不寫。 */
+  beforeWrite?: () => Promise<boolean>
 }>()
 
 const emit = defineEmits<{ close: []; assigned: [] }>()
@@ -36,6 +38,7 @@ async function pick(staffId: string | null): Promise<void> {
   submitting.value = true
   submitError.value = null
   try {
+    if (props.beforeWrite && !(await props.beforeWrite())) return
     await setDuty(props.ym, { areaId: props.areaId, date: props.date, staffId })
     emit('assigned')
   } catch (err) {

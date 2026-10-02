@@ -1,6 +1,6 @@
 /**
- * 筆刷式矩陣「按住拖過多格連續塗」的共用手法（issue #29；之後 SCREEN 01 的拖拉對調會複製
- * 這個檔案的寫法，語意不同所以不共用同一個 composable，只共用手法）。
+ * 筆刷式矩陣「按住拖過多格連續塗」的共用手法（issue #29；SCREEN 01 的拖拉對調語意不同，
+ * 另寫 `usePointerDragSwap`，只共用這裡的 `resolvePaintKey` 與同一套手法）。
  *
  * 手法：`pointerdown` 在起始格 `setPointerCapture`，讓後續的 `pointermove`／`pointerup`
  * 就算游標離開起始格的 DOM 元素，事件仍然持續打在同一個 target 上，不會被半路吃掉；
