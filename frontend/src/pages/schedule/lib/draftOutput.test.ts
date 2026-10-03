@@ -66,6 +66,8 @@ describe('downloadBlob', () => {
   it('觸發下載後不在計時器上收回 URL：WebView2 的存檔對話框開著時還要讀它（#33）', () => {
     downloadBlob(new Blob(['x']), 'duty-2026-11.xlsx')
     expect(clicked).toEqual(['duty-2026-11.xlsx'])
+    // 前一個測試留下的 URL 會在這次呼叫時被收回，那不是這裡要驗的
+    revoked = []
     vi.advanceTimersByTime(10 * 60 * 1000)
     expect(revoked).toEqual([])
   })

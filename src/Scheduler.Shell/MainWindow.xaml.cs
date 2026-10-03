@@ -142,7 +142,7 @@ public partial class MainWindow : Window
     /// Handled 一律設 true，關掉 WebView2 自己的下載提示。
     /// 不在事件處理函式裡直接跑模態迴圈：照 WebView2 對事件重入的建議拿 deferral，事件返回後再由 Dispatcher 開對話框，
     /// 選完才 Complete。對話框開著的這段時間前端的 blob URL 必須還活著，見 frontend 的 <c>downloadBlob</c>。
-    /// 已知問題：Chromium 在使用者選好之前就把內容寫進「下載」資料夾的 GUID.tmp，取消時那個檔不會刪（#33，另開 issue 追）。
+    /// 已知問題：Chromium 在使用者選好之前就把內容寫進「下載」資料夾的 GUID.tmp，取消時那個檔不會刪（#70）。
     /// </summary>
     private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
     {
@@ -161,6 +161,8 @@ public partial class MainWindow : Window
                     Filter = spec.Filter,
                     AddExtension = true,
                     OverwritePrompt = true,
+                    // 不要在 %APPDATA%\Microsoft\Windows\Recent 留 .lnk（portable：data/ 以外不寫）
+                    AddToRecent = false,
                 };
                 if (dialog.ShowDialog(this) == true)
                 {
@@ -171,16 +173,30 @@ public partial class MainWindow : Window
                     e.Cancel = true;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // 對話框開不起來就不下載，總比默默存到使用者不知道的地方好
-                e.Cancel = true;
+                System.Diagnostics.Trace.TraceWarning($"存檔對話框失敗：{ex.Message}");
+                TryOrWarn(() => e.Cancel = true);
             }
             finally
             {
-                deferral.Complete();
+                // args 已失效（例如 WebView2 關閉中）時這兩個 COM 呼叫也會丟；Shell 沒有全域例外處理，不能讓它炸掉 process
+                TryOrWarn(deferral.Complete);
             }
         });
+    }
+
+    private static void TryOrWarn(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"下載收尾失敗：{ex.Message}");
+        }
     }
 
     private async Task<CoreWebView2WebResourceResponse> ForwardToApiAsync(CoreWebView2 core, Uri uri, CoreWebView2WebResourceRequest request)
