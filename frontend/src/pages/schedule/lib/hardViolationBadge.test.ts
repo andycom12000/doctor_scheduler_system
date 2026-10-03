@@ -1,0 +1,34 @@
+import { describe, expect, it } from 'vitest'
+import type { Violation } from '@/api/types'
+import { hardViolationBadgeInfo } from './hardViolationBadge'
+
+const v = (code: string, severity: 'hard' | 'soft', id = code): Violation => ({
+  id,
+  code,
+  severity,
+  cellKeys: ['area:area-a:2026-09-01'],
+  message: 'x',
+})
+
+describe('hardViolationBadgeInfo', () => {
+  it('沒有違規或只有軟違規 → null（標籤不顯示）', () => {
+    expect(hardViolationBadgeInfo([])).toBeNull()
+    expect(hardViolationBadgeInfo([v('S3_X', 'soft')])).toBeNull()
+  })
+
+  it('只有一般硬違規 → 只有第一行，軟違規不算', () => {
+    const info = hardViolationBadgeInfo([v('H1_AREA_COVERAGE', 'hard', 'a'), v('H5_BLOCKED_DAY', 'hard', 'b'), v('S3_X', 'soft')])
+    expect(info).toEqual({ headline: '2 項硬違規', detail: null, label: '2 項硬違規' })
+  })
+
+  it('有同人同日兩區 → 第二行明說排除後才能發布', () => {
+    const info = hardViolationBadgeInfo([
+      v('H1_AREA_COVERAGE', 'hard', 'a'),
+      v('X1_STAFF_DOUBLE_BOOKED', 'hard', 'b'),
+      v('X1_STAFF_DOUBLE_BOOKED', 'hard', 'c'),
+    ])
+    expect(info?.headline).toBe('3 項硬違規')
+    expect(info?.detail).toBe('其中 2 項同人同日兩區，排除後才能發布')
+    expect(info?.label).toContain('排除後才能發布')
+  })
+})

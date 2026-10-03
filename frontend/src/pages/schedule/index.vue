@@ -30,11 +30,13 @@ import DayDetailPanel from './DayDetailPanel.vue'
 import PointBoardPanel from './PointBoardPanel.vue'
 import UtilizationPanel from './UtilizationPanel.vue'
 import ViolationSidebar from './ViolationSidebar.vue'
+import HardViolationBadge from './HardViolationBadge.vue'
 import CandidatePanel from './CandidatePanel.vue'
 import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancyCountMap } from './lib/scheduleGrid'
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
 import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
+import { hardViolationBadgeInfo } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
 
 const { ym } = useYearMonth()
@@ -116,6 +118,8 @@ const dayByStaffRenderIndex = computed(() => projectRenderIndexToStaffView(cellR
 // 反方向：H3／H4／H6／H7 是 staff:{staffId}:{date}，區域 × 日要反查「當天值哪一區」才上得了色
 // （PR #57 審查回饋 B1，右側欄限定區域 × 日之後這幾條違規原本完全不會被畫出來）。
 const areaByDayRenderIndex = computed(() => projectRenderIndexToAreaView(cellRenderIndex.value, dutyMapByStaff.value))
+// 發布前的硬違規提示（#68）：資料來源就是右側欄那份違規清單，不另打 API
+const hardBadge = computed(() => hardViolationBadgeInfo(violationsRes.data.value?.violations ?? []))
 const vacancyCounts = computed(() => vacancyCountMap(vacanciesRes.data.value?.byDate ?? []))
 
 // -- 單日詳表用：`GET days/{date}` 只帶 area.code（如 CHIEF），中文全名與區域類型
@@ -241,6 +245,13 @@ async function jumpToViolation(violation: Violation): Promise<void> {
   if (target.domId) document.getElementById(target.domId)?.scrollIntoView({ block: 'center', inline: 'center' })
 }
 
+// -- 發布旁的硬違規標籤：違規清單只在區域 × 日分頁有，其他分頁先切回來再捲過去 -----
+async function jumpToViolationList(): Promise<void> {
+  activeTab.value = 'area-by-day'
+  await nextTick()
+  document.getElementById('violation-sidebar')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
+
 // -- 拖拉對調（區域 × 日）-------------------------------------------------------------
 const swapping = ref(false)
 
@@ -283,7 +294,8 @@ async function runValidate(): Promise<void> {
   }
 }
 
-// -- 發布／重新發布：409 HARD_VIOLATIONS_PRESENT → 確認 → 帶 acknowledgeViolations 重發 -----
+// -- 發布／重新發布：409 HARD_VIOLATIONS_PRESENT → 確認 → 帶 acknowledgeViolations 重發。
+// 409 DOUBLE_BOOKING_PRESENT（同人同日兩區）不能確認略過，不跳確認，直接走 fail 的錯誤 toast（#68）-----
 const publishing = ref(false)
 
 /** 回傳是否發布成功（匯出「先發布再匯出」要接著用）。失敗與取消都是 false，訊息已經顯示。 */
@@ -464,6 +476,7 @@ const emptyStateLoading = computed(
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runPrint">列印</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runValidate">驗證約束</button>
         <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
+        <HardViolationBadge v-if="hardBadge" :info="hardBadge" @click="jumpToViolationList" />
         <button type="button" class="btn btn-primary" :disabled="writeBusy" @click="runPublish()">
           {{ publishLabel }}
         </button>

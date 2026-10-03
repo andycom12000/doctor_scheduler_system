@@ -14,7 +14,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   BLOCKED_DAY_CAP_EXCEEDED: '已達該人員本月不可排班日的登記上限。',
   HARD_VIOLATIONS_PRESENT: '值班表仍有硬約束違規，需明確確認才能發布。',
   SCHEDULE_ALREADY_PUBLISHED: '值班表已發布，不可整份套用變體，請逐格修改。',
-  STAFF_ALREADY_ON_DUTY: '這位人員當天已排在另一區，同一人同一天只能值一區。',
+  DOUBLE_BOOKING_PRESENT: '還有人同一天排在兩區，排除後才能發布。',
   AREA_IN_USE: '這個區域仍被值班表引用，無法刪除。',
   AREA_TYPE_IN_USE: '這個區域類型仍被區域引用，無法刪除。',
   RANK_IN_USE: '這個身分或身分組仍被人員、資格矩陣或約束引用，無法刪除。',

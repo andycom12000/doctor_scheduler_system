@@ -569,6 +569,30 @@ export function computeViolationsForDuties(
     }
   }
 
+  // X1 結構規則（不是原語、不看約束設定、不能停用）：同一人同一天排在兩區以上。
+  // 一個（人，日）一筆，cellKeys 含他當天所在的每個 area 格，對齊 ViolationChecker.StaffDoubleBooked。
+  const areasByStaffDate = new Map<string, { staffId: string; date: string; areaIds: string[] }>()
+  for (const [key, staffId] of dutyMap) {
+    const { areaId, date } = parseDutyKey(key)
+    const groupKey = `${staffId}|${date}`
+    const entry = areasByStaffDate.get(groupKey) ?? { staffId, date, areaIds: [] }
+    entry.areaIds.push(areaId)
+    areasByStaffDate.set(groupKey, entry)
+  }
+  for (const { staffId, date, areaIds } of areasByStaffDate.values()) {
+    if (areaIds.length < 2) continue
+    const staff = store.staff.find((s) => s.id === staffId)
+    const names = areaIds.map((id) => store.areas.find((a) => a.id === id)?.name ?? id)
+    violations.push(
+      makeViolation(
+        'X1_STAFF_DOUBLE_BOOKED',
+        'hard',
+        areaIds.map((id) => areaCellKey(id, date)),
+        `${staff?.name ?? staffId} ${date} 同時排在 ${names.join('、')}`,
+      ),
+    )
+  }
+
   return violations
 }
 
@@ -738,7 +762,7 @@ export function computeCandidates(store: MockStore, ym: string, areaId: string, 
     const blockingReasons: string[] = []
     const warnings: string[] = []
     if (blockedToday.has(staff.id)) blockingReasons.push('該日已登記不可排班')
-    if (assignedElsewhereToday.has(staff.id)) blockingReasons.push('當日已排在其他區域')
+    if (assignedElsewhereToday.has(staff.id)) blockingReasons.push(`${staff.name} ${date} 同時排在多個區域`)
 
     const cap = quotaCapFor(store, staff.rankCode, ym)
     const points = quotaPointsForStaffInMonth(store, ym, staff.id)

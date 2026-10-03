@@ -21,6 +21,10 @@ describe('renderKindOf', () => {
     expect(renderKindOf('H4_MIN_GAP', 'hard')).toBe('violation-bg')
   })
 
+  it('X1 同人同日兩區（結構規則）→ 與其他硬違規一致的 violation-bg', () => {
+    expect(renderKindOf('X1_STAFF_DOUBLE_BOOKED', 'hard')).toBe('violation-bg')
+  })
+
   it('軟項一律不上格', () => {
     expect(renderKindOf('S3_R2R3_PREFER_ICU', 'soft')).toBeNull()
     expect(renderKindOf('H1_AREA_COVERAGE', 'soft')).toBeNull()
@@ -50,6 +54,15 @@ describe('buildCellRenderIndex', () => {
     const violations = [violation({ code: 'H1_AREA_COVERAGE', cellKeys: ['area:area-c:2026-09-10'] })]
     const index = buildCellRenderIndex(violations)
     expect(index.get('area:area-c:2026-09-10')).toBe('vacancy')
+  })
+
+  it('X1 的兩個 area 格都上色', () => {
+    const violations = [
+      violation({ code: 'X1_STAFF_DOUBLE_BOOKED', cellKeys: ['area:area-a:2026-09-05', 'area:area-b:2026-09-05'] }),
+    ]
+    const index = buildCellRenderIndex(violations)
+    expect(index.get('area:area-a:2026-09-05')).toBe('violation-bg')
+    expect(index.get('area:area-b:2026-09-05')).toBe('violation-bg')
   })
 
   it('軟違規不會進索引', () => {

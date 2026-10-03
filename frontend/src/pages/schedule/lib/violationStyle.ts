@@ -4,7 +4,8 @@
  * 規則（CLAUDE.md 任務描述逐字）：
  * - H1 空缺 → `--cell-vacancy-outline`（連同 `--cell-vacancy-bg` 的斜紋一起套用）
  * - H5 排到不可排班日 → `--cell-violation-stripe` 斜紋 + `--cell-violation-outline`
- * - 其他硬違規 → `--cell-violation-bg`
+ * - 其他硬違規 → `--cell-violation-bg`（含 X1 同人同日兩區：兩格都標，與其他硬違規一致，
+ *   不另立樣式——它的醒目靠工具列的警示標籤與發布硬擋，不靠格子顏色）
  * - 軟項不上格（回 `null`）
  *
  * 一個 cellKey 可能同時出現在多筆違規裡（例如 H2 與 H5 都是「已指派」的格子才會觸發，
