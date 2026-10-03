@@ -438,8 +438,10 @@ self-contained 的 Shell 引用它要關掉 `ValidateExecutableReferencesMatchSe
 ### 6.4 匯出檔案
 
 `GET /api/schedules/{ym}/export` **直接回檔案位元組**，不回下載連結。
-前端用 `URL.createObjectURL` 觸發，WebView2 走原生下載流程、跳系統存檔對話框，
+前端用 `URL.createObjectURL` 觸發，Shell 接手 WebView2 的 `DownloadStarting` 跳系統存檔對話框
+（WebView2 預設不問就存進「下載」，#33 實測），
 使用者存到哪裡是他家的事，不碰 `data/`。
+系統對話框會在登錄檔記下上次資料夾，這是 §10「登錄檔無任何寫入」的唯一例外。
 
 雲端版一字不用改——這也是不採用「回一個帶 `expiresAt` 的 URL」的理由：
 portable 環境沒有 HTTP server 能提供那種連結，也沒有可放暫存檔的地方。
@@ -597,7 +599,9 @@ win-x64 publish，解析每個 native DLL 的 PE import table（`build/check-nat
 ## 10. 架構驗收檢查清單
 
 - [ ] 在乾淨的 Windows（無 .NET、無 WebView2、無 VC++ Redist）解壓即可執行
-- [ ] `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔無任何寫入
+- [ ] `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔無任何寫入（唯一例外：使用者操作系統存檔對話框時，Windows 自己在
+      `HKCU\…\Explorer\ComDlg32` 記下的上次資料夾。這是 OS shell 的行為、程式關不掉；程式本身已設
+      `AddToRecent = false`，不在 `%APPDATA%\…\Recent` 留捷徑。案主 2026-10-03 拍板，#33）
 - [ ] 複製整個資料夾到另一台機器，所有資料與設定完整保留
 - [ ] 程式放在唯讀路徑時，啟動有明確錯誤訊息而非崩潰
 - [ ] 求解期間 UI 不凍結，**狀態與收斂資訊即時更新（非百分比進度）**，可中止
