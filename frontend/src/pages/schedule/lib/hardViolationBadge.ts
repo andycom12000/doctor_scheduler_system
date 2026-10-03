@@ -22,6 +22,16 @@ export function hardViolationBadgeInfo(violations: readonly Violation[]): HardVi
   if (hard.length === 0) return null
   const doubleBooked = hard.filter((v) => v.code === DOUBLE_BOOKED_CODE).length
   const headline = `${hard.length} 項硬違規`
-  const detail = doubleBooked > 0 ? `其中 ${doubleBooked} 項同人同日兩區，排除後才能發布` : null
+  const detail = doubleBooked > 0 ? `其中 ${doubleBooked} 項同人同日兩區，排除後才能發布／匯出／列印` : null
   return { headline, detail, label: detail ? `${headline}，${detail}` : headline }
+}
+
+/**
+ * 匯出／列印前的前端把關（#68）：違規清單含同人同日兩區就回要顯示的錯誤訊息，沒有回 `null`。
+ * 後端匯出遇到同一情況也會 409 `DOUBLE_BOOKING_PRESENT`，這裡只是不必打 API 就先擋。
+ */
+export function doubleBookingBlockMessage(violations: readonly Violation[], action: '匯出' | '列印'): string | null {
+  return violations.some((v) => v.severity === 'hard' && v.code === DOUBLE_BOOKED_CODE)
+    ? `還有人同一天排在兩區，排除後才能${action}。`
+    : null
 }

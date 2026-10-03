@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Violation } from '@/api/types'
-import { hardViolationBadgeInfo } from './hardViolationBadge'
+import { doubleBookingBlockMessage, hardViolationBadgeInfo } from './hardViolationBadge'
 
 const v = (code: string, severity: 'hard' | 'soft', id = code): Violation => ({
   id,
@@ -28,7 +28,17 @@ describe('hardViolationBadgeInfo', () => {
       v('X1_STAFF_DOUBLE_BOOKED', 'hard', 'c'),
     ])
     expect(info?.headline).toBe('3 項硬違規')
-    expect(info?.detail).toBe('其中 2 項同人同日兩區，排除後才能發布')
+    expect(info?.detail).toBe('其中 2 項同人同日兩區，排除後才能發布／匯出／列印')
     expect(info?.label).toContain('排除後才能發布')
+  })
+})
+
+describe('doubleBookingBlockMessage', () => {
+  it('有 X1 → 依動作組訊息；沒有（含只有其他硬違規）→ null', () => {
+    const x1 = [v('H1_AREA_COVERAGE', 'hard', 'a'), v('X1_STAFF_DOUBLE_BOOKED', 'hard', 'b')]
+    expect(doubleBookingBlockMessage(x1, '匯出')).toBe('還有人同一天排在兩區，排除後才能匯出。')
+    expect(doubleBookingBlockMessage(x1, '列印')).toBe('還有人同一天排在兩區，排除後才能列印。')
+    expect(doubleBookingBlockMessage([v('H1_AREA_COVERAGE', 'hard')], '匯出')).toBeNull()
+    expect(doubleBookingBlockMessage([], '列印')).toBeNull()
   })
 })

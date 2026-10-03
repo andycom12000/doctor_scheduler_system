@@ -239,7 +239,8 @@ paths:
 
         **同一人同一天排在兩區**（`X1_STAFF_DOUBLE_BOOKED`）時一律回 `409 DOUBLE_BOOKING_PRESENT`，
         **`acknowledgeViolations` 也略過不了**：一個人不可能同時在兩區值班，這份班表必然有錯。
-        這也保證已發布的月份是乾淨的，下個月讀上月尾巴時不會碰到重複。
+        實際保證：發布、匯出、列印的當下一定沒有同人同日兩區。已發布後仍可逐格修改而再出現，
+        此時重新發布與匯出（前端也含列印）都會被擋，直到排除。
         `details` 帶 `doubleBookingCount`（這類違規的筆數）與 `hardViolationCount`。
 
         其他硬約束違規時回 `409 HARD_VIOLATIONS_PRESENT`，**除非** body 帶 `acknowledgeViolations: true`。
@@ -300,6 +301,9 @@ paths:
 
         portable 環境沒有可放暫存檔的地方（`data/` 以外都不能寫），
         也沒有真的 HTTP server 能提供 `expiresAt` 型的連結。
+
+        **有同人同日兩區（`X1_STAFF_DOUBLE_BOOKED`）時回 `409 DOUBLE_BOOKING_PRESENT`**，
+        不論草稿或已發布，理由同 `publishSchedule`：這份班表必然有錯，不該流出去。
       responses:
         '200':
           description: xlsx 檔案內容
@@ -312,6 +316,11 @@ paths:
               schema: { type: string, format: binary }
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: 有同人同日兩區（`DOUBLE_BOOKING_PRESENT`），排除後才能匯出
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
           description: layout 不是 area-by-day 或 day-by-staff
           content:
@@ -1196,7 +1205,7 @@ components:
         - BLOCKED_DAY_CAP_EXCEEDED       # 超過每人每月不可排班日上限
         - HARD_VIOLATIONS_PRESENT        # 發布時仍有硬約束違規且未確認
         - SCHEDULE_ALREADY_PUBLISHED     # 對已發布的值班表套用變體
-        - DOUBLE_BOOKING_PRESENT         # 發布時仍有同人同日兩區，不能用 acknowledgeViolations 略過
+        - DOUBLE_BOOKING_PRESENT         # 發布或匯出時仍有同人同日兩區；發布也不能用 acknowledgeViolations 略過
         - AREA_IN_USE                    # 刪除仍被值班表引用的區域
         - AREA_TYPE_IN_USE               # 刪除仍被區域引用的區域類型
         - RANK_IN_USE                    # 刪除仍被人員／矩陣／約束引用的身分或身分組

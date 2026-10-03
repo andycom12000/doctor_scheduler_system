@@ -230,6 +230,13 @@ const scheduleHandlers = [
     }
     const schedule = store.schedules.get(ym)
     if (!schedule) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
+    // 同人同日兩區（X1）不論草稿或已發布都不匯出，與後端 DoubleBookingGuard 一致（#68）
+    const doubleBooked = computeViolations(store, ym).filter((v) => v.code === 'X1_STAFF_DOUBLE_BOOKED').length
+    if (doubleBooked > 0) {
+      return errorResponse(409, 'DOUBLE_BOOKING_PRESENT', `仍有 ${doubleBooked} 項同一人同一天排在兩區，排除後才能匯出`, {
+        doubleBookingCount: doubleBooked,
+      })
+    }
     const duties = scheduleToDuties(schedule)
 
     // 簡化：不是真正的 xlsx，回一份最小的 CSV 位元組，content-type 與檔名照契約。

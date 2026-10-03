@@ -85,6 +85,21 @@ public sealed class ExportEndpointTests : IClassFixture<ApiFixture>
         Assert.Equal("NOT_FOUND", body["error"]!["code"]!.GetValue<string>());
     }
 
+    [Fact]
+    public async Task 有同人同日兩區_409_DOUBLE_BOOKING_PRESENT_排除後_200()
+    {
+        await _api.SendAsync(HttpMethod.Patch, "/api/schedules/2027-07/duties", """{"areaId":"area-icu","date":"2027-07-05","staffId":"s-r3"}""", "setDuty", HttpStatusCode.OK);
+        await _api.SendAsync(HttpMethod.Patch, "/api/schedules/2027-07/duties", """{"areaId":"area-a","date":"2027-07-05","staffId":"s-r3"}""", "setDuty", HttpStatusCode.OK);
+
+        var body = await _api.GetAsync("/api/schedules/2027-07/export", "exportSchedule", HttpStatusCode.Conflict);
+        Assert.Equal("DOUBLE_BOOKING_PRESENT", body["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(1, body["error"]!["details"]!["doubleBookingCount"]!.GetValue<int>());
+
+        await _api.SendAsync(HttpMethod.Patch, "/api/schedules/2027-07/duties", """{"areaId":"area-a","date":"2027-07-05","staffId":null}""", "setDuty", HttpStatusCode.OK);
+        using var response = await _api.Client.GetAsync("/api/schedules/2027-07/export");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("by-magic")]
     [InlineData("")]

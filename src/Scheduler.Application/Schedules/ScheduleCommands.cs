@@ -116,7 +116,7 @@ public sealed class ScheduleCommands
     }
 
     /// <summary>
-    /// 發布：同人同日兩區（X1）一律 409 <c>DOUBLE_BOOKING_PRESENT</c>、不能確認略過；
+    /// 發布：同人同日兩區（X1，<see cref="DoubleBookingGuard"/>）一律 409 <c>DOUBLE_BOOKING_PRESENT</c>、不能確認略過；
     /// 其他硬違規未確認時 409。結算本月的月結轉（重複發布整份覆寫）；
     /// 本月第一次發布時把當下讀到的上月月結轉凍結存下（ADR-0004），之後重新發布不重拍。
     /// </summary>
@@ -129,14 +129,7 @@ public sealed class ScheduleCommands
         }
 
         var validation = new ViolationChecker(loaded.Context).Check(loaded.Constraints);
-        var doubleBooked = validation.Violations.Count(v => v.Code == StructuralRules.StaffDoubleBooked);
-        if (doubleBooked > 0)
-        {
-            throw new SchedulerException(
-                ErrorCode.DoubleBookingPresent,
-                $"仍有 {doubleBooked} 項同一人同一天排在兩區，排除後才能發布",
-                new Dictionary<string, object?> { ["doubleBookingCount"] = doubleBooked, ["hardViolationCount"] = validation.HardCount });
-        }
+        DoubleBookingGuard.EnsureNone(validation, "發布");
 
         if (validation.HardCount > 0 && !acknowledgeViolations)
         {

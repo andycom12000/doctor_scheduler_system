@@ -563,6 +563,10 @@ async function main() {
           assert((await blockedPublish.json()).error?.code === 'DOUBLE_BOOKING_PRESENT', '錯誤碼 DOUBLE_BOOKING_PRESENT')
         }
 
+        const blockedExport = await fetch(`${BASE}/schedules/2026-09/export?layout=area-by-day`)
+        assert(blockedExport.status === 409, '有 X1 匯出 → 409')
+        assert((await blockedExport.json()).error?.code === 'DOUBLE_BOOKING_PRESENT', '匯出錯誤碼 DOUBLE_BOOKING_PRESENT')
+
         // 再對調一次（swap 是對合）把重複排除
         const undo = await fetch(`${BASE}/schedules/2026-09/duties/swap`, { method: 'POST', headers: json, body: swapBody })
         assert(undo.status === 200, '對調回去 → 200')

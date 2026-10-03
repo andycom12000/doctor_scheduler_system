@@ -36,7 +36,7 @@ import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancy
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
 import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
-import { hardViolationBadgeInfo } from './lib/hardViolationBadge'
+import { doubleBookingBlockMessage, hardViolationBadgeInfo } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
 
 const { ym } = useYearMonth()
@@ -331,7 +331,7 @@ async function runPublish(month = ym.value): Promise<boolean> {
   }
 }
 
-// -- 匯出 Excel：版面跟著目前檢視；草稿先問要不要發布 ----------------------------------------
+// -- 匯出 Excel：版面跟著目前檢視；草稿先問要不要發布。有 X1 直接擋；後端 409 DOUBLE_BOOKING_PRESENT 走 fail 的錯誤 toast ----------------------------------------
 const exporting = ref(false)
 
 async function downloadExport(month: string): Promise<void> {
@@ -343,6 +343,12 @@ async function runExport(): Promise<void> {
   if (exporting.value) return
   toast.clearErrors()
   const month = ym.value
+  // 同人同日兩區：不跳草稿提示、不打 API，直接擋（後端匯出也會 409，#68）
+  const blocked = doubleBookingBlockMessage(violationsRes.data.value?.violations ?? [], '匯出')
+  if (blocked) {
+    toast.error(blocked)
+    return
+  }
   exporting.value = true
   try {
     if (!isPublished.value) {
@@ -362,6 +368,11 @@ async function runExport(): Promise<void> {
 async function runPrint(): Promise<void> {
   toast.clearErrors()
   const month = ym.value
+  const blocked = doubleBookingBlockMessage(violationsRes.data.value?.violations ?? [], '列印')
+  if (blocked) {
+    toast.error(blocked)
+    return
+  }
   if (!isPublished.value) {
     const decision = await promptDraftOutput('列印')
     if (decision === 'cancel') return
