@@ -226,6 +226,7 @@ gh pr create        # base 自動是 develop（預設分支已設定）
   `revision` 只是修改次數計數器，不是併發控制。
 - **不要改成 `PublishSingleFile`。** 自解壓到 `%TEMP%` 會觸發 AppLocker / EDR。
 - **所有執行期狀態寫在程式旁的 `data/`**，不得碰 `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔。
+  唯一例外是匯出時系統存檔對話框由 Windows 自己寫的紀錄（ARCHITECTURE §10，#33），不要為此拿掉對話框。
   這是 portable 的硬性要求，也是驗收項目。
 - **`frontend/vite.config.ts` 的 `build.target` 綁定隨附的 WebView2 版本**
   （釘選在 `build/webview2.json`）。改一邊就要改另一邊。

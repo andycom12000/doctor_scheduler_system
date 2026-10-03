@@ -113,7 +113,7 @@ TURN 3 與 TURN 4 已經是修訂後的版本：5 區、33 人、10 身分、4 �
 - **匯出或列印仍是草稿的值班表**時提示「尚未發布，要先發布再匯出嗎？」，可以不發布繼續。
 - 工具列的「發布」在已發布時顯示「重新發布」；發布成功後顯示 `PublishResult` 的月結轉摘要。
 - 發布時仍有硬違規會回 409 `HARD_VIOLATIONS_PRESENT`：前端跳確認，使用者同意後帶 `acknowledgeViolations: true` 再發一次。這是「明確確認」流程，不是擋。
-- 匯出走 `fetch` 拿位元組 → `URL.createObjectURL` → 隱藏 `<a download>`，WebView2 會走原生存檔對話框（§6.4）。
+- 匯出走 `fetch` 拿位元組 → `URL.createObjectURL` → 隱藏 `<a download>`，由 Shell 接手 `DownloadStarting` 跳系統存檔對話框（WebView2 預設不問就存進「下載」，#33；§6.4）。
 
 ### 3.2 SCREEN 02 區域與點數
 

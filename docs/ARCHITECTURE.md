@@ -359,6 +359,7 @@ EF Core 的規矩：
 Persistence 只提供單純的「給我某月的 duty」「給我某年的例外日」這類介面。
 
 **所有執行期狀態寫在程式旁的 `data/`**，不得碰 `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔。
+（唯一例外是系統存檔對話框由 Windows 自己寫的紀錄，見 §10，#33。）
 這是 portable 的硬性要求，也是驗收項目。
 
 **沒有樂觀鎖。** `revision` 只是修改次數計數器，供前端快取失效，
@@ -441,7 +442,8 @@ self-contained 的 Shell 引用它要關掉 `ValidateExecutableReferencesMatchSe
 前端用 `URL.createObjectURL` 觸發，Shell 接手 WebView2 的 `DownloadStarting` 跳系統存檔對話框
 （WebView2 預設不問就存進「下載」，#33 實測），
 使用者存到哪裡是他家的事，不碰 `data/`。
-系統對話框會在登錄檔記下上次資料夾，這是 §10「登錄檔無任何寫入」的唯一例外。
+系統對話框由 Windows shell 自己寫的紀錄（對話框 MRU、資料夾檢視狀態）是 §10「登錄檔無任何寫入」的唯一例外。
+已知問題：Chromium 在使用者選好位置前就把內容寫進「下載」的 `GUID.tmp`，取消時不會刪（#70）。
 
 雲端版一字不用改——這也是不採用「回一個帶 `expiresAt` 的 URL」的理由：
 portable 環境沒有 HTTP server 能提供那種連結，也沒有可放暫存檔的地方。
@@ -599,9 +601,10 @@ win-x64 publish，解析每個 native DLL 的 PE import table（`build/check-nat
 ## 10. 架構驗收檢查清單
 
 - [ ] 在乾淨的 Windows（無 .NET、無 WebView2、無 VC++ Redist）解壓即可執行
-- [ ] `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔無任何寫入（唯一例外：使用者操作系統存檔對話框時，Windows 自己在
-      `HKCU\…\Explorer\ComDlg32` 記下的上次資料夾。這是 OS shell 的行為、程式關不掉；程式本身已設
-      `AddToRecent = false`，不在 `%APPDATA%\…\Recent` 留捷徑。案主 2026-10-03 拍板，#33）
+- [ ] `%APPDATA%` / `%LOCALAPPDATA%` / 登錄檔無任何寫入（唯一例外：使用者操作系統存檔對話框時，Windows shell 自己寫的
+      對話框 MRU 與資料夾檢視狀態，例如 `HKCU\…\Explorer\ComDlg32` 底下各鍵、Shellbags。範圍以「由系統對話框觸發、
+      程式關不掉」界定，不是列舉路徑；程式本身可關的都關了（`AddToRecent = false`：不留 `Recent` 捷徑、RecentDocs、
+      Jump List）。驗收時用 procmon 抓到的其他寫入仍算失敗。案主 2026-10-03 拍板，#33）
 - [ ] 複製整個資料夾到另一台機器，所有資料與設定完整保留
 - [ ] 程式放在唯讀路徑時，啟動有明確錯誤訊息而非崩潰
 - [ ] 求解期間 UI 不凍結，**狀態與收斂資訊即時更新（非百分比進度）**，可中止
