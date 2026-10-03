@@ -76,6 +76,23 @@ public static class WebViewBridge
     };
 
     /// <summary>
+    /// 下載要跳的「另存新檔」對話框內容：WebView2 預設會不問就存進「下載」資料夾（#33 實測），
+    /// 所以 Shell 接手 <c>DownloadStarting</c>，以它建議的路徑當預設檔名與資料夾，讓使用者自己選位置。
+    /// </summary>
+    public static SaveDialogSpec SaveDialogFor(string suggestedPath)
+    {
+        var extension = Path.GetExtension(suggestedPath).ToLowerInvariant();
+        const string all = "所有檔案 (*.*)|*.*";
+        var filter = extension switch
+        {
+            "" => all,
+            ".xlsx" => $"Excel 活頁簿 (*.xlsx)|*.xlsx|{all}",
+            _ => $"{extension.TrimStart('.').ToUpperInvariant()} 檔案 (*{extension})|*{extension}|{all}",
+        };
+        return new SaveDialogSpec(Path.GetFileName(suggestedPath), Path.GetDirectoryName(suggestedPath) ?? string.Empty, extension, filter);
+    }
+
+    /// <summary>
     /// 組出送進 TestServer 的請求：相對路徑（TestServer 的 BaseAddress 是 <c>http://localhost/</c>）、
     /// 本體先整份讀進記憶體（WebView2 的 COM 串流不可重讀）、內容類標頭放到 <see cref="HttpContent.Headers"/>，
     /// 其餘標頭原樣搬；<c>Host</c> 丟掉，TestServer 自己會填。
@@ -144,3 +161,6 @@ public static class WebViewBridge
         }
     }
 }
+
+/// <summary>「另存新檔」對話框的預設值；欄位名稱對應 <c>Microsoft.Win32.SaveFileDialog</c> 的同名屬性。</summary>
+public sealed record SaveDialogSpec(string FileName, string InitialDirectory, string DefaultExt, string Filter);

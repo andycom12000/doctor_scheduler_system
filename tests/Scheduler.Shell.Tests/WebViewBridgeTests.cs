@@ -103,6 +103,33 @@ public class WebViewBridgeTests
         Assert.DoesNotContain("\n", flat.Replace("\r\n", string.Empty));
     }
 
+    [Fact]
+    public void 存檔對話框_以_WebView2_建議的路徑帶出檔名資料夾與_Excel_篩選()
+    {
+        var suggested = Path.Combine(Path.GetTempPath(), "Downloads", "duty-2026-11.xlsx");
+
+        var dialog = WebViewBridge.SaveDialogFor(suggested);
+
+        Assert.Equal("duty-2026-11.xlsx", dialog.FileName);
+        Assert.Equal(Path.Combine(Path.GetTempPath(), "Downloads"), dialog.InitialDirectory);
+        Assert.Equal(".xlsx", dialog.DefaultExt);
+        Assert.Equal("Excel 活頁簿 (*.xlsx)|*.xlsx|所有檔案 (*.*)|*.*", dialog.Filter);
+    }
+
+    [Theory]
+    [InlineData("report.csv", ".csv", "CSV 檔案 (*.csv)|*.csv|所有檔案 (*.*)|*.*")]
+    [InlineData("REPORT.XLSX", ".xlsx", "Excel 活頁簿 (*.xlsx)|*.xlsx|所有檔案 (*.*)|*.*")]
+    [InlineData("data.bin", ".bin", "BIN 檔案 (*.bin)|*.bin|所有檔案 (*.*)|*.*")]
+    [InlineData("noext", "", "所有檔案 (*.*)|*.*")]
+    public void 存檔對話框_篩選依副檔名_不認得的照副檔名列_沒有副檔名只給所有檔案(string name, string defaultExt, string filter)
+    {
+        var dialog = WebViewBridge.SaveDialogFor(Path.Combine(Path.GetTempPath(), name));
+
+        Assert.Equal(name, dialog.FileName);
+        Assert.Equal(defaultExt, dialog.DefaultExt);
+        Assert.Equal(filter, dialog.Filter);
+    }
+
     /// <summary>WebView2 給的 COM 串流不可 seek，轉換要自己緩衝。</summary>
     private sealed class NonSeekableStream : MemoryStream
     {

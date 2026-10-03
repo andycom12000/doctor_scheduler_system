@@ -20,11 +20,20 @@ export async function promptDraftOutput(label: string): Promise<DraftOutputDecis
   return 'cancel'
 }
 
-const REVOKE_DELAY_MS = 1000
+/** 上一次下載的 object URL；下一次下載時才收回（見 `downloadBlob`）。 */
+let pendingUrl: string | null = null
 
-/** 把位元組交給瀏覽器下載：隱藏的 `<a download>` + object URL，用完立刻 revoke。 */
+/**
+ * 把位元組交給瀏覽器下載：隱藏的 `<a download>` + object URL。
+ *
+ * URL 不能在計時器上收回：WebView2 殼會先跳「另存新檔」對話框，使用者選位置的這段時間
+ * 下載還在讀這個 URL，提早收回會讓下載默默失敗（#33 實測，原本的 1 秒就不夠）。
+ * 改成下一次下載時才收回上一個，同時只留一個，匯出檔又只有幾 KB。
+ */
 export function downloadBlob(blob: Blob, fileName: string): void {
+  if (pendingUrl) URL.revokeObjectURL(pendingUrl)
   const url = URL.createObjectURL(blob)
+  pendingUrl = url
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = fileName
@@ -32,6 +41,4 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  // 延後 revoke：WebView2 的下載是非同步取用這個 URL，立刻收回可能讀到空的。
-  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS)
 }

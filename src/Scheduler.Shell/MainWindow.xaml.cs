@@ -71,6 +71,7 @@ public partial class MainWindow : Window
             // 之前吃掉同一主機的所有請求，事件連 /api/ 都收不到，見 ARCHITECTURE §6.2。
             core.AddWebResourceRequestedFilter($"{WebViewBridge.Origin}*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
             core.WebResourceRequested += OnWebResourceRequested;
+            core.DownloadStarting += OnDownloadStarting;
 #if DEBUG
             core.Settings.AreDevToolsEnabled = true;
 #else
@@ -133,6 +134,53 @@ public partial class MainWindow : Window
         {
             deferral.Complete();
         }
+    }
+
+    /// <summary>
+    /// 匯出 Excel 的 <c>&lt;a download&gt;</c> 落到這裡。不接手的話 WebView2 會不問就存進「下載」資料夾、只跳一個角落提示
+    /// （#33 實測），使用者找不到檔案也選不了位置。改成跳系統「另存新檔」對話框；取消就整個取消下載。
+    /// Handled 一律設 true，關掉 WebView2 自己的下載提示。
+    /// 不在事件處理函式裡直接跑模態迴圈：照 WebView2 對事件重入的建議拿 deferral，事件返回後再由 Dispatcher 開對話框，
+    /// 選完才 Complete。對話框開著的這段時間前端的 blob URL 必須還活著，見 frontend 的 <c>downloadBlob</c>。
+    /// 已知問題：Chromium 在使用者選好之前就把內容寫進「下載」資料夾的 GUID.tmp，取消時那個檔不會刪（#33，另開 issue 追）。
+    /// </summary>
+    private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    {
+        e.Handled = true;
+        var deferral = e.GetDeferral();
+        Dispatcher.InvokeAsync(() =>
+        {
+            try
+            {
+                var spec = WebViewBridge.SaveDialogFor(e.ResultFilePath);
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    FileName = spec.FileName,
+                    InitialDirectory = spec.InitialDirectory,
+                    DefaultExt = spec.DefaultExt,
+                    Filter = spec.Filter,
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                };
+                if (dialog.ShowDialog(this) == true)
+                {
+                    e.ResultFilePath = dialog.FileName;
+                }
+                else
+                {
+                    e.Cancel = true;
+                }
+            }
+            catch
+            {
+                // 對話框開不起來就不下載，總比默默存到使用者不知道的地方好
+                e.Cancel = true;
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        });
     }
 
     private async Task<CoreWebView2WebResourceResponse> ForwardToApiAsync(CoreWebView2 core, Uri uri, CoreWebView2WebResourceRequest request)
