@@ -1,69 +1,58 @@
 <script setup lang="ts">
 /**
- * 發布前的硬違規提示（#68）：工具列「發布」旁的深色警示標籤，視覺延續 ToastHost 的錯誤樣式
- * （neutral-900 實底、白字、警示圖示）。點擊由 index.vue 捲到右側違規清單。
- * 沒有硬違規時由呼叫端不渲染。
+ * 硬違規摘要卡（#68）：違規側欄最上方的深色區塊，視覺延續 ToastHost 的錯誤樣式
+ * （neutral-900 實底、白字、警示圖示）。原本放在工具列「發布」旁，案主驗收時嫌把工具列擠滿，
+ * 改放到違規清單頂端，跟明細在一起。沒有硬違規時由呼叫端不渲染。
  */
 import { TriangleAlert } from 'lucide-vue-next'
 import type { HardViolationBadgeInfo } from './lib/hardViolationBadge'
 
 defineProps<{ info: HardViolationBadgeInfo }>()
-defineEmits<{ click: [] }>()
 </script>
 
 <template>
-  <button type="button" class="hard-badge" :aria-label="`${info.label}，點擊查看違規清單`" @click="$emit('click')">
-    <TriangleAlert class="hard-badge__icon" :size="18" aria-hidden="true" />
-    <span class="hard-badge__text">
-      <span class="hard-badge__headline">{{ info.headline }}</span>
-      <span v-if="info.detail" class="hard-badge__detail">{{ info.detail }}</span>
-    </span>
-  </button>
+  <div class="hard-summary" role="status" :aria-label="info.label">
+    <TriangleAlert class="hard-summary__icon" :size="20" aria-hidden="true" />
+    <div class="hard-summary__text">
+      <span class="hard-summary__headline">{{ info.headline }}</span>
+      <span v-if="info.detail" class="hard-summary__detail">{{ info.detail }}</span>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.hard-badge {
-  display: inline-flex;
-  align-items: center;
+.hard-summary {
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-2);
-  padding: 4px var(--space-3);
-  border: none;
+  padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--color-neutral-900);
   color: #fff;
-  text-align: left;
-  cursor: pointer;
 }
 
-.hard-badge:hover {
-  opacity: 0.9;
-}
-
-.hard-badge:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.hard-badge__icon {
+.hard-summary__icon {
   flex: none;
+  margin-top: 1px;
 }
 
-.hard-badge__text {
+.hard-summary__text {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.hard-badge__headline {
-  font-size: 13px;
+.hard-summary__headline {
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.3;
 }
 
-.hard-badge__detail {
-  font-size: 11px;
+.hard-summary__detail {
+  font-size: 12.5px;
   font-weight: 500;
-  line-height: 1.3;
-  opacity: 0.85;
+  line-height: 1.45;
+  opacity: 0.9;
 }
 </style>

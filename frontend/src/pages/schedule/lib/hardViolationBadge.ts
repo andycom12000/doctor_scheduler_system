@@ -1,5 +1,5 @@
 /**
- * 工具列「發布」旁的硬違規警示標籤（#68）：把違規清單歸納成標籤文字。
+ * 違規側欄頂端的硬違規摘要卡（#68）：把違規清單歸納成摘要文字。
  * 純函式，靠 `hardViolationBadge.test.ts` 守住；畫面在 `HardViolationBadge.vue`。
  */
 import type { Violation } from '@/api/types'

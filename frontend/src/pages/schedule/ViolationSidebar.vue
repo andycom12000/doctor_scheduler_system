@@ -6,20 +6,25 @@
  * 「API 只帶 code 與 severity；底色／斜紋／外框由前端決定。公平性是身分組層級的
  * 分數、指不到格子，不出現在這裡」——這裡列出的都是能指到 cellKeys 的違規。
  */
+import { computed } from 'vue'
 import type { Violation } from '@/api/types'
+import HardViolationBadge from './HardViolationBadge.vue'
+import { hardViolationBadgeInfo } from './lib/hardViolationBadge'
 
-defineProps<{ violations: Violation[] }>()
+const props = defineProps<{ violations: Violation[] }>()
 
 const emit = defineEmits<{ jump: [violation: Violation] }>()
+
+// 有硬違規時最上方放深色摘要卡（#68），取代標題旁的計數 tag；沒有時才顯示「無硬違規」。
+const hardSummary = computed(() => hardViolationBadgeInfo(props.violations))
 </script>
 
 <template>
-  <section id="violation-sidebar" class="violation-sidebar" tabindex="-1" aria-labelledby="violation-sidebar-title">
+  <section class="violation-sidebar" aria-labelledby="violation-sidebar-title">
+    <HardViolationBadge v-if="hardSummary" :info="hardSummary" />
     <div class="violation-sidebar__title">
       <span id="violation-sidebar-title" class="k">違規</span>
-      <span class="tag" :class="violations.some((v) => v.severity === 'hard') ? 'tag-accent' : 'tag-outline'">
-        {{ violations.filter((v) => v.severity === 'hard').length ? `${violations.filter((v) => v.severity === 'hard').length} 硬違規` : '無硬違規' }}
-      </span>
+      <span v-if="!hardSummary" class="tag tag-outline">無硬違規</span>
     </div>
     <div class="violation-sidebar__list">
       <button
@@ -51,15 +56,6 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
-}
-
-.violation-sidebar:focus {
-  outline: none;
-}
-
-.violation-sidebar:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
 }
 
 .violation-sidebar {
