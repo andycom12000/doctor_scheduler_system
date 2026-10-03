@@ -22,7 +22,7 @@ public sealed record PublishResult(ScheduleStatus Status, DateTimeOffset Publish
 /// <summary>
 /// 值班表的寫入路徑：指派／清空一格、對調兩格、發布。
 /// 打破硬約束不拒絕（契約 <c>setDuty</c>），包括同一人同一天排在兩區（X1，#68）：多步調整的中間狀態要能存。
-/// 把關在發布：X1 不能用 acknowledgeViolations 略過。
+/// 把關在發布與匯出（<see cref="DoubleBookingGuard"/>，前端另擋列印）：X1 不能用 acknowledgeViolations 略過。
 /// 違規清單一律由 Domain 的檢查器重算，這裡不重寫任何約束語義。
 /// </summary>
 public sealed class ScheduleCommands

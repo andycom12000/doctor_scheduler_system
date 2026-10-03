@@ -63,7 +63,7 @@ public sealed class SchedulerDbContext : DbContext
             e.HasOne<ScheduleEntity>().WithMany().HasForeignKey(x => new { x.Year, x.Month }).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => x.StaffId);
             e.HasIndex(x => x.Date);
-            // 同人同日兩區是允許存的中間狀態（違規 X1，發布時才擋，#68），
+            // 同人同日兩區是允許存的中間狀態（違規 X1，發布與匯出時才擋，#68），
             // 所以刻意不建 (date, staff_id) 唯一索引。
         });
 

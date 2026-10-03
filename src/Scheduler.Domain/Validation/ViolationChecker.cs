@@ -59,7 +59,7 @@ public sealed class ViolationChecker
     /// <summary>
     /// X1：同一人同一天排在兩個以上區域。序列原語以日期為單位、先 Distinct，同日兩格會合併，任何身分都抓不到，所以獨立成結構規則。
     /// 一個（人，日）一筆違規，cellKeys 是他當天所在的每一個 <c>area:</c> 格，前端兩格都能標示。
-    /// 寫入端不擋（排班者多步調整的中間狀態，#68），發布時才擋。
+    /// 寫入端不擋（排班者多步調整的中間狀態，#68），發布與匯出時才擋（前端另擋列印）。
     /// </summary>
     private IEnumerable<Violation> StaffDoubleBooked()
     {

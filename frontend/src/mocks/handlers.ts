@@ -144,7 +144,7 @@ const scheduleHandlers = [
     // 該月尚無值班表時自動建立一份空草稿——這是「從空白手排」的入口。
     // 已發布的值班表也可以改，revision 照常遞增。
     const schedule = ensureSchedule(store, ym)
-    // 同人同日兩區照常寫入，由違規清單的 X1 回報（#68）；把關在發布。
+    // 同人同日兩區照常寫入，由違規清單的 X1 回報（#68）；把關在發布與匯出（前端另擋列印）。
     const key = dutyKey(body.areaId, body.date)
     if (body.staffId) schedule.duties.set(key, body.staffId)
     else schedule.duties.delete(key)
@@ -235,6 +235,7 @@ const scheduleHandlers = [
     if (doubleBooked > 0) {
       return errorResponse(409, 'DOUBLE_BOOKING_PRESENT', `仍有 ${doubleBooked} 項同一人同一天排在兩區，排除後才能匯出`, {
         doubleBookingCount: doubleBooked,
+        hardViolationCount: computeViolations(store, ym).filter((v) => v.severity === 'hard').length,
       })
     }
     const duties = scheduleToDuties(schedule)

@@ -14,9 +14,9 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
 </script>
 
 <template>
-  <section id="violation-sidebar" class="violation-sidebar" tabindex="-1">
+  <section id="violation-sidebar" class="violation-sidebar" tabindex="-1" aria-labelledby="violation-sidebar-title">
     <div class="violation-sidebar__title">
-      <span class="k">違規</span>
+      <span id="violation-sidebar-title" class="k">違規</span>
       <span class="tag" :class="violations.some((v) => v.severity === 'hard') ? 'tag-accent' : 'tag-outline'">
         {{ violations.filter((v) => v.severity === 'hard').length ? `${violations.filter((v) => v.severity === 'hard').length} 硬違規` : '無硬違規' }}
       </span>
@@ -55,6 +55,11 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
 
 .violation-sidebar:focus {
   outline: none;
+}
+
+.violation-sidebar:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .violation-sidebar {

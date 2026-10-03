@@ -35,3 +35,13 @@ export function doubleBookingBlockMessage(violations: readonly Violation[], acti
     ? `還有人同一天排在兩區，排除後才能${action}。`
     : null
 }
+
+/**
+ * 列印前的 fail-closed 把關（#68）：列印沒有後端守門，所以前端列印前重新抓過違規清單，
+ * 用這個判斷能不能印。清單拿不到（`violations` 為 null）或重抓失敗（`loadFailed`）一律不印，
+ * 不能因為快取是空的或留著舊清單就放行。能印回 `null`。
+ */
+export function printBlockMessage(violations: readonly Violation[] | null, loadFailed: boolean): string | null {
+  if (loadFailed || violations === null) return '無法確認違規清單，暫時不能列印，請稍後再試。'
+  return doubleBookingBlockMessage(violations, '列印')
+}

@@ -93,6 +93,13 @@ function cellText(staffId: string, date: string): string {
     .join('、')
 }
 
+/** 同日排在兩區（X1）的格子才有提示；一般格子不要多餘的 title。 */
+function cellTitle(staffId: string, date: string): string | undefined {
+  const areas = areasAt(staffId, date)
+  if (areas.length < 2) return undefined
+  return `同日排在 ${cellText(staffId, date)}，另一區請到區域 × 日修改`
+}
+
 function cellClick(staffId: string, date: string): void {
   const areaId = areasAt(staffId, date)[0]
   if (areaId) emit('cellClick', areaId, date)
@@ -147,6 +154,7 @@ function cellClick(staffId: string, date: string): void {
             type="button"
             class="dp-grid__cell"
             :class="cellClass(row.staffId, day.date, day.isHoliday)"
+            :title="cellTitle(row.staffId, day.date)"
             @click="cellClick(row.staffId, day.date)"
           >
             {{ cellText(row.staffId, day.date) }}
@@ -159,6 +167,7 @@ function cellClick(staffId: string, date: string): void {
           type="button"
           class="dp-grid__cell"
           :class="cellClass(row.staffId, day.date, day.isHoliday)"
+          :title="cellTitle(row.staffId, day.date)"
           @click="cellClick(row.staffId, day.date)"
         >
           {{ cellText(row.staffId, day.date) }}
@@ -332,6 +341,10 @@ function cellClick(staffId: string, date: string): void {
   cursor: pointer;
   font: 600 9px ui-monospace, Menlo, monospace;
   color: var(--color-accent-900);
+  /* 同日兩區（X1）顯示「A、B」可能比格子寬，截斷不撐破（完整內容在 title） */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .dp-grid__cell:hover {

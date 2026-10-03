@@ -36,7 +36,7 @@ import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancy
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
 import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
-import { doubleBookingBlockMessage, hardViolationBadgeInfo } from './lib/hardViolationBadge'
+import { doubleBookingBlockMessage, hardViolationBadgeInfo, printBlockMessage } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
 
 const { ym } = useYearMonth()
@@ -364,11 +364,15 @@ async function runExport(): Promise<void> {
   }
 }
 
-// -- 列印：只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
+// -- 列印：有 X1 或確認不了違規清單就擋（前端列印前重抓，見 printBlockMessage）。只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
 async function runPrint(): Promise<void> {
   toast.clearErrors()
   const month = ym.value
-  const blocked = doubleBookingBlockMessage(violationsRes.data.value?.violations ?? [], '列印')
+  // 列印沒有後端守門：先重新抓一次違規清單再判斷（fail-closed，抓不到就不印）。
+  // reload 不丟例外，失敗會留在 error；快取的舊清單不能當成「確認過」。
+  await violationsRes.reload()
+  if (isStale(month)) return
+  const blocked = printBlockMessage(violationsRes.data.value?.violations ?? null, violationsRes.error.value !== null)
   if (blocked) {
     toast.error(blocked)
     return

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Violation } from '@/api/types'
-import { doubleBookingBlockMessage, hardViolationBadgeInfo } from './hardViolationBadge'
+import { doubleBookingBlockMessage, hardViolationBadgeInfo, printBlockMessage } from './hardViolationBadge'
 
 const v = (code: string, severity: 'hard' | 'soft', id = code): Violation => ({
   id,
@@ -40,5 +40,18 @@ describe('doubleBookingBlockMessage', () => {
     expect(doubleBookingBlockMessage(x1, '列印')).toBe('還有人同一天排在兩區，排除後才能列印。')
     expect(doubleBookingBlockMessage([v('H1_AREA_COVERAGE', 'hard')], '匯出')).toBeNull()
     expect(doubleBookingBlockMessage([], '列印')).toBeNull()
+  })
+})
+
+describe('printBlockMessage', () => {
+  it('清單拿不到或重抓失敗 → fail-closed 不印', () => {
+    expect(printBlockMessage(null, false)).toBe('無法確認違規清單，暫時不能列印，請稍後再試。')
+    expect(printBlockMessage([], true)).toBe('無法確認違規清單，暫時不能列印，請稍後再試。')
+  })
+
+  it('有 X1 → 擋；沒有 X1（含其他硬違規）→ 放行', () => {
+    expect(printBlockMessage([v('X1_STAFF_DOUBLE_BOOKED', 'hard')], false)).toBe('還有人同一天排在兩區，排除後才能列印。')
+    expect(printBlockMessage([v('H1_AREA_COVERAGE', 'hard')], false)).toBeNull()
+    expect(printBlockMessage([], false)).toBeNull()
   })
 })

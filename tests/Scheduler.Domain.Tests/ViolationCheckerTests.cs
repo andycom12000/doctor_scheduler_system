@@ -156,7 +156,7 @@ public class ViolationCheckerTests
         Assert.DoesNotContain(result.Violations, v => v.Code is DefaultConstraints.S1QuotaFairness or DefaultConstraints.S2AreaConsistency or DefaultConstraints.S7FairnessPoint);
     }
 
-    // ---- 結構規則 X1：同人同日兩區（不是約束、不能停用；寫入不擋、發布才擋，#68） ----
+    // ---- 結構規則 X1：同人同日兩區（不是約束、不能停用；寫入不擋、發布與匯出才擋，#68） ----
 
     [Fact]
     public void 同一人同一天排在兩個區域_是硬違規X1_兩格都標_NP也一樣()
