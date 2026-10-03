@@ -219,7 +219,7 @@ async function main() {
     })
 
     await mockOnly('6. PATCH /schedules/2026-09/duties', '依賴 mock 種子的 2026-09 值班表', async () => {
-      // 先從當天的值班表挑一位「9/10 沒班」的在職人員，避免撞到同人同日不變式
+      // 先從當天的值班表挑一位「9/10 沒班」的在職人員，避免造出同人同日兩區（X1）而干擾後面的斷言
       const scheduleRes = await fetch(`${BASE}/schedules/2026-09`)
       const schedule = await scheduleRes.json()
       const onDuty = new Set(

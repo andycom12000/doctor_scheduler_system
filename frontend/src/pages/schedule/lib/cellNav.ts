@@ -41,13 +41,14 @@ export interface JumpTarget {
  * 點了違規清單本身就消失。改成優先反查「那天在哪個區值班」，留在區域 × 日；
  * 查不到值班紀錄（理論上不該發生，保留為防禦）才退回切去日 × 人。
  */
-export function resolveJumpTarget(cellKey: string, dutyMapByStaff: ReadonlyMap<string, string>): JumpTarget | null {
+export function resolveJumpTarget(cellKey: string, dutyMapByStaff: ReadonlyMap<string, readonly string[]>): JumpTarget | null {
   const parsed = parseCellKey(cellKey)
   if (!parsed) return null
   if (parsed.kind === 'area') {
     return { tab: 'area-by-day', domId: domIdForCellKey(cellKey) }
   }
-  const areaId = dutyMapByStaff.get(`${parsed.id}|${parsed.date}`)
+  // 同人同日兩區（X1）時有多個，挑 areaId 排序後的第一個，確定性
+  const areaId = dutyMapByStaff.get(`${parsed.id}|${parsed.date}`)?.[0]
   if (areaId) {
     return { tab: 'area-by-day', domId: domIdForCellKey(`area:${areaId}:${parsed.date}`) }
   }

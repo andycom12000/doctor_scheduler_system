@@ -86,12 +86,12 @@ export function projectRenderIndexToStaffView(
 /**
  * 反方向投影（PR #57 審查回饋 B1）：區域 × 日的右側欄限定只在這個分頁顯示，
  * `staff:` 開頭的違規（H3／H4／H6／H7 本人累計型）如果不投影回區域格，區域 × 日上完全不上色。
- * 用「當天在那個區值班」反查（`dutiesByStaff`：`staffId|date` → `areaId`）；查不到（理論上
+ * 用「當天在那個區值班」反查（`dutiesByStaff`：`staffId|date` → `areaId[]`；同人同日兩區時兩格都投影）；查不到（理論上
  * 不該發生）就跳過。`area:` 開頭的違規原樣併入，同格取 `PRIORITY` 高者。
  */
 export function projectRenderIndexToAreaView(
   index: ReadonlyMap<string, CellRenderKind>,
-  dutiesByStaff: ReadonlyMap<string, string>,
+  dutiesByStaff: ReadonlyMap<string, readonly string[]>,
 ): Map<string, CellRenderKind> {
   const result = new Map<string, CellRenderKind>()
   const upsert = (key: string, kind: CellRenderKind): void => {
@@ -105,9 +105,9 @@ export function projectRenderIndexToAreaView(
       upsert(cellKey, kind)
       continue
     }
-    const areaId = dutiesByStaff.get(`${parsed.id}|${parsed.date}`)
-    if (!areaId) continue // 查不到當天值班區域，轉不出格子，跳過
-    upsert(areaCellKey(areaId, parsed.date), kind)
+    const areaIds = dutiesByStaff.get(`${parsed.id}|${parsed.date}`)
+    if (!areaIds) continue // 查不到當天值班區域，轉不出格子，跳過
+    for (const areaId of areaIds) upsert(areaCellKey(areaId, parsed.date), kind)
   }
   return result
 }

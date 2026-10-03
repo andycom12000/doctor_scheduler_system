@@ -129,10 +129,19 @@ describe('projectRenderIndexToAreaView', () => {
     const index = buildCellRenderIndex([
       violation({ code: 'H4_MIN_GAP', cellKeys: ['staff:staff-001:2026-09-14'] }),
     ])
-    const dutiesByStaff = new Map([['staff-001|2026-09-14', 'area-icu']])
+    const dutiesByStaff = new Map([['staff-001|2026-09-14', ['area-icu']]])
     const projected = projectRenderIndexToAreaView(index, dutiesByStaff)
     expect(projected.get('area:area-icu:2026-09-14')).toBe('violation-bg')
     expect(projected.has('staff:staff-001:2026-09-14')).toBe(false)
+  })
+
+  it('同人同日兩區（X1）時 staff: 違規兩個區域格都投影', () => {
+    const index = buildCellRenderIndex([
+      violation({ code: 'H3_QUOTA_CAP', cellKeys: ['staff:staff-001:2026-09-14'] }),
+    ])
+    const projected = projectRenderIndexToAreaView(index, new Map([['staff-001|2026-09-14', ['area-a', 'area-icu']]]))
+    expect(projected.get('area:area-a:2026-09-14')).toBe('violation-bg')
+    expect(projected.get('area:area-icu:2026-09-14')).toBe('violation-bg')
   })
 
   it('查不到當天值班區域就跳過（理論上不該發生，防禦用）', () => {
@@ -156,7 +165,7 @@ describe('projectRenderIndexToAreaView', () => {
       violation({ code: 'H2_ELIGIBILITY', cellKeys: ['area:area-a:2026-09-05'] }),
       violation({ code: 'H5_BLOCKED_DAY', cellKeys: ['staff:staff-003:2026-09-05'] }),
     ])
-    const dutiesByStaff = new Map([['staff-003|2026-09-05', 'area-a']])
+    const dutiesByStaff = new Map([['staff-003|2026-09-05', ['area-a']]])
     const projected = projectRenderIndexToAreaView(index, dutiesByStaff)
     expect(projected.get('area:area-a:2026-09-05')).toBe('violation-stripe')
   })

@@ -249,7 +249,9 @@ async function jumpToViolation(violation: Violation): Promise<void> {
 async function jumpToViolationList(): Promise<void> {
   activeTab.value = 'area-by-day'
   await nextTick()
-  document.getElementById('violation-sidebar')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  const sidebar = document.getElementById('violation-sidebar')
+  sidebar?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  sidebar?.focus({ preventScroll: true })
 }
 
 // -- 拖拉對調（區域 × 日）-------------------------------------------------------------

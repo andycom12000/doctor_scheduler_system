@@ -73,7 +73,7 @@ public sealed class ScheduleCommands
         return new MutationResult(header.Revision, new[] { CellOf(cell, staffId) }, violations);
     }
 
-    /// <summary>對調兩格。該月尚無值班表時 404，不會憑空建表。兩格互為對方的來源，檢查同日另一區時把對方排除。</summary>
+    /// <summary>對調兩格。該月尚無值班表時 404，不會憑空建表。同人同日兩區照常寫入，由違規清單的 X1 回報。</summary>
     public async Task<MutationResult> SwapAsync(YearMonth month, CellRef a, CellRef b, CancellationToken cancellationToken = default)
     {
         var loaded = await _loader.LoadAsync(month, cancellationToken);

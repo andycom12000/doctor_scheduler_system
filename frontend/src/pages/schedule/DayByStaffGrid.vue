@@ -29,7 +29,7 @@ const props = defineProps<{
   areas: Area[]
   days: DayColumn[]
   pointBoardGroups: PointBoardGroup[]
-  dutiesByStaff: Map<string, string>
+  dutiesByStaff: Map<string, string[]>
   staffRenderIndex: Map<string, CellRenderKind>
   vacancyCounts: Map<string, number>
   staffDirectory: Map<string, StaffDirectoryEntry>
@@ -67,12 +67,13 @@ const staffColumns = computed(() =>
   staffFooterColumns(props.pointBoardGroups, extraStaffRows.value, props.dutiesByStaff),
 )
 
-function areaAt(staffId: string, date: string): string | undefined {
-  return props.dutiesByStaff.get(`${staffId}|${date}`)
+/** 當天的區域；同人同日兩區（X1，#68）時有多個。 */
+function areasAt(staffId: string, date: string): string[] {
+  return props.dutiesByStaff.get(`${staffId}|${date}`) ?? []
 }
 
 function cellClass(staffId: string, date: string, isHoliday: boolean): Record<string, boolean> {
-  const areaId = areaAt(staffId, date)
+  const areaId = areasAt(staffId, date)[0]
   const render = props.staffRenderIndex.get(staffCellKey(staffId, date)) ?? null
   const isBlocked = props.blockedSet.has(`${staffId}|${date}`)
   const kind = cellKindOf({ hasDuty: Boolean(areaId), isHoliday, renderKind: render, isBlocked })
@@ -87,12 +88,13 @@ function cellClass(staffId: string, date: string, isHoliday: boolean): Record<st
 }
 
 function cellText(staffId: string, date: string): string {
-  const areaId = areaAt(staffId, date)
-  return areaId ? areaLabelById.value.get(areaId) ?? '' : ''
+  return areasAt(staffId, date)
+    .map((id) => areaLabelById.value.get(id) ?? '')
+    .join('、')
 }
 
 function cellClick(staffId: string, date: string): void {
-  const areaId = areaAt(staffId, date)
+  const areaId = areasAt(staffId, date)[0]
   if (areaId) emit('cellClick', areaId, date)
 }
 </script>

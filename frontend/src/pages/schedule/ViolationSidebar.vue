@@ -14,7 +14,7 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
 </script>
 
 <template>
-  <section id="violation-sidebar" class="violation-sidebar">
+  <section id="violation-sidebar" class="violation-sidebar" tabindex="-1">
     <div class="violation-sidebar__title">
       <span class="k">違規</span>
       <span class="tag" :class="violations.some((v) => v.severity === 'hard') ? 'tag-accent' : 'tag-outline'">
@@ -51,6 +51,10 @@ const emit = defineEmits<{ jump: [violation: Violation] }>()
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.violation-sidebar:focus {
+  outline: none;
 }
 
 .violation-sidebar {

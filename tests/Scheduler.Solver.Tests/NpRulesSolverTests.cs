@@ -30,6 +30,20 @@ public sealed class NpRulesSolverTests
     }
 
     [Fact]
+    public async Task 草稿含同人同日兩區_X1_照常求解_輸出沒有X1_也沒有例外()
+    {
+        // 既有草稿只當 Hints()：同一人同一天的兩個 hint 互斥，求解器要能照常解、輸出仍是每人每天最多一格
+        var b = new ContextBuilder().WithStaff("NP-1", DefaultRanks.NP)
+            .WithDuty("NP-1", 5, "area-a").WithDuty("NP-1", 5, "area-b");
+        var ctx = b.Build();
+
+        var result = await SolverFixture.SolveAsync(ctx, limit: TimeSpan.FromSeconds(4));
+
+        SolverFixture.AssertOnlyCoverageViolations(ctx, result.Duties);
+        Assert.Empty(result.Duties.GroupBy(d => (d.StaffId, d.Date)).Where(g => g.Count() > 1));
+    }
+
+    [Fact]
     public async Task NP_上月已連六_月初第一天不能再值()
     {
         var b = new ContextBuilder().WithStaff("NP-1", DefaultRanks.NP);
