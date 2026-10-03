@@ -139,10 +139,11 @@ paths:
         不需要另設建立端點。**已發布的值班表也可以改**（臨時換人是常態），
         `revision` 照常遞增；月結轉要重算的話再呼叫一次 `publish`。
 
-        **唯一會拒絕的排班狀態：同一人同一天已在另一區。** 這不是約束、是值班表的
-        結構不變式（跟「同一格兩個人」同一層次），不在約束設定裡、使用者不能停用，
-        回 `409 STAFF_ALREADY_ON_DUTY`，`details` 帶他當天已在的 `areaId`。
-        求解器端以「每人每天最多一格」建模，與此一致。
+        **同一人同一天排在兩區也照常寫入**（排班者連續調整時，這常是中間狀態），
+        以硬違規 `X1_STAFF_DOUBLE_BOOKED` 回報（一筆違規、`cellKeys` 含他當天所在的每一個 `area:` 格）。
+        這條規則不是約束、不在約束設定裡、不能停用；把關在發布與匯出：有它就不能發布、不能匯出（前端列印也擋），
+        `acknowledgeViolations` 也略過不了（見 `publishSchedule`）。
+        求解器端仍以「每人每天最多一格」建模，求解輸出不會有它。
 
         清空一格（`staffId: null`）時回應的 `duties` 仍帶那一格，`staffId` 為 `null`，
         前端才能就地更新。
@@ -157,11 +158,6 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MutationResult' }
-        '409':
-          description: 同一人同一天已在另一區（`STAFF_ALREADY_ON_DUTY`）
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
           description: |
             請求本身無效（人員不存在、日期不在本月、區域不存在）。
@@ -178,8 +174,8 @@ paths:
       operationId: swapDuties
       summary: 對調兩格的值班人員
       description: |
-        兩格日期不同時，對調後任一人若在新日期已在另一區，
-        與 `setDuty` 一樣回 `409 STAFF_ALREADY_ON_DUTY`。
+        兩格日期不同時，對調後任一人若在新日期已在另一區，與 `setDuty` 一樣照常寫入，
+        以硬違規 `X1_STAFF_DOUBLE_BOOKED` 回報，不拒絕。
       requestBody:
         required: true
         content:
@@ -193,11 +189,6 @@ paths:
               schema: { $ref: '#/components/schemas/MutationResult' }
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          description: 同一人同一天已在另一區（`STAFF_ALREADY_ON_DUTY`）
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
           description: 請求本身無效（兩格是同一格、區域不存在、日期不在本月）
           content:
@@ -216,6 +207,9 @@ paths:
         （`Scheduler.Domain` 不得引用 OR-Tools，見 ADR-0002）。
 
         會讀上個月的尾巴以檢查跨月的值休休與 NP 連續天數。
+
+        **結構規則 `X1_STAFF_DOUBLE_BOOKED`**（同人同日兩區）也會出現在違規清單，
+        它不是約束、不能停用。
 
         **哪些約束會產生逐格違規**：全部硬約束，以及軟約束中的 `Preference`
         （每一格本身就偏離）。`Fairness` 是身分組層級的分數、`Consistency` 是個人
@@ -243,8 +237,15 @@ paths:
         發布時結算**月結轉**（同組內剩餘額度偏少者的差額），供下個月的公平性目標
         當起始偏移使用。
 
-        仍有硬約束違規時回 `409`，**除非** body 帶 `acknowledgeViolations: true`。
+        **同一人同一天排在兩區**（`X1_STAFF_DOUBLE_BOOKED`）時一律回 `409 DOUBLE_BOOKING_PRESENT`，
+        **`acknowledgeViolations` 也略過不了**：一個人不可能同時在兩區值班，這份班表必然有錯。
+        實際保證：發布、匯出、列印的當下一定沒有同人同日兩區（發布、匯出由後端擋；列印由前端列印前重新確認違規清單擋，確認不了也不印）。已發布後仍可逐格修改而再出現，
+        此時重新發布與匯出（前端也含列印）都會被擋，直到排除。
+        `details` 帶 `doubleBookingCount`（這類違規的筆數）與 `hardViolationCount`。
+
+        其他硬約束違規時回 `409 HARD_VIOLATIONS_PRESENT`，**除非** body 帶 `acknowledgeViolations: true`。
         排班者是唯一權威，系統要求的是明確確認，不是拒絕。
+        檢查順序：先擋 `DOUBLE_BOOKING_PRESENT`，再走 `HARD_VIOLATIONS_PRESENT`。
 
         **可重複呼叫。** 已發布的值班表被逐格改過之後再發布一次，會以當下的內容
         **覆寫**該月的月結轉，`publishedAt` 更新為最後一次。
@@ -273,7 +274,9 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 尚有硬約束違規且未確認
+          description: |
+            `DOUBLE_BOOKING_PRESENT`（同人同日兩區，不能略過）或
+            `HARD_VIOLATIONS_PRESENT`（尚有硬約束違規且未確認）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -298,6 +301,9 @@ paths:
 
         portable 環境沒有可放暫存檔的地方（`data/` 以外都不能寫），
         也沒有真的 HTTP server 能提供 `expiresAt` 型的連結。
+
+        **有同人同日兩區（`X1_STAFF_DOUBLE_BOOKED`）時回 `409 DOUBLE_BOOKING_PRESENT`**，
+        不論草稿或已發布，理由同 `publishSchedule`：這份班表必然有錯，不該流出去。
       responses:
         '200':
           description: xlsx 檔案內容
@@ -310,6 +316,11 @@ paths:
               schema: { type: string, format: binary }
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: 有同人同日兩區（`DOUBLE_BOOKING_PRESENT`），排除後才能匯出
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '422':
           description: layout 不是 area-by-day 或 day-by-staff
           content:
@@ -1194,7 +1205,7 @@ components:
         - BLOCKED_DAY_CAP_EXCEEDED       # 超過每人每月不可排班日上限
         - HARD_VIOLATIONS_PRESENT        # 發布時仍有硬約束違規且未確認
         - SCHEDULE_ALREADY_PUBLISHED     # 對已發布的值班表套用變體
-        - STAFF_ALREADY_ON_DUTY          # 同一人同一天已在另一區（結構不變式，非約束）
+        - DOUBLE_BOOKING_PRESENT         # 發布或匯出時仍有同人同日兩區；發布也不能用 acknowledgeViolations 略過
         - AREA_IN_USE                    # 刪除仍被值班表引用的區域
         - AREA_TYPE_IN_USE               # 刪除仍被區域引用的區域類型
         - RANK_IN_USE                    # 刪除仍被人員／矩陣／約束引用的身分或身分組
@@ -1394,8 +1405,11 @@ components:
             前端才能做 diff 與去重。
         code:
           type: string
-          description: 對應 ConstraintSettings 裡的約束代碼
-          examples: ['H1_AREA_COVERAGE']
+          description: |
+            對應 ConstraintSettings 裡的約束代碼；或結構規則代碼 `X1_STAFF_DOUBLE_BOOKED`
+            （同一人同一天排在兩區以上：硬違規、不在約束設定裡、不能停用、發布時不能略過；
+            `cellKeys` 是他當天所在的每一個 `area:` 格）。
+          examples: ['H1_AREA_COVERAGE', 'X1_STAFF_DOUBLE_BOOKED']
         severity: { $ref: '#/components/schemas/Severity' }
         cellKeys:
           type: array

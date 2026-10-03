@@ -18,6 +18,16 @@ public sealed record Violation(string Id, string Code, Severity Severity, IReadO
         return new Violation(ComputeId(constraint.Code, sorted), constraint.Code, constraint.Severity, sorted, message);
     }
 
+    /// <summary>
+    /// 結構規則產生的違規（不是原語、不在 <c>ConstraintSettings</c> 裡），例如 <see cref="StructuralRules.StaffDoubleBooked"/>。
+    /// 嚴重度由規則自己決定，不能被設定停用或降級。
+    /// </summary>
+    public static Violation CreateStructural(string code, Severity severity, IEnumerable<string> cellKeys, string message)
+    {
+        var sorted = cellKeys.Distinct(StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal).ToArray();
+        return new Violation(ComputeId(code, sorted), code, severity, sorted, message);
+    }
+
     /// <summary>SHA-256(code | key1,key2,…) 前 8 bytes 的小寫 hex。夠短、夠穩定、夠不撞。</summary>
     public static string ComputeId(string code, IReadOnlyList<string> sortedCellKeys)
     {
@@ -25,6 +35,16 @@ public sealed record Violation(string Id, string Code, Severity Severity, IReadO
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
     }
+}
+
+/// <summary>
+/// 結構規則的代碼。它們不是九個原語之一、不在約束設定裡、不能停用，代碼用 <c>X</c> 開頭與 H1–H7／S1–S7 區分
+/// （ADR-0002「不是每條規則都是原語」，#68）。
+/// </summary>
+public static class StructuralRules
+{
+    /// <summary>同一人同一天排在兩個以上區域。硬違規；發布時不能用 acknowledgeViolations 略過。</summary>
+    public const string StaffDoubleBooked = "X1_STAFF_DOUBLE_BOOKED";
 }
 
 /// <summary><c>POST /schedules/{ym}/validate</c> 的回應本體。</summary>

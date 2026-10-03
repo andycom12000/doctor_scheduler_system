@@ -45,9 +45,15 @@ describe('resolveJumpTarget', () => {
   })
 
   it('staff: 開頭且查得到當天值班區域時，留在區域 × 日、捲到那個區域格（PR #57 審查回饋 B1）', () => {
-    const dutyMapByStaff = new Map([['staff-001|2026-09-14', 'area-icu']])
+    const dutyMapByStaff = new Map([['staff-001|2026-09-14', ['area-icu']]])
     const target = resolveJumpTarget('staff:staff-001:2026-09-14', dutyMapByStaff)
     expect(target).toEqual({ tab: 'area-by-day', domId: 'sc-cell-area-area-icu-2026-09-14' })
+  })
+
+  it('同人同日兩區（X1）時跳到第一個區域格（確定性）', () => {
+    const dutyMapByStaff = new Map([['staff-001|2026-09-14', ['area-a', 'area-icu']]])
+    const target = resolveJumpTarget('staff:staff-001:2026-09-14', dutyMapByStaff)
+    expect(target).toEqual({ tab: 'area-by-day', domId: 'sc-cell-area-area-a-2026-09-14' })
   })
 
   it('staff: 開頭但查不到值班紀錄時，退回切去日 × 人（防禦分支）', () => {

@@ -50,8 +50,8 @@
   `Schedules/ScheduleCommands`（setDuty 自動建草稿、swap、publish）、`BlockedDays/BlockedDayCommands`、
   `Settings/SettingsCommands`（五份文件整份取代 + 逐月覆寫）、`Calendars/CalendarCommands`、
   `People/StaffCommands`。寫入走 `IUnitOfWork.CommitAsync`：repository 只登記變更、不落盤，
-  一個用例一次 commit。setDuty 只擋結構不變式（同人同日另一區 → `STAFF_ALREADY_ON_DUTY`），
-  硬約束違規照收、回全量違規；publish 用 Domain 的 `CarryOverSettlement` 結算月結轉，
+  一個用例一次 commit。setDuty／swap 什麼都不擋（同人同日兩區也照收，違規碼 `X1_STAFF_DOUBLE_BOOKED`，#68），
+  硬約束違規照收、回全量違規；publish 與 export 遇 X1 一律 409 `DOUBLE_BOOKING_PRESENT`（ack 略不過；`DoubleBookingGuard` 共用），其他硬違規才吃 ack；publish 用 Domain 的 `CarryOverSettlement` 結算月結轉，
   第一次發布才寫 `carry_over_applied`（ADR-0004）。設定 PUT 在 `SettingsCommands` 守住讀取路徑
   對設定形狀的假設（主鍵重複、指到不存在的類型／組、原語缺參數、公平性查表缺列、範圍空陣列
   正規化成 null），否則一次 PUT 會讓之後每個 GET 都 500。發布時間戳從 DI 的 `TimeProvider` 拿

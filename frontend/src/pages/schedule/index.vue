@@ -35,6 +35,7 @@ import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancy
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
 import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
+import { doubleBookingBlockMessage, printBlockMessage } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
 
 const { ym } = useYearMonth()
@@ -283,7 +284,8 @@ async function runValidate(): Promise<void> {
   }
 }
 
-// -- 發布／重新發布：409 HARD_VIOLATIONS_PRESENT → 確認 → 帶 acknowledgeViolations 重發 -----
+// -- 發布／重新發布：409 HARD_VIOLATIONS_PRESENT → 確認 → 帶 acknowledgeViolations 重發。
+// 409 DOUBLE_BOOKING_PRESENT（同人同日兩區）不能確認略過，不跳確認，直接走 fail 的錯誤 toast（#68）-----
 const publishing = ref(false)
 
 /** 回傳是否發布成功（匯出「先發布再匯出」要接著用）。失敗與取消都是 false，訊息已經顯示。 */
@@ -317,7 +319,7 @@ async function runPublish(month = ym.value): Promise<boolean> {
   }
 }
 
-// -- 匯出 Excel：版面跟著目前檢視；草稿先問要不要發布 ----------------------------------------
+// -- 匯出 Excel：版面跟著目前檢視；草稿先問要不要發布。有 X1 直接擋；後端 409 DOUBLE_BOOKING_PRESENT 走 fail 的錯誤 toast ----------------------------------------
 const exporting = ref(false)
 
 async function downloadExport(month: string): Promise<void> {
@@ -329,6 +331,12 @@ async function runExport(): Promise<void> {
   if (exporting.value) return
   toast.clearErrors()
   const month = ym.value
+  // 同人同日兩區：不跳草稿提示、不打 API，直接擋（後端匯出也會 409，#68）
+  const blocked = doubleBookingBlockMessage(violationsRes.data.value?.violations ?? [], '匯出')
+  if (blocked) {
+    toast.error(blocked)
+    return
+  }
   exporting.value = true
   try {
     if (!isPublished.value) {
@@ -344,10 +352,19 @@ async function runExport(): Promise<void> {
   }
 }
 
-// -- 列印：只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
+// -- 列印：有 X1 或確認不了違規清單就擋（前端列印前重抓，見 printBlockMessage）。只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
 async function runPrint(): Promise<void> {
   toast.clearErrors()
   const month = ym.value
+  // 列印沒有後端守門：先重新抓一次違規清單再判斷（fail-closed，抓不到就不印）。
+  // reload 不丟例外，失敗會留在 error；快取的舊清單不能當成「確認過」。
+  await violationsRes.reload()
+  if (isStale(month)) return
+  const blocked = printBlockMessage(violationsRes.data.value?.violations ?? null, violationsRes.error.value !== null)
+  if (blocked) {
+    toast.error(blocked)
+    return
+  }
   if (!isPublished.value) {
     const decision = await promptDraftOutput('列印')
     if (decision === 'cancel') return

@@ -97,29 +97,6 @@ function toMutationResult(
   }
 }
 
-/**
- * 結構不變式：同一人同一天最多一格。回他當天已在的另一區 areaId，沒有就 null。
- * 這不是約束（不在約束設定裡、不能停用），跟「同一格兩個人」同一層次，
- * 所以在寫入時直接拒絕，而不是產生違規。
- */
-function otherAreaOnDate(
-  schedule: ReturnType<typeof ensureSchedule>,
-  staffId: string,
-  date: string,
-  exceptAreaId: string,
-): string | null {
-  for (const area of store.areas) {
-    if (area.id === exceptAreaId) continue
-    if (schedule.duties.get(dutyKey(area.id, date)) === staffId) return area.id
-  }
-  return null
-}
-
-function staffAlreadyOnDuty(staffId: string, date: string, areaId: string) {
-  const name = store.staff.find((s) => s.id === staffId)?.name ?? staffId
-  return errorResponse(409, 'STAFF_ALREADY_ON_DUTY', `${name} 在 ${date} 已排在另一區`, { staffId, date, areaId })
-}
-
 // ---------------------------------------------------------------------------
 // health
 // ---------------------------------------------------------------------------
@@ -167,11 +144,7 @@ const scheduleHandlers = [
     // 該月尚無值班表時自動建立一份空草稿——這是「從空白手排」的入口。
     // 已發布的值班表也可以改，revision 照常遞增。
     const schedule = ensureSchedule(store, ym)
-    if (body.staffId) {
-      const other = otherAreaOnDate(schedule, body.staffId, body.date, body.areaId)
-      if (other) return staffAlreadyOnDuty(body.staffId, body.date, other)
-    }
-
+    // 同人同日兩區照常寫入，由違規清單的 X1 回報（#68）；把關在發布與匯出（前端另擋列印）。
     const key = dutyKey(body.areaId, body.date)
     if (body.staffId) schedule.duties.set(key, body.staffId)
     else schedule.duties.delete(key)
@@ -195,23 +168,7 @@ const scheduleHandlers = [
       return errorResponse(422, 'INVALID_REQUEST', '對調的兩格是同一格')
     }
 
-    // 對調後 A 的人落到 b 格、B 的人落到 a 格，不能撞到同人同日另一區。照後端 SwapAsync：
-    // 先把 a、b 兩格（區域＋日期）一起排除，再找目標日的其他區，同日跨日都檢查。
-    // 不能只比區域——那會把「同區、別天」的格子當成來源格放行（案主驗收 #65 時踩到）。
-    const isSwapCell = (areaId: string, date: string) =>
-      (areaId === body.a.areaId && date === body.a.date) || (areaId === body.b.areaId && date === body.b.date)
-    const onDutyElsewhere = (staffId: string, date: string): string | null =>
-      store.areas.find((area) => !isSwapCell(area.id, date) && schedule.duties.get(dutyKey(area.id, date)) === staffId)
-        ?.id ?? null
-    if (staffA) {
-      const other = onDutyElsewhere(staffA, body.b.date)
-      if (other) return staffAlreadyOnDuty(staffA, body.b.date, other)
-    }
-    if (staffB) {
-      const other = onDutyElsewhere(staffB, body.a.date)
-      if (other) return staffAlreadyOnDuty(staffB, body.a.date, other)
-    }
-
+    // 對調後同人同日兩區也照常寫入，由違規清單的 X1 回報（#68）。
     if (staffB) schedule.duties.set(keyA, staffB)
     else schedule.duties.delete(keyA)
     if (staffA) schedule.duties.set(keyB, staffA)
@@ -235,6 +192,14 @@ const scheduleHandlers = [
     if (!schedule) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
 
     const violations = computeViolations(store, ym)
+    // X1 同人同日兩區：不論 acknowledgeViolations 為何都擋，先於 HARD_VIOLATIONS_PRESENT（#68）
+    const doubleBooked = violations.filter((v) => v.code === 'X1_STAFF_DOUBLE_BOOKED').length
+    if (doubleBooked > 0) {
+      return errorResponse(409, 'DOUBLE_BOOKING_PRESENT', `仍有 ${doubleBooked} 項同一人同一天排在兩區，排除後才能發布`, {
+        doubleBookingCount: doubleBooked,
+        hardViolationCount: violations.filter((v) => v.severity === 'hard').length,
+      })
+    }
     const hasHardViolations = violations.some((v) => v.severity === 'hard')
     if (hasHardViolations && !body?.acknowledgeViolations) {
       return errorResponse(409, 'HARD_VIOLATIONS_PRESENT', '仍有硬約束違規，需明確確認才能發布')
@@ -265,6 +230,14 @@ const scheduleHandlers = [
     }
     const schedule = store.schedules.get(ym)
     if (!schedule) return errorResponse(404, 'NOT_FOUND', `找不到 ${ym} 的值班表`)
+    // 同人同日兩區（X1）不論草稿或已發布都不匯出，與後端 DoubleBookingGuard 一致（#68）
+    const doubleBooked = computeViolations(store, ym).filter((v) => v.code === 'X1_STAFF_DOUBLE_BOOKED').length
+    if (doubleBooked > 0) {
+      return errorResponse(409, 'DOUBLE_BOOKING_PRESENT', `仍有 ${doubleBooked} 項同一人同一天排在兩區，排除後才能匯出`, {
+        doubleBookingCount: doubleBooked,
+        hardViolationCount: computeViolations(store, ym).filter((v) => v.severity === 'hard').length,
+      })
+    }
     const duties = scheduleToDuties(schedule)
 
     // 簡化：不是真正的 xlsx，回一份最小的 CSV 位元組，content-type 與檔名照契約。

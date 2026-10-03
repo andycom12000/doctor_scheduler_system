@@ -85,10 +85,19 @@ export function dutiesByArea(duties: readonly Duty[]): Map<string, string> {
   return map
 }
 
-/** `staffId|date` → `areaId`，日 × 人檢視查表用。 */
-export function dutiesByStaff(duties: readonly Duty[]): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const duty of duties) map.set(`${duty.staffId}|${duty.date}`, duty.areaId)
+/**
+ * `staffId|date` → `areaId[]`，日 × 人檢視查表用。正常一格一個區域；同人同日兩區（X1，#68）時
+ * 有多個，依 areaId 排序讓顯示與跳轉都是確定性的。
+ */
+export function dutiesByStaff(duties: readonly Duty[]): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const duty of duties) {
+    const key = `${duty.staffId}|${duty.date}`
+    const list = map.get(key)
+    if (list) list.push(duty.areaId)
+    else map.set(key, [duty.areaId])
+  }
+  for (const list of map.values()) list.sort()
   return map
 }
 
@@ -158,7 +167,7 @@ export interface StaffFooterColumn {
 export function staffFooterColumns(
   groups: readonly PointBoardGroup[],
   extraStaff: readonly { staffId: string }[],
-  dutiesByStaff: ReadonlyMap<string, string>,
+  dutiesByStaff: ReadonlyMap<string, readonly string[]>,
 ): StaffFooterColumn[] {
   const columns: StaffFooterColumn[] = []
   for (const group of groups) {
@@ -174,8 +183,8 @@ export function staffFooterColumns(
   }
   for (const extra of extraStaff) {
     let duties = 0
-    for (const key of dutiesByStaff.keys()) {
-      if (key.startsWith(`${extra.staffId}|`)) duties += 1
+    for (const [key, areaIds] of dutiesByStaff) {
+      if (key.startsWith(`${extra.staffId}|`)) duties += areaIds.length
     }
     columns.push({ staffId: extra.staffId, duties, quotaLabel: '—', quotaTitle: '不在點數看板', quotaAtCap: false })
   }

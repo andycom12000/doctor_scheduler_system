@@ -29,7 +29,7 @@ const props = defineProps<{
   areas: Area[]
   days: DayColumn[]
   pointBoardGroups: PointBoardGroup[]
-  dutiesByStaff: Map<string, string>
+  dutiesByStaff: Map<string, string[]>
   staffRenderIndex: Map<string, CellRenderKind>
   vacancyCounts: Map<string, number>
   staffDirectory: Map<string, StaffDirectoryEntry>
@@ -67,12 +67,13 @@ const staffColumns = computed(() =>
   staffFooterColumns(props.pointBoardGroups, extraStaffRows.value, props.dutiesByStaff),
 )
 
-function areaAt(staffId: string, date: string): string | undefined {
-  return props.dutiesByStaff.get(`${staffId}|${date}`)
+/** 當天的區域；同人同日兩區（X1，#68）時有多個。 */
+function areasAt(staffId: string, date: string): string[] {
+  return props.dutiesByStaff.get(`${staffId}|${date}`) ?? []
 }
 
 function cellClass(staffId: string, date: string, isHoliday: boolean): Record<string, boolean> {
-  const areaId = areaAt(staffId, date)
+  const areaId = areasAt(staffId, date)[0]
   const render = props.staffRenderIndex.get(staffCellKey(staffId, date)) ?? null
   const isBlocked = props.blockedSet.has(`${staffId}|${date}`)
   const kind = cellKindOf({ hasDuty: Boolean(areaId), isHoliday, renderKind: render, isBlocked })
@@ -87,12 +88,20 @@ function cellClass(staffId: string, date: string, isHoliday: boolean): Record<st
 }
 
 function cellText(staffId: string, date: string): string {
-  const areaId = areaAt(staffId, date)
-  return areaId ? areaLabelById.value.get(areaId) ?? '' : ''
+  return areasAt(staffId, date)
+    .map((id) => areaLabelById.value.get(id) ?? '')
+    .join('、')
+}
+
+/** 同日排在兩區（X1）的格子才有提示；一般格子不要多餘的 title。 */
+function cellTitle(staffId: string, date: string): string | undefined {
+  const areas = areasAt(staffId, date)
+  if (areas.length < 2) return undefined
+  return `同日排在 ${cellText(staffId, date)}，另一區請到區域 × 日修改`
 }
 
 function cellClick(staffId: string, date: string): void {
-  const areaId = areaAt(staffId, date)
+  const areaId = areasAt(staffId, date)[0]
   if (areaId) emit('cellClick', areaId, date)
 }
 </script>
@@ -145,6 +154,7 @@ function cellClick(staffId: string, date: string): void {
             type="button"
             class="dp-grid__cell"
             :class="cellClass(row.staffId, day.date, day.isHoliday)"
+            :title="cellTitle(row.staffId, day.date)"
             @click="cellClick(row.staffId, day.date)"
           >
             {{ cellText(row.staffId, day.date) }}
@@ -157,6 +167,7 @@ function cellClick(staffId: string, date: string): void {
           type="button"
           class="dp-grid__cell"
           :class="cellClass(row.staffId, day.date, day.isHoliday)"
+          :title="cellTitle(row.staffId, day.date)"
           @click="cellClick(row.staffId, day.date)"
         >
           {{ cellText(row.staffId, day.date) }}
@@ -330,6 +341,10 @@ function cellClick(staffId: string, date: string): void {
   cursor: pointer;
   font: 600 9px ui-monospace, Menlo, monospace;
   color: var(--color-accent-900);
+  /* 同日兩區（X1）顯示「A、B」可能比格子寬，截斷不撐破（完整內容在 title） */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .dp-grid__cell:hover {

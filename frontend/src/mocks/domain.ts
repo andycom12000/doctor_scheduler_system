@@ -321,6 +321,11 @@ export function violationId(code: string, cellKeys: string[]): string {
   return fnv1a(`${code}|${[...cellKeys].sort().join(',')}`)
 }
 
+/** `2026-09-05` → `9/5`，對齊後端訊息的 `M/d`。 */
+function shortDate(date: string): string {
+  return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`
+}
+
 function makeViolation(code: string, severity: Severity, cellKeys: string[], message: string): Violation {
   return { id: violationId(code, cellKeys), code, severity, cellKeys, message }
 }
@@ -569,6 +574,30 @@ export function computeViolationsForDuties(
     }
   }
 
+  // X1 結構規則（不是原語、不看約束設定、不能停用）：同一人同一天排在兩區以上。
+  // 一個（人，日）一筆，cellKeys 含他當天所在的每個 area 格，對齊 ViolationChecker.StaffDoubleBooked。
+  const areasByStaffDate = new Map<string, { staffId: string; date: string; areaIds: string[] }>()
+  for (const [key, staffId] of dutyMap) {
+    const { areaId, date } = parseDutyKey(key)
+    const groupKey = `${staffId}|${date}`
+    const entry = areasByStaffDate.get(groupKey) ?? { staffId, date, areaIds: [] }
+    entry.areaIds.push(areaId)
+    areasByStaffDate.set(groupKey, entry)
+  }
+  for (const { staffId, date, areaIds } of areasByStaffDate.values()) {
+    if (areaIds.length < 2) continue
+    const staff = store.staff.find((s) => s.id === staffId)
+    const names = areaIds.map((id) => store.areas.find((a) => a.id === id)?.name ?? id)
+    violations.push(
+      makeViolation(
+        'X1_STAFF_DOUBLE_BOOKED',
+        'hard',
+        areaIds.map((id) => areaCellKey(id, date)),
+        `${staff?.name ?? staffId} ${shortDate(date)} 同時排在 ${names.join('、')}`,
+      ),
+    )
+  }
+
   return violations
 }
 
@@ -717,11 +746,14 @@ export function computeCandidates(store: MockStore, ym: string, areaId: string, 
     (store.blockedDays.get(ym) ?? []).filter((e) => e.date === date).map((e) => e.staffId),
   )
   const schedule = store.schedules.get(ym)
-  const assignedElsewhereToday = new Set<string>()
+  // 當天已在其他區的人 → 那些區的 areaId（同人同日兩區 X1，#68）
+  const elsewhereToday = new Map<string, string[]>()
   if (schedule) {
     for (const [key, sid] of schedule.duties) {
       const parsed = parseDutyKey(key)
-      if (parsed.date === date && parsed.areaId !== areaId) assignedElsewhereToday.add(sid)
+      if (parsed.date === date && parsed.areaId !== areaId) {
+        elsewhereToday.set(sid, [...(elsewhereToday.get(sid) ?? []), parsed.areaId])
+      }
     }
   }
 
@@ -738,7 +770,12 @@ export function computeCandidates(store: MockStore, ym: string, areaId: string, 
     const blockingReasons: string[] = []
     const warnings: string[] = []
     if (blockedToday.has(staff.id)) blockingReasons.push('該日已登記不可排班')
-    if (assignedElsewhereToday.has(staff.id)) blockingReasons.push('當日已排在其他區域')
+    const elsewhere = elsewhereToday.get(staff.id)
+    if (elsewhere) {
+      // 對齊後端 X1 訊息：把候選的這一區和他已在的區一起列出，依名稱排序
+      const names = [area.name, ...elsewhere.map((id) => store.areas.find((a) => a.id === id)?.name ?? id)].sort()
+      blockingReasons.push(`${staff.name} ${shortDate(date)} 同時排在 ${names.join('、')}`)
+    }
 
     const cap = quotaCapFor(store, staff.rankCode, ym)
     const points = quotaPointsForStaffInMonth(store, ym, staff.id)

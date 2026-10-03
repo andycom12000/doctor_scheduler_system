@@ -21,7 +21,8 @@ public sealed record PublishResult(ScheduleStatus Status, DateTimeOffset Publish
 
 /// <summary>
 /// 值班表的寫入路徑：指派／清空一格、對調兩格、發布。
-/// 打破硬約束不拒絕（契約 <c>setDuty</c>），唯一擋的是結構不變式「同一人同一天已在另一區」。
+/// 打破硬約束不拒絕（契約 <c>setDuty</c>），包括同一人同一天排在兩區（X1，#68）：多步調整的中間狀態要能存。
+/// 把關在發布與匯出（<see cref="DoubleBookingGuard"/>，前端另擋列印）：X1 不能用 acknowledgeViolations 略過。
 /// 違規清單一律由 Domain 的檢查器重算，這裡不重寫任何約束語義。
 /// </summary>
 public sealed class ScheduleCommands
@@ -58,7 +59,6 @@ public sealed class ScheduleCommands
         var after = ctx.Duties.Where(d => !(d.AreaId == cell.AreaId && d.Date == cell.Date)).ToList();
         if (staffId is not null)
         {
-            EnsureNotOnDutyElsewhere(after, staffId, cell);
             after.Add(new Duty(cell.AreaId, cell.Date, staffId));
         }
 
@@ -73,7 +73,7 @@ public sealed class ScheduleCommands
         return new MutationResult(header.Revision, new[] { CellOf(cell, staffId) }, violations);
     }
 
-    /// <summary>對調兩格。該月尚無值班表時 404，不會憑空建表。兩格互為對方的來源，檢查同日另一區時把對方排除。</summary>
+    /// <summary>對調兩格。該月尚無值班表時 404，不會憑空建表。同人同日兩區照常寫入，由違規清單的 X1 回報。</summary>
     public async Task<MutationResult> SwapAsync(YearMonth month, CellRef a, CellRef b, CancellationToken cancellationToken = default)
     {
         var loaded = await _loader.LoadAsync(month, cancellationToken);
@@ -94,16 +94,6 @@ public sealed class ScheduleCommands
         var staffB = ctx.Duties.FirstOrDefault(d => d.AreaId == b.AreaId && d.Date == b.Date)?.StaffId;
 
         var others = ctx.Duties.Where(d => !IsCell(d, a) && !IsCell(d, b)).ToList();
-        if (staffA is not null)
-        {
-            EnsureNotOnDutyElsewhere(others, staffA, b);
-        }
-
-        if (staffB is not null)
-        {
-            EnsureNotOnDutyElsewhere(others, staffB, a);
-        }
-
         var after = others.ToList();
         if (staffB is not null)
         {
@@ -126,7 +116,8 @@ public sealed class ScheduleCommands
     }
 
     /// <summary>
-    /// 發布：仍有硬違規且未確認時 409。結算本月的月結轉（重複發布整份覆寫）；
+    /// 發布：同人同日兩區（X1，<see cref="DoubleBookingGuard"/>）一律 409 <c>DOUBLE_BOOKING_PRESENT</c>、不能確認略過；
+    /// 其他硬違規未確認時 409。結算本月的月結轉（重複發布整份覆寫）；
     /// 本月第一次發布時把當下讀到的上月月結轉凍結存下（ADR-0004），之後重新發布不重拍。
     /// </summary>
     public async Task<PublishResult> PublishAsync(YearMonth month, bool acknowledgeViolations, CancellationToken cancellationToken = default)
@@ -138,6 +129,8 @@ public sealed class ScheduleCommands
         }
 
         var validation = new ViolationChecker(loaded.Context).Check(loaded.Constraints);
+        DoubleBookingGuard.EnsureNone(validation, "發布");
+
         if (validation.HardCount > 0 && !acknowledgeViolations)
         {
             throw new SchedulerException(
@@ -224,19 +217,6 @@ public sealed class ScheduleCommands
         if (!ctx.Areas.Any(a => a.Id == cell.AreaId))
         {
             throw new SchedulerException(ErrorCode.InvalidRequest, $"找不到區域 {cell.AreaId}");
-        }
-    }
-
-    /// <summary>結構不變式：同一人同一天最多一格。<paramref name="duties"/> 是不含目標格的清單。</summary>
-    private static void EnsureNotOnDutyElsewhere(IEnumerable<Duty> duties, string staffId, CellRef target)
-    {
-        var elsewhere = duties.FirstOrDefault(d => d.StaffId == staffId && d.Date == target.Date && d.AreaId != target.AreaId);
-        if (elsewhere is not null)
-        {
-            throw new SchedulerException(
-                ErrorCode.StaffAlreadyOnDuty,
-                $"{staffId} 在 {target.Date:yyyy-MM-dd} 已排在 {elsewhere.AreaId}",
-                new Dictionary<string, object?> { ["areaId"] = elsewhere.AreaId, ["staffId"] = staffId, ["date"] = target.Date.ToString("yyyy-MM-dd") });
         }
     }
 

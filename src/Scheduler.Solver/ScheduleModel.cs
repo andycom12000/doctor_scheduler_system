@@ -124,7 +124,8 @@ internal sealed class ScheduleModel
 
     /// <summary>
     /// 不在 ConstraintSettings 裡、不能停用的結構不變式：同一人同一天最多一格、同一格最多 requiredPerDay 人。
-    /// 寫入端用 STAFF_ALREADY_ON_DUTY 擋的就是前者；<c>SchedulingContext.EnsureConsistent</c> 對兩者都會擲出。
+    /// 前者在 Domain 是結構規則 X1（硬違規，寫入不擋、發布與匯出才擋，#68），求解輸出因此不會有它；後者仍由
+    /// <c>SchedulingContext.EnsureConsistent</c> 擲出。
     /// </summary>
     private void StructuralInvariants()
     {

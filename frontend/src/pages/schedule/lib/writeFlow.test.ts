@@ -17,7 +17,7 @@ describe('isHardViolationsPresent', () => {
   })
 
   it('其他狀態碼、其他錯誤碼、非 ApiError、本體形狀不對都不算', () => {
-    expect(isHardViolationsPresent(new ApiError(409, errorBody('STAFF_ALREADY_ON_DUTY'), 'm'))).toBe(false)
+    expect(isHardViolationsPresent(new ApiError(409, errorBody('DOUBLE_BOOKING_PRESENT'), 'm'))).toBe(false)
     expect(isHardViolationsPresent(new ApiError(422, errorBody('HARD_VIOLATIONS_PRESENT'), 'm'))).toBe(false)
     expect(isHardViolationsPresent(new ApiError(409, null, 'm'))).toBe(false)
     expect(isHardViolationsPresent(new ApiError(409, { error: null }, 'm'))).toBe(false)

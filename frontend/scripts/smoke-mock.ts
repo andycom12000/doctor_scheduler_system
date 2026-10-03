@@ -219,7 +219,7 @@ async function main() {
     })
 
     await mockOnly('6. PATCH /schedules/2026-09/duties', '依賴 mock 種子的 2026-09 值班表', async () => {
-      // 先從當天的值班表挑一位「9/10 沒班」的在職人員，避免撞到同人同日不變式
+      // 先從當天的值班表挑一位「9/10 沒班」的在職人員，避免造出同人同日兩區（X1）而干擾後面的斷言
       const scheduleRes = await fetch(`${BASE}/schedules/2026-09`)
       const schedule = await scheduleRes.json()
       const onDuty = new Set(
@@ -244,16 +244,21 @@ async function main() {
       assert(body.duties.length === 1 && body.duties[0].staffId === free.id, 'duties 帶回改動的那一格')
       revision = body.revision
 
-      // 同一人同一天已在另一區 → 409 STAFF_ALREADY_ON_DUTY（結構不變式，非約束）
+      // 同一人同一天已在另一區 → 照常寫入 200，違規清單出現 X1（硬違規，兩格都標；#68）
       const conflict = await fetch(`${BASE}/schedules/2026-09/duties`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ areaId: 'area-c', date: '2026-09-10', staffId: busy }),
       })
-      assert(conflict.status === 409, '同人同日另一區 → 409')
+      assert(conflict.status === 200, '同人同日另一區 → 200（寫入不擋）')
       const conflictBody = await conflict.json()
-      assert(conflictBody.error.code === 'STAFF_ALREADY_ON_DUTY', '錯誤碼 STAFF_ALREADY_ON_DUTY')
-      assert(typeof conflictBody.error.details?.areaId === 'string', 'details 帶他當天已在的 areaId')
+      const x1 = (conflictBody.violations as Array<{ code: string; severity: string; cellKeys: string[] }>).find(
+        (v) => v.code === 'X1_STAFF_DOUBLE_BOOKED' && v.cellKeys.includes('area:area-c:2026-09-10'),
+      )
+      assert(x1, '違規清單出現 X1_STAFF_DOUBLE_BOOKED')
+      assert(x1.severity === 'hard', 'X1 是硬違規')
+      assert(x1.cellKeys.length === 2, 'X1 的 cellKeys 含兩個 area 格')
+      revision = conflictBody.revision
 
       // 清空一格：回應仍帶那一格，staffId 為 null
       const clear = await fetch(`${BASE}/schedules/2026-09/duties`, {
@@ -522,34 +527,52 @@ async function main() {
         '清空後出現 H1 空缺違規（發布會因此被擋）',
       )
 
-      // swap 跨日衝突：某人 d1 在 X 區、d2 在 Y 區，把 (X, d1) 拖到 d2 的另一區 → 409。
-      // 同區別天（X === Y）是 mock 曾經漏擋的情境（只比區域就把它當成來源格），優先挑它。
+      // swap 跨日撞同人同日：某人 d1 在 X 區、d2 在 Y 區，把 (X, d1) 拖到 d2 的另一區 → 照常寫入 200，
+      // 違規清單出現 X1（#68）；發布帶 ack 仍 409 DOUBLE_BOOKING_PRESENT；對調回去排除後 X1 消失。
+      // 同區別天（X === Y）是 mock 曾經漏判的情境（只比區域就把它當成來源格），優先挑它。
       const beforeConflict = await scheduleBody()
       const conflict = findCrossDateConflict(beforeConflict)
       assert(conflict !== null, '找得到跨日對調會撞到同人同日的格子')
       if (conflict) {
         // 退到「別區別天」測試照樣會過，但就不再守原本那個 bug——種子變了要知道。
-        assert(conflict.label === '同區別天', '挑到的是同區別天（原本漏擋的情境）')
-        const res = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
-          method: 'POST',
-          headers: json,
-          body: JSON.stringify({ a: conflict.a, b: conflict.b }),
-        })
-        assert(res.status === 409, `跨日對調撞同人同日 → 409（${conflict.label}）`)
-        const err = await res.json()
-        assert(err.error?.code === 'STAFF_ALREADY_ON_DUTY', '錯誤碼是 STAFF_ALREADY_ON_DUTY')
-        // 撞到的是被拖的那個人在目標日原本的那一區，不是對方那格的人碰巧撞到。
-        assert(
-          err.error?.details?.staffId === conflict.staffId && err.error?.details?.areaId === conflict.clashArea,
-          'details 指向被拖的人與他當天原本的那一區',
+        assert(conflict.label === '同區別天', '挑到的是同區別天（原本漏判的情境）')
+        const swapBody = JSON.stringify({ a: conflict.a, b: conflict.b })
+        const res = await fetch(`${BASE}/schedules/2026-09/duties/swap`, { method: 'POST', headers: json, body: swapBody })
+        assert(res.status === 200, `跨日對調撞同人同日 → 200，寫入不擋（${conflict.label}）`)
+        const swapResult = await res.json()
+        const x1 = (swapResult.violations as Array<{ code: string; severity: string; cellKeys: string[] }>).find(
+          (v) =>
+            v.code === 'X1_STAFF_DOUBLE_BOOKED' &&
+            v.cellKeys.includes(`area:${conflict.b.areaId}:${conflict.b.date}`) &&
+            v.cellKeys.includes(`area:${conflict.clashArea}:${conflict.b.date}`),
         )
-        const unchanged = await scheduleBody()
-        // mock 任何寫入都會 revision++，revision 沒變就代表兩格都沒動；b 格再比一次當保險。
+        assert(x1, '違規清單出現 X1，兩個相關格都在 cellKeys')
+        assert(x1.severity === 'hard', 'X1 是硬違規')
         assert(
-          unchanged.revision === beforeConflict.revision &&
-            dutyAt(unchanged, conflict.b.areaId, conflict.b.date) ===
-              dutyAt(beforeConflict, conflict.b.areaId, conflict.b.date),
-          '409 不留痕',
+          dutyAt(await scheduleBody(), conflict.b.areaId, conflict.b.date) === conflict.staffId,
+          '被拖的人確實落到目標格',
+        )
+
+        for (const ack of [false, true]) {
+          const blockedPublish = await fetch(`${BASE}/schedules/2026-09/publish`, {
+            method: 'POST',
+            headers: json,
+            body: JSON.stringify({ acknowledgeViolations: ack }),
+          })
+          assert(blockedPublish.status === 409, `有 X1 發布（ack=${ack}）→ 409`)
+          assert((await blockedPublish.json()).error?.code === 'DOUBLE_BOOKING_PRESENT', '錯誤碼 DOUBLE_BOOKING_PRESENT')
+        }
+
+        const blockedExport = await fetch(`${BASE}/schedules/2026-09/export?layout=area-by-day`)
+        assert(blockedExport.status === 409, '有 X1 匯出 → 409')
+        assert((await blockedExport.json()).error?.code === 'DOUBLE_BOOKING_PRESENT', '匯出錯誤碼 DOUBLE_BOOKING_PRESENT')
+
+        // 再對調一次（swap 是對合）把重複排除
+        const undo = await fetch(`${BASE}/schedules/2026-09/duties/swap`, { method: 'POST', headers: json, body: swapBody })
+        assert(undo.status === 200, '對調回去 → 200')
+        assert(
+          !(await undo.json()).violations.some((v: { code: string }) => v.code === 'X1_STAFF_DOUBLE_BOOKED'),
+          '排除後違規清單沒有 X1',
         )
       }
 

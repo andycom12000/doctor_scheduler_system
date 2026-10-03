@@ -14,6 +14,7 @@ namespace Scheduler.Domain.Validation;
 /// cellKey 的慣例：逐格的規則（覆蓋、資格、不可排班日、偏好）指向 <c>area:</c> 格；
 /// 逐人的序列／累計規則（額度、值休休、連續）指向 <c>staff:</c> 格。
 /// Fairness 與 Consistency 是分數，不產生違規（見 <see cref="ScheduleScores"/>）。
+/// 另有一條結構規則 X1（同人同日兩區），不是原語、不能停用，見 <see cref="StructuralRules"/>。
 /// </summary>
 public sealed class ViolationChecker
 {
@@ -31,6 +32,7 @@ public sealed class ViolationChecker
         _ctx.EnsureConsistent();
         var violations = settings.Active
             .SelectMany(Evaluate)
+            .Concat(StaffDoubleBooked())
             .OrderBy(v => v.Severity)
             .ThenBy(v => v.Code, StringComparer.Ordinal)
             .ThenBy(v => v.CellKeys[0], StringComparer.Ordinal)
@@ -51,6 +53,27 @@ public sealed class ViolationChecker
         Primitive.Fairness or Primitive.Consistency => Enumerable.Empty<Violation>(),
         _ => throw new ArgumentOutOfRangeException(nameof(c), c.Primitive, "未知的原語"),
     };
+
+    // ---- 結構規則（不是原語，不看 ConstraintSettings） ----
+
+    /// <summary>
+    /// X1：同一人同一天排在兩個以上區域。序列原語以日期為單位、先 Distinct，同日兩格會合併，任何身分都抓不到，所以獨立成結構規則。
+    /// 一個（人，日）一筆違規，cellKeys 是他當天所在的每一個 <c>area:</c> 格，前端兩格都能標示。
+    /// 寫入端不擋（排班者多步調整的中間狀態，#68），發布與匯出時才擋（前端另擋列印）。
+    /// </summary>
+    private IEnumerable<Violation> StaffDoubleBooked()
+    {
+        foreach (var group in _ctx.Duties.GroupBy(d => (d.StaffId, d.Date)).Where(g => g.Count() > 1))
+        {
+            var staff = _ctx.StaffOf(group.Key.StaffId);
+            var areas = string.Join("、", group.Select(d => _ctx.AreaOf(d).Name).Order(StringComparer.Ordinal));
+            yield return Violation.CreateStructural(
+                StructuralRules.StaffDoubleBooked,
+                Severity.Hard,
+                group.Select(d => CellKey.Area(d)),
+                $"{staff.Name} {group.Key.Date:M/d} 同時排在 {areas}");
+        }
+    }
 
     // ---- 逐格的規則 ----
 

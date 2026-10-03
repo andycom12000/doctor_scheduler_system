@@ -30,6 +30,19 @@ public class ScheduleExportQueriesTests
     }
 
     [Fact]
+    public async Task 同人同日兩區_X1_丟_DoubleBookingPresent_兩種版面都擋()
+    {
+        var store = Store().WithDuty("area-b", new DateOnly(2026, 9, 1), "s-pgy1"); // s-pgy1 9/1 同時在 A、B
+
+        foreach (var layout in new[] { ExportLayout.AreaByDay, ExportLayout.DayByStaff })
+        {
+            var ex = await Assert.ThrowsAsync<SchedulerException>(() => new ScheduleExportQueries(store.Loader).BuildAsync(Sep, layout));
+            Assert.Equal(ErrorCode.DoubleBookingPresent, ex.Code);
+            Assert.Equal(1, ex.Details!["doubleBookingCount"]);
+        }
+    }
+
+    [Fact]
     public async Task 區域乘日_列是設定順序的區域_欄是本月每一天_格子是人名()
     {
         var table = await new ScheduleExportQueries(Store().Loader).BuildAsync(Sep, ExportLayout.AreaByDay);

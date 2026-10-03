@@ -111,13 +111,7 @@ public sealed record SchedulingContext(
             throw new InvalidOperationException($"格子 {duplicated.Key.AreaId}/{duplicated.Key.Date:yyyy-MM-dd} 有多筆值班");
         }
 
-        // 結構不變式：同一人同一天最多一格。這不是約束（不在 ConstraintSettings 裡、不能停用），
-        // 跟「同一格兩個人」同一層次，由寫入端拒絕（STAFF_ALREADY_ON_DUTY），這裡只是最後防線。
-        // 沒有它，NP（豁免 H4）同日兩區沒有任何原語抓得到。
-        var doubleBooked = Duties.GroupBy(d => (d.StaffId, d.Date)).FirstOrDefault(g => g.Count() > 1);
-        if (doubleBooked is not null)
-        {
-            throw new InvalidOperationException($"人員 {doubleBooked.Key.StaffId} 在 {doubleBooked.Key.Date:yyyy-MM-dd} 排在多個區域");
-        }
+        // 同一人同一天排在多區「不」在這裡擲出：它是 ViolationChecker 的結構規則 X1（硬違規），
+        // 寫入端不擋、發布與匯出時才擋（前端另擋列印，#68）。若在這裡擲出，存了這種資料後每次讀取都會 500。
     }
 }

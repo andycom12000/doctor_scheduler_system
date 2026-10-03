@@ -115,9 +115,17 @@ describe('dutiesByArea／dutiesByStaff', () => {
     expect(map.get('area-icu|2026-09-01')).toBe('staff-002')
   })
 
-  it('dutiesByStaff 用 staffId|date 查 areaId', () => {
+  it('dutiesByStaff 用 staffId|date 查 areaId[]', () => {
     const map = dutiesByStaff(duties)
-    expect(map.get('staff-001|2026-09-01')).toBe('area-a')
+    expect(map.get('staff-001|2026-09-01')).toEqual(['area-a'])
+  })
+
+  it('dutiesByStaff 同人同日兩區（X1）兩個都留著，依 areaId 排序', () => {
+    const map = dutiesByStaff([
+      { areaId: 'area-b', date: '2026-09-01', staffId: 'staff-001' },
+      { areaId: 'area-a', date: '2026-09-01', staffId: 'staff-001' },
+    ])
+    expect(map.get('staff-001|2026-09-01')).toEqual(['area-a', 'area-b'])
   })
 })
 
@@ -234,11 +242,17 @@ describe('staffFooterColumns', () => {
     expect(columns[0].quotaAtCap).toBe(true)
   })
 
+  it('extraStaff 同人同日兩區算兩班，不少算', () => {
+    const map = new Map([['staff-050|2026-09-01', ['area-a', 'area-b']]])
+    const columns = staffFooterColumns(groups, [{ staffId: 'staff-050' }], map)
+    expect(columns.find((c) => c.staffId === 'staff-050')?.duties).toBe(2)
+  })
+
   it('當月有班但已停用的人（extraStaff）額度印 —、帶「不在點數看板」的 title，班數由值班表數出來', () => {
     const dutiesByStaffMap = new Map([
-      ['staff-050|2026-09-01', 'area-a'],
-      ['staff-050|2026-09-05', 'area-b'],
-      ['staff-001|2026-09-02', 'area-a'],
+      ['staff-050|2026-09-01', ['area-a']],
+      ['staff-050|2026-09-05', ['area-b']],
+      ['staff-001|2026-09-02', ['area-a']],
     ])
     const columns = staffFooterColumns(groups, [{ staffId: 'staff-050' }], dutiesByStaffMap)
     expect(columns.find((c) => c.staffId === 'staff-050')).toEqual({

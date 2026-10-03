@@ -3,13 +3,15 @@ using Scheduler.Application.Errors;
 using Scheduler.Application.Scheduling;
 using Scheduler.Domain.Model;
 using Scheduler.Domain.Scheduling;
+using Scheduler.Domain.Validation;
 
 namespace Scheduler.Application.Schedules;
 
 /// <summary>
 /// <c>GET /schedules/{ym}/export</c> 的內容：把某月值班表攤成 <see cref="ExportTable"/>。
 /// 從 <see cref="SchedulingContextLoader"/> 組 context（人員含停用，值班表上引用到的離職者才找得到名字；
-/// 行事曆在 context 裡，國定假日的名稱直接印在日標題上），值班表不存在時 404，與 <c>getSchedule</c> 一致。
+/// 行事曆在 context 裡，國定假日的名稱直接印在日標題上），值班表不存在時 404，與 <c>getSchedule</c> 一致；
+/// 有同人同日兩區（X1）時 409 <c>DOUBLE_BOOKING_PRESENT</c>。
 /// </summary>
 public sealed class ScheduleExportQueries
 {
@@ -35,6 +37,8 @@ public sealed class ScheduleExportQueries
         }
 
         var ctx = loaded.Context;
+        // 同人同日兩區（X1）不論草稿或已發布都不匯出：這份班表必然有錯（#68）
+        DoubleBookingGuard.EnsureNone(new ViolationChecker(ctx).Check(loaded.Constraints), "匯出");
         return layout switch
         {
             ExportLayout.AreaByDay => AreaByDay(ctx),
