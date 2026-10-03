@@ -156,20 +156,60 @@ public class ViolationCheckerTests
         Assert.DoesNotContain(result.Violations, v => v.Code is DefaultConstraints.S1QuotaFairness or DefaultConstraints.S2AreaConsistency or DefaultConstraints.S7FairnessPoint);
     }
 
-    // ---- 結構不變式：同人同日最多一格（不是約束，寫入端拒絕，這裡是最後防線） ----
+    // ---- 結構規則 X1：同人同日兩區（不是約束、不能停用；寫入不擋、發布才擋，#68） ----
 
     [Fact]
-    public void 同一人同一天排在兩個區域_不是違規而是資料不一致_NP也一樣()
+    public void 同一人同一天排在兩個區域_是硬違規X1_兩格都標_NP也一樣()
     {
         var np = new ContextBuilder().WithStaff("np-1", DefaultRanks.NP)
             .WithDuty("np-1", 1, "area-a").WithDuty("np-1", 1, "area-b").Build();
         var r2 = new ContextBuilder().WithStaff("r2-1", DefaultRanks.R2)
             .WithDuty("r2-1", 1, "area-a").WithDuty("r2-1", 1, "area-b").Build();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new ViolationChecker(np).Check(Defaults));
-        Assert.Contains("np-1", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("2026-09-01", ex.Message, StringComparison.Ordinal);
-        Assert.Throws<InvalidOperationException>(() => new ViolationChecker(r2).Check(Defaults));
+        foreach (var ctx in new[] { np, r2 })
+        {
+            var x1 = Assert.Single(new ViolationChecker(ctx).Check(Defaults).Violations, v => v.Code == StructuralRules.StaffDoubleBooked);
+            Assert.Equal("X1_STAFF_DOUBLE_BOOKED", x1.Code);
+            Assert.Equal(Severity.Hard, x1.Severity);
+            Assert.Equal(new[] { "area:area-a:2026-09-01", "area:area-b:2026-09-01" }, x1.CellKeys);
+        }
+
+        Assert.Contains("np-1", new ViolationChecker(np).Check(Defaults).Violations.Single(v => v.Code == StructuralRules.StaffDoubleBooked).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void X1_不受約束設定影響_全部約束停用仍會產生_並算進硬違規數()
+    {
+        var ctx = new ContextBuilder().WithStaff("r2-1", DefaultRanks.R2)
+            .WithDuty("r2-1", 1, "area-a").WithDuty("r2-1", 1, "area-b").Build();
+        var none = new ConstraintSettings(
+            Defaults.Hard.Select(c => c with { Enabled = false }).ToArray(),
+            Defaults.Soft.Select(c => c with { Weight = 0 }).ToArray());
+
+        var result = new ViolationChecker(ctx).Check(none);
+
+        Assert.Equal(StructuralRules.StaffDoubleBooked, Assert.Single(result.Violations).Code);
+        Assert.Equal(1, result.HardCount);
+    }
+
+    [Fact]
+    public void 同一人同一天沒有重複_不產生X1()
+    {
+        var ctx = new ContextBuilder().WithStaff("r2-1", DefaultRanks.R2).WithDuty("r2-1", 1, "area-a").Build();
+
+        Assert.DoesNotContain(new ViolationChecker(ctx).Check(Defaults).Violations, v => v.Code == StructuralRules.StaffDoubleBooked);
+    }
+
+    [Fact]
+    public void EnsureConsistent_同人同日兩區不再擲出_同一格兩筆仍擲出()
+    {
+        var doubleBooked = new ContextBuilder().WithStaff("r2-1", DefaultRanks.R2)
+            .WithDuty("r2-1", 1, "area-a").WithDuty("r2-1", 1, "area-b").Build();
+        var sameCell = new ContextBuilder().WithStaff("r2-1", DefaultRanks.R2).WithStaff("r2-2", DefaultRanks.R2)
+            .WithDuty("r2-1", 1, "area-a").WithDuty("r2-2", 1, "area-a").Build();
+
+        doubleBooked.EnsureConsistent();
+        Assert.Throws<InvalidOperationException>(sameCell.EnsureConsistent);
     }
 
     [Fact]

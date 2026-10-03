@@ -213,7 +213,7 @@ public class ScheduleQueriesTests
         Assert.Contains("chief", ids);
 
         Assert.Empty(candidates.Single(c => c.StaffId == "fresh").BlockingReasons);
-        Assert.Contains("當日已排在其他區域", candidates.Single(c => c.StaffId == "busy").BlockingReasons);
+        Assert.Contains(candidates.Single(c => c.StaffId == "busy").BlockingReasons, r => r.Contains("同時排在", StringComparison.Ordinal));
         Assert.NotEmpty(candidates.Single(c => c.StaffId == "off").BlockingReasons);
         Assert.NotEmpty(candidates.Single(c => c.StaffId == "tired").BlockingReasons);
 

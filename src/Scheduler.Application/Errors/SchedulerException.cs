@@ -11,7 +11,7 @@ public enum ErrorCode
     BlockedDayCapExceeded,
     HardViolationsPresent,
     ScheduleAlreadyPublished,
-    StaffAlreadyOnDuty,
+    DoubleBookingPresent,
     AreaInUse,
     AreaTypeInUse,
     RankInUse,

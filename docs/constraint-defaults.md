@@ -28,6 +28,11 @@ MSW mock、Solver 的單元測試 fixture 都從這裡抄，不得各自發明�
 `H1` 在**求解器**裡建成極高權重的軟項而非硬約束（登記過多時回「空缺最少」的變體，
 而不是 INFEASIBLE）；在**驗證層**仍是硬違規。這是兩邊對同一份定義刻意不同的唯一解讀。
 
+**結構規則 `X1_STAFF_DOUBLE_BOOKED`（同一人同一天排在兩區以上）不在這 7 + 7 裡：**
+它不是約束、不是原語、不在 `ConstraintSettings`、不能停用，由 `ViolationChecker` 固定產生硬違規
+（cellKeys 含他當天所在的每個 `area:` 格）。寫入不擋，發布時一律擋（`DOUBLE_BOOKING_PRESENT`，
+`acknowledgeViolations` 略過不了）。見 ADR-0002、#68。種子與 mock 沒有任何設定列要抄它。
+
 `H4`、`H7` **跨月**：讀上個月最後幾天的值班為固定輸入。
 
 「每人最多登記 16 天」**不在這裡**——它是登記期的驗證規則，求解器看不到 16 這個數字（ADR-0001）。

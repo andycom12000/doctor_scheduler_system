@@ -59,15 +59,16 @@ public class ScheduleCommandsTests
     }
 
     [Fact]
-    public async Task 同一人同一天已在另一區_STAFF_ALREADY_ON_DUTY_帶_areaId()
+    public async Task 同一人同一天已在另一區_照常寫入_回X1硬違規()
     {
         var store = new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithDraft(Oct).WithDuty("area-icu", D(5), "s1");
 
-        var ex = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).SetDutyAsync(Oct, new CellRef("area-a", D(5)), "s1"));
+        var result = await CommandsOf(store).SetDutyAsync(Oct, new CellRef("area-a", D(5)), "s1");
 
-        Assert.Equal(ErrorCode.StaffAlreadyOnDuty, ex.Code);
-        Assert.Equal("area-icu", ex.Details!["areaId"]);
-        Assert.Single(store.Duties);
+        Assert.Equal(2, store.Duties.Count);
+        var x1 = Assert.Single(result.Violations, v => v.Code == "X1_STAFF_DOUBLE_BOOKED");
+        Assert.Equal(Scheduler.Domain.Constraints.Severity.Hard, x1.Severity);
+        Assert.Equal(new[] { "area:area-a:2026-10-05", "area:area-icu:2026-10-05" }, x1.CellKeys);
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class ScheduleCommandsTests
     }
 
     [Fact]
-    public async Task swap_不同日對調後撞到同人同日另一區_409()
+    public async Task swap_不同日對調後撞到同人同日另一區_照常寫入_回X1硬違規()
     {
         // s1 在 10/5 ICU 與 10/12 A；把 10/5 ICU 與 10/12 B 對調，s1 會落到 10/12 B，但他 10/12 已在 A
         var store = new InMemoryStore()
@@ -151,11 +152,10 @@ public class ScheduleCommandsTests
             .WithDuty("area-icu", D(5), "s1")
             .WithDuty("area-a", D(12), "s1");
 
-        var ex = await Assert.ThrowsAsync<SchedulerException>(() =>
-            CommandsOf(store).SwapAsync(Oct, new CellRef("area-icu", D(5)), new CellRef("area-b", D(12))));
+        var result = await CommandsOf(store).SwapAsync(Oct, new CellRef("area-icu", D(5)), new CellRef("area-b", D(12)));
 
-        Assert.Equal(ErrorCode.StaffAlreadyOnDuty, ex.Code);
-        Assert.Equal("area-a", ex.Details!["areaId"]);
+        Assert.Equal(new[] { "area-a", "area-b" }, store.Duties.Where(d => d.Date == D(12)).Select(d => d.AreaId).Order().ToArray());
+        Assert.Contains(result.Violations, v => v.Code == "X1_STAFF_DOUBLE_BOOKED");
     }
 
     [Fact]
@@ -195,6 +195,32 @@ public class ScheduleCommandsTests
         Assert.Equal(1, result.CarryOver.Single(e => e.StaffId == "s-r4").Points);
         Assert.Equal(0, result.CarryOver.Single(e => e.StaffId == "s-r5").Points);
         Assert.Equal(result.CarryOver, store.CarryOver[Oct]);
+    }
+
+    [Fact]
+    public async Task publish_同人同日兩區_帶ack仍409_DOUBLE_BOOKING_PRESENT_排除後可發布()
+    {
+        var store = new InMemoryStore()
+            .WithStaff("s1", DefaultRanks.R2)
+            .WithDraft(Oct)
+            .WithDuty("area-icu", D(5), "s1")
+            .WithDuty("area-a", D(5), "s1");
+        var commands = CommandsOf(store);
+
+        foreach (var ack in new[] { false, true })
+        {
+            var ex = await Assert.ThrowsAsync<SchedulerException>(() => commands.PublishAsync(Oct, acknowledgeViolations: ack));
+            Assert.Equal(ErrorCode.DoubleBookingPresent, ex.Code);
+            Assert.Equal(1, ex.Details!["doubleBookingCount"]);
+            Assert.Equal(ScheduleStatus.Draft, store.Headers[Oct].Status);
+        }
+
+        // 排除重複後，其他硬違規（空表的 H1 覆蓋）仍走既有 ack 邏輯
+        await commands.SetDutyAsync(Oct, new CellRef("area-a", D(5)), null);
+        var blocked = await Assert.ThrowsAsync<SchedulerException>(() => commands.PublishAsync(Oct, acknowledgeViolations: false));
+        Assert.Equal(ErrorCode.HardViolationsPresent, blocked.Code);
+        var result = await commands.PublishAsync(Oct, acknowledgeViolations: true);
+        Assert.Equal(ScheduleStatus.Published, result.Status);
     }
 
     [Fact]

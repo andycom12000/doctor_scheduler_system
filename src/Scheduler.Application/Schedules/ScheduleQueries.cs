@@ -163,7 +163,7 @@ public sealed class ScheduleQueries
     /// <summary>
     /// 某一格的候選人：在職且有資格的人全列，阻擋理由來自「把他放進這格後多出來的硬違規」，
     /// 警示來自多出來的軟違規。不重寫 H3／H4／H6 的判斷，直接跑 <see cref="ViolationChecker"/>。
-    /// 同日已排在其他區域是結構不變式，不在約束裡，要先擋，否則 context 組不起來。
+    /// 同日已排在其他區域不再特判：放進去後 X1（同人同日兩區）會自然變成阻擋理由，但仍可選（#68）。
     /// </summary>
     public async Task<IReadOnlyList<Candidate>> ListCandidatesAsync(
         YearMonth month, string areaId, DateOnly date, CancellationToken cancellationToken = default)
@@ -181,7 +181,6 @@ public sealed class ScheduleQueries
         // 基準：這一格先清空。候選人是「換成他」的意思，現任者也照樣評估。
         var baseline = WithDuties(ctx, ctx.Duties.Where(d => !(d.AreaId == areaId && d.Date == date)));
         var baselineIds = new ViolationChecker(baseline).Check(loaded.Constraints).Violations.Select(v => v.Id).ToHashSet();
-        var onDutyElsewhere = baseline.Duties.Where(d => d.Date == date).Select(d => d.StaffId).ToHashSet();
         var metrics = new MetricEvaluator(ctx);
 
         var candidates = new List<Candidate>();
@@ -194,19 +193,12 @@ public sealed class ScheduleQueries
 
             var blocking = new List<string>();
             var warnings = new List<string>();
-            if (onDutyElsewhere.Contains(staff.Id))
+            var hypothetical = WithDuties(baseline, baseline.Duties.Append(new Duty(areaId, date, staff.Id)));
+            var added = new ViolationChecker(hypothetical).Check(loaded.Constraints).Violations
+                .Where(v => !baselineIds.Contains(v.Id));
+            foreach (var v in added)
             {
-                blocking.Add("當日已排在其他區域");
-            }
-            else
-            {
-                var hypothetical = WithDuties(baseline, baseline.Duties.Append(new Duty(areaId, date, staff.Id)));
-                var added = new ViolationChecker(hypothetical).Check(loaded.Constraints).Violations
-                    .Where(v => !baselineIds.Contains(v.Id));
-                foreach (var v in added)
-                {
-                    (v.Severity == Severity.Hard ? blocking : warnings).Add(v.Message);
-                }
+                (v.Severity == Severity.Hard ? blocking : warnings).Add(v.Message);
             }
 
             var own = ctx.DutiesOf(staff.Id).ToArray();

@@ -55,13 +55,24 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
-    public async Task setDuty_同人同日另一區_409_帶_areaId()
+    public async Task setDuty_同人同日另一區_200_違規清單有X1_發布帶ack仍409_排除後可發布()
     {
         await PatchAsync("/api/schedules/2027-01/duties", """{"areaId":"area-icu","date":"2027-01-05","staffId":"s-r3"}""", "setDuty");
-        var body = await PatchAsync("/api/schedules/2027-01/duties", """{"areaId":"area-a","date":"2027-01-05","staffId":"s-r3"}""", "setDuty", HttpStatusCode.Conflict);
+        var body = await PatchAsync("/api/schedules/2027-01/duties", """{"areaId":"area-a","date":"2027-01-05","staffId":"s-r3"}""", "setDuty");
 
-        Assert.Equal("STAFF_ALREADY_ON_DUTY", body["error"]!["code"]!.GetValue<string>());
-        Assert.Equal("area-icu", body["error"]!["details"]!["areaId"]!.GetValue<string>());
+        var x1 = Assert.Single(body["violations"]!.AsArray(), v => v!["code"]!.GetValue<string>() == "X1_STAFF_DOUBLE_BOOKED");
+        Assert.Equal("hard", x1!["severity"]!.GetValue<string>());
+        Assert.Equal(new[] { "area:area-a:2027-01-05", "area:area-icu:2027-01-05" }, x1["cellKeys"]!.AsArray().Select(k => k!.GetValue<string>()).ToArray());
+
+        foreach (var ack in new[] { "null", """{"acknowledgeViolations":true}""" })
+        {
+            var conflict = await PostAsync("/api/schedules/2027-01/publish", ack == "null" ? null : ack, "publishSchedule", HttpStatusCode.Conflict);
+            Assert.Equal("DOUBLE_BOOKING_PRESENT", conflict["error"]!["code"]!.GetValue<string>());
+        }
+
+        await PatchAsync("/api/schedules/2027-01/duties", """{"areaId":"area-a","date":"2027-01-05","staffId":null}""", "setDuty");
+        var published = await PostAsync("/api/schedules/2027-01/publish", """{"acknowledgeViolations":true}""", "publishSchedule");
+        Assert.Equal("published", published["status"]!.GetValue<string>());
     }
 
     [Theory]
