@@ -13,6 +13,14 @@ export function printTabFor(tab: ScheduleTab): PrintTab {
   return tab === 'area-by-day' ? 'area-by-day' : 'day-by-staff'
 }
 
+/**
+ * Ctrl+P（含 Ctrl+Shift+P 的系統列印對話框）：排班主表攔下來改走「列印」按鈕的流程，
+ * 才不會繞過同人同日兩區擋印與草稿提示。右鍵選單的列印由 Shell 拿掉（#32）。
+ */
+export function isPrintShortcut(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'>): boolean {
+  return (e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'p'
+}
+
 /** 紙本標題。草稿也能印（草稿提示選「直接列印草稿」），所以狀態一定要印出來。 */
 export function printHeading(ym: string, status: ScheduleStatus, publishedVersion: number): string {
   const month = `${Number(ym.slice(0, 4))} 年 ${Number(ym.slice(5, 7))} 月值班表`
