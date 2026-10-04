@@ -5,21 +5,29 @@
  * `v{publishedVersion}`。色票全部來自 `styles.css` 的 token。
  */
 import { computed } from 'vue'
-import { CircleCheck, PencilLine } from 'lucide-vue-next'
+import { CircleAlert, CircleCheck, PencilLine } from 'lucide-vue-next'
+import { scheduleStatusLabel } from './scheduleStatusLabel'
 
 const props = defineProps<{
   status: 'draft' | 'published'
   /** 定版版本號（契約 `publishedVersion`）；只在已發布時顯示。 */
   publishedVersion?: number
+  /** 發布後又改過（契約 `editedSincePublish`，#75）。 */
+  edited?: boolean
 }>()
 
 const published = computed(() => props.status === 'published')
-const label = computed(() => (published.value ? props.publishedVersion ? `已發布 v${props.publishedVersion}` : '已發布' : '草稿'))
+/** 發布後有修改（#75）不能跟「已發布、沒改過」長得一樣：淺底＋虛線框＋警示圖示，提醒還沒定版。 */
+const variant = computed(() =>
+  !published.value ? 'status-badge--draft' : props.edited ? 'status-badge--edited' : 'status-badge--published',
+)
+const icon = computed(() => (!published.value ? PencilLine : props.edited ? CircleAlert : CircleCheck))
+const label = computed(() => scheduleStatusLabel(props.status, props.publishedVersion, props.edited ?? false))
 </script>
 
 <template>
-  <span class="status-badge" :class="published ? 'status-badge--published' : 'status-badge--draft'">
-    <component :is="published ? CircleCheck : PencilLine" class="status-badge__icon" :size="13" aria-hidden="true" />
+  <span class="status-badge" :class="variant" :title="edited && published ? '發布後又改過，還沒重新發布' : undefined">
+    <component :is="icon" class="status-badge__icon" :size="13" aria-hidden="true" />
     {{ label }}
   </span>
 </template>
@@ -53,5 +61,12 @@ const label = computed(() => (published.value ? props.publishedVersion ? `已發
   background: var(--color-accent-700);
   border-color: var(--color-accent-700);
   color: var(--color-accent-100);
+}
+
+.status-badge--edited {
+  background: var(--color-accent-100);
+  border-color: var(--color-accent-700);
+  border-style: dashed;
+  color: var(--color-accent-900);
 }
 </style>

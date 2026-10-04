@@ -54,7 +54,9 @@ const bigLabel = computed(() => {
 // 「尚無班表」是 statusLabelOf 查不到資料時的預設值，不能拿它當「確定沒有班表」的結論
 // ——寧可不顯示這顆 tag，也不要顯示一個可能是錯的狀態。
 const currentStatus = computed(() => (error.value ? null : (monthStatus.value.get(ym.value) ?? 'none')))
-const currentVersion = computed(() => data.value?.months.find((m) => m.yearMonth === ym.value)?.publishedVersion)
+const currentMonth = computed(() => data.value?.months.find((m) => m.yearMonth === ym.value))
+const currentVersion = computed(() => currentMonth.value?.publishedVersion)
+const currentEdited = computed(() => currentMonth.value?.editedSincePublish ?? false)
 
 function shift(delta: number): void {
   setYearMonth(shiftYearMonth(ym.value, delta))
@@ -81,6 +83,7 @@ function onSelect(event: Event): void {
       class="ym-switcher__tag"
       :status="currentStatus"
       :published-version="currentVersion"
+      :edited="currentEdited"
     />
     <span v-else-if="currentStatus === 'none'" class="tag tag-outline ym-switcher__tag">尚無班表</span>
   </div>

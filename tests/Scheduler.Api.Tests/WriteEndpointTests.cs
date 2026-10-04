@@ -131,11 +131,22 @@ public sealed class WriteEndpointTests : IClassFixture<ApiFixture>
 
         var schedule = await _api.GetAsync("/api/schedules/2027-05", "getSchedule");
         Assert.Equal(1, schedule["publishedVersion"]!.GetValue<int>());
+        Assert.False(schedule["editedSincePublish"]!.GetValue<bool>());
         Assert.Equal("published", schedule["status"]!.GetValue<string>());
         // 契約守法只開 format: date 的檢查，date-time 的形狀在這裡守：UTC、可解析
         var publishedAt = DateTimeOffset.Parse(schedule["publishedAt"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture);
         Assert.Equal(TimeSpan.Zero, publishedAt.Offset);
         Assert.Equal(publishedAt, DateTimeOffset.Parse(body["publishedAt"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture));
+
+        // 發布後再改一格：仍是已發布 v1，但標出「發布後有修改」（#75），單月與清單都要有
+        await PatchAsync("/api/schedules/2027-05/duties", """{"areaId":"area-chief","date":"2027-05-04","staffId":"s-r5"}""", "setDuty");
+        var edited = await _api.GetAsync("/api/schedules/2027-05", "getSchedule");
+        Assert.Equal("published", edited["status"]!.GetValue<string>());
+        Assert.Equal(1, edited["publishedVersion"]!.GetValue<int>());
+        Assert.True(edited["editedSincePublish"]!.GetValue<bool>());
+        var list = await _api.GetAsync("/api/schedules", "listSchedules");
+        var month = list["months"]!.AsArray().Single(m => m!["yearMonth"]!.GetValue<string>() == "2027-05")!;
+        Assert.True(month["editedSincePublish"]!.GetValue<bool>());
     }
 
     [Fact]

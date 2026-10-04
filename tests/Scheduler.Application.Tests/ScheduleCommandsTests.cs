@@ -274,6 +274,33 @@ public class ScheduleCommandsTests
     }
 
     [Fact]
+    public async Task 發布後有修改_改格對調套用都算_重新發布後清掉_草稿一律不算()
+    {
+        var store = new InMemoryStore().WithStaff("s1", DefaultRanks.R2).WithStaff("s2", DefaultRanks.R3).WithDraft(Oct);
+        var commands = CommandsOf(store);
+        var queries = new ScheduleQueries(store, store.Loader);
+
+        await commands.SetDutyAsync(Oct, new CellRef("area-icu", D(5)), "s1");
+        Assert.False(store.Headers[Oct].EditedSincePublish);
+
+        await commands.PublishAsync(Oct, acknowledgeViolations: true);
+        Assert.False(store.Headers[Oct].EditedSincePublish);
+        Assert.False((await queries.GetAsync(Oct)).EditedSincePublish);
+
+        await commands.SetDutyAsync(Oct, new CellRef("area-icu", D(6)), "s2");
+        Assert.True(store.Headers[Oct].EditedSincePublish);
+        Assert.True((await queries.GetAsync(Oct)).EditedSincePublish);
+        Assert.True((await queries.ListAsync()).Single(m => m.YearMonth == Oct).EditedSincePublish);
+
+        var second = await commands.PublishAsync(Oct, acknowledgeViolations: true);
+        Assert.Equal(2, second.PublishedVersion);
+        Assert.False(store.Headers[Oct].EditedSincePublish);
+
+        await commands.SwapAsync(Oct, new CellRef("area-icu", D(5)), new CellRef("area-icu", D(6)));
+        Assert.True(store.Headers[Oct].EditedSincePublish);
+    }
+
+    [Fact]
     public async Task publish_該月沒有值班表_NOT_FOUND()
     {
         var store = new InMemoryStore().WithStaff("s1", DefaultRanks.R2);

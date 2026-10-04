@@ -143,6 +143,7 @@ public sealed class ScheduleCommands
         var firstPublish = header.PublishedAt is null;
         var now = _clock.GetUtcNow();
         var published = header with { Status = ScheduleStatus.Published, Revision = header.Revision + 1, PublishedAt = now, PublishedVersion = header.PublishedVersion + 1 };
+        published = published with { PublishedRevision = published.Revision };
         var carryOver = CarryOverSettlement.Settle(loaded.Context);
 
         await _schedules.UpsertAsync(published, cancellationToken);
@@ -196,7 +197,7 @@ public sealed class ScheduleCommands
 
         var ctx = loaded.Context;
         return new ScheduleView(
-            month, header.Status, header.Revision, header.PublishedVersion, header.PublishedAt, month.DayCount,
+            month, header.Status, header.Revision, header.PublishedVersion, header.EditedSincePublish, header.PublishedAt, month.DayCount,
             ctx.Staff.Count(s => s.Status == StaffStatus.Active),
             ctx.Areas,
             variant.Duties

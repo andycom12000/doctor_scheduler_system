@@ -16,13 +16,21 @@ public enum ScheduleStatus
 /// <param name="Revision">修改次數計數器，供快取失效，不是併發控制，也不是給使用者看的版本號。</param>
 /// <param name="PublishedAt">最近一次發布的時間；草稿為 null。第一次發布後不會再變回 null。</param>
 /// <param name="PublishedVersion">定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。與 Revision 無關。</param>
+/// <param name="PublishedRevision">最近一次發布當下的 Revision；從未發布為 0。只用來判斷發布後有沒有再改過（#75）。</param>
 public sealed record ScheduleHeader(
     YearMonth YearMonth,
     ScheduleStatus Status,
     int Revision,
     DateTimeOffset? PublishedAt,
-    int PublishedVersion)
+    int PublishedVersion,
+    int PublishedRevision)
 {
     public static ScheduleHeader NewDraft(YearMonth yearMonth) =>
-        new(yearMonth, ScheduleStatus.Draft, Revision: 0, PublishedAt: null, PublishedVersion: 0);
+        new(yearMonth, ScheduleStatus.Draft, Revision: 0, PublishedAt: null, PublishedVersion: 0, PublishedRevision: 0);
+
+    /// <summary>
+    /// 已發布、但之後又改過（改格、對調會動 Revision；已發布不准整份套用變體）。狀態仍是已發布、版本號不變，
+    /// 畫面與紙本要另外標出來，輸出前也要像草稿一樣先問要不要重新發布（#75）。
+    /// </summary>
+    public bool EditedSincePublish => Status == ScheduleStatus.Published && Revision != PublishedRevision;
 }

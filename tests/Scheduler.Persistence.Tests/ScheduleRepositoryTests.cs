@@ -47,7 +47,7 @@ public class ScheduleRepositoryTests
         using (var scope = db.Scope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<IScheduleRepository>();
-            await repo.UpsertAsync(new ScheduleHeader(Sep, ScheduleStatus.Published, Revision: 3, publishedAt, PublishedVersion: 2));
+            await repo.UpsertAsync(new ScheduleHeader(Sep, ScheduleStatus.Published, Revision: 3, publishedAt, PublishedVersion: 2, PublishedRevision: 3));
             await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
         }
 
@@ -55,7 +55,7 @@ public class ScheduleRepositoryTests
         {
             var repo = scope.ServiceProvider.GetRequiredService<IScheduleRepository>();
             var header = await repo.FindAsync(Sep);
-            Assert.Equal(new ScheduleHeader(Sep, ScheduleStatus.Published, 3, publishedAt, 2), header);
+            Assert.Equal(new ScheduleHeader(Sep, ScheduleStatus.Published, 3, publishedAt, 2, 3), header);
             Assert.Single(await repo.ListAsync());
         }
     }

@@ -20,13 +20,14 @@ public sealed record ErrorBodyDto(
 
 public sealed record ScheduleListDto(IReadOnlyList<ScheduleSummaryDto> Months);
 
-public sealed record ScheduleSummaryDto(string YearMonth, string Status, int Revision, int PublishedVersion, DateTimeOffset? PublishedAt, int HardViolationCount);
+public sealed record ScheduleSummaryDto(string YearMonth, string Status, int Revision, int PublishedVersion, bool EditedSincePublish, DateTimeOffset? PublishedAt, int HardViolationCount);
 
 public sealed record ScheduleDto(
     string YearMonth,
     string Status,
     int Revision,
     int PublishedVersion,
+    bool EditedSincePublish,
     DateTimeOffset? PublishedAt,
     int DayCount,
     int StaffCount,

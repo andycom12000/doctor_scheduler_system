@@ -1237,7 +1237,7 @@ components:
 
     ScheduleSummary:
       type: object
-      required: [yearMonth, status, revision, publishedVersion]
+      required: [yearMonth, status, revision, publishedVersion, editedSincePublish]
       properties:
         yearMonth: { type: string, examples: ['2026-09'] }
         status: { $ref: '#/components/schemas/ScheduleStatus' }
@@ -1249,12 +1249,18 @@ components:
             定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。畫面標題列的
             「已發布 v2」就是它。與 `revision` 不同：`revision` 是每次改格都會動的
             修改次數計數器，`publishedVersion` 只在發布時動，改格、套用變體都不影響它。
+        editedSincePublish:
+          type: boolean
+          description: |
+            已發布之後又改過（改格、對調；整份套用變體只開放給草稿，不會進到這個狀態）。狀態仍是 `published`、`publishedVersion`
+            不變，但內容已經不是那一版；畫面要標出來，列印與匯出前要像草稿一樣先問要不要重新發布。
+            草稿一律 false，重新發布後回到 false。
         publishedAt: { type: [string, 'null'], format: date-time }
         hardViolationCount: { type: integer }
 
     Schedule:
       type: object
-      required: [yearMonth, status, revision, publishedVersion, dayCount, areas, duties]
+      required: [yearMonth, status, revision, publishedVersion, editedSincePublish, dayCount, areas, duties]
       properties:
         yearMonth: { type: string, examples: ['2026-09'] }
         status: { $ref: '#/components/schemas/ScheduleStatus' }
@@ -1271,6 +1277,12 @@ components:
             定版版本號：只有發布（含重新發布）才 +1，0 = 從未發布。畫面標題列的
             「已發布 v2」就是它。與 `revision` 不同：`revision` 是每次改格都會動的
             修改次數計數器，`publishedVersion` 只在發布時動，改格、套用變體都不影響它。
+        editedSincePublish:
+          type: boolean
+          description: |
+            已發布之後又改過（改格、對調；整份套用變體只開放給草稿，不會進到這個狀態）。狀態仍是 `published`、`publishedVersion`
+            不變，但內容已經不是那一版；畫面要標出來，列印與匯出前要像草稿一樣先問要不要重新發布。
+            草稿一律 false，重新發布後回到 false。
         publishedAt: { type: [string, 'null'], format: date-time }
         dayCount: { type: integer }
         staffCount: { type: integer }

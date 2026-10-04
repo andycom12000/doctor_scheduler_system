@@ -35,6 +35,7 @@ import {
   computeVacancies,
   computeViolations,
   datesOfYearMonth,
+  editedSincePublish,
   dutyKey,
   ensureSchedule,
   generateVariants,
@@ -69,6 +70,7 @@ function toScheduleResponse(schedule: ReturnType<typeof ensureSchedule>): Schedu
     status: schedule.status,
     revision: schedule.revision,
     publishedVersion: schedule.publishedVersion,
+    editedSincePublish: editedSincePublish(schedule),
     publishedAt: schedule.publishedAt,
     dayCount: datesOfYearMonth(schedule.yearMonth).length,
     staffCount: store.staff.filter((s) => s.status === 'active').length,
@@ -116,6 +118,7 @@ const scheduleHandlers = [
         status: schedule.status,
         revision: schedule.revision,
         publishedVersion: schedule.publishedVersion,
+        editedSincePublish: editedSincePublish(schedule),
         publishedAt: schedule.publishedAt,
         hardViolationCount: computeViolations(store, schedule.yearMonth).filter((v) => v.severity === 'hard').length,
       }))
@@ -208,6 +211,7 @@ const scheduleHandlers = [
     schedule.status = 'published'
     schedule.revision++
     schedule.publishedVersion++
+    schedule.publishedRevision = schedule.revision
     schedule.publishedAt = new Date().toISOString()
     const carryOver = computeCarryOverEntries(store, ym)
     store.carryOver.set(nextYearMonth(ym), carryOver)

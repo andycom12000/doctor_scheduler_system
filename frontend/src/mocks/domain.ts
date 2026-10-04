@@ -91,13 +91,15 @@ export interface ScheduleState {
   revision: number
   /** 定版版本號：只有發布才 +1，0 = 從未發布。 */
   publishedVersion: number
+  /** 最近一次發布當下的 revision；跟 revision 不同就是「發布後有修改」（#75）。 */
+  publishedRevision: number
   publishedAt: string | null
   /** key: `${areaId}|${date}`。未指派的格子不出現在這裡。 */
   duties: Map<string, string>
 }
 
 export function newScheduleState(yearMonth: string): ScheduleState {
-  return { yearMonth, status: 'draft', revision: 0, publishedVersion: 0, publishedAt: null, duties: new Map() }
+  return { yearMonth, status: 'draft', revision: 0, publishedVersion: 0, publishedRevision: 0, publishedAt: null, duties: new Map() }
 }
 
 /** 該月尚無值班表時自動建立一份空草稿——`setDuty`／`swapDuties`／`applyVariant` 的入口語意。 */
@@ -1259,3 +1261,8 @@ export function generateVariants(
 }
 
 export { previousYearMonth, nextYearMonth, previousDate, nextDate, datesOfYearMonth }
+
+/** 已發布、但之後又改過（後端 `ScheduleHeader.EditedSincePublish` 的 mock 版，#75）。 */
+export function editedSincePublish(schedule: ScheduleState): boolean {
+  return schedule.status === 'published' && schedule.revision !== schedule.publishedRevision
+}

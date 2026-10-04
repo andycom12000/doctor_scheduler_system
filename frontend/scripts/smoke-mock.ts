@@ -198,6 +198,10 @@ async function main() {
       const body = await list.json()
       assert(Array.isArray(body.months), 'months 是陣列')
       assert(body.months.every((m: { publishedVersion: unknown }) => typeof m.publishedVersion === 'number'), '每個月份都帶 publishedVersion')
+      assert(
+        body.months.every((m: { editedSincePublish: unknown }) => typeof m.editedSincePublish === 'boolean'),
+        '每個月份都帶 editedSincePublish',
+      )
       if (isMock) {
         assert(body.months.some((m: { yearMonth: string }) => m.yearMonth === '2026-08'), '清單含 2026-08')
         assert(body.months.some((m: { yearMonth: string }) => m.yearMonth === '2026-09'), '清單含 2026-09')
@@ -214,6 +218,7 @@ async function main() {
       const body = await res.json()
       assert(body.status === 'draft', '2026-09 初始狀態為 draft')
       assert(body.publishedVersion === 0, '草稿 publishedVersion = 0')
+      assert(body.editedSincePublish === false, '草稿 editedSincePublish = false')
       assert(body.duties.length > 100, 'duties 數量合理（> 100）')
       revision = body.revision
     })
@@ -626,6 +631,7 @@ async function main() {
       // publishedVersion：草稿是 0、發布 +1、發布後改格不動、重新發布再 +1（revision 另算）
       assert(publishedBody.publishedVersion === 1, '第一次發布 publishedVersion = 1')
       assert((await scheduleBody()).publishedVersion === 1, 'GET 值班表 publishedVersion = 1')
+      assert((await scheduleBody()).editedSincePublish === false, '剛發布 editedSincePublish = false')
       const reswap = await fetch(`${BASE}/schedules/2026-09/duties/swap`, {
         method: 'POST',
         headers: json,
@@ -633,6 +639,7 @@ async function main() {
       })
       assert(reswap.status === 200, '發布後 swap → 200')
       assert((await scheduleBody()).publishedVersion === 1, '發布後改格 publishedVersion 不變')
+      assert((await scheduleBody()).editedSincePublish === true, '發布後改格 editedSincePublish = true（#75）')
       const republished = await fetch(`${BASE}/schedules/2026-09/publish`, {
         method: 'POST',
         headers: json,
@@ -640,6 +647,7 @@ async function main() {
       })
       assert(republished.status === 200, '重新發布 → 200')
       assert((await republished.json()).publishedVersion === 2, '重新發布 publishedVersion = 2')
+      assert((await scheduleBody()).editedSincePublish === false, '重新發布後 editedSincePublish = false')
 
       // export：已發布也能匯出，位元組長度 > 0
       const exported = await fetch(`${BASE}/schedules/2026-09/export?layout=area-by-day`)

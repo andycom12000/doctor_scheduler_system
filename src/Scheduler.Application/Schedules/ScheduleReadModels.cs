@@ -10,6 +10,7 @@ public sealed record ScheduleSummary(
     ScheduleStatus Status,
     int Revision,
     int PublishedVersion,
+    bool EditedSincePublish,
     DateTimeOffset? PublishedAt,
     int HardViolationCount);
 
@@ -19,6 +20,7 @@ public sealed record ScheduleView(
     ScheduleStatus Status,
     int Revision,
     int PublishedVersion,
+    bool EditedSincePublish,
     DateTimeOffset? PublishedAt,
     int DayCount,
     int StaffCount,

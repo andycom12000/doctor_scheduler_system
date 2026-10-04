@@ -41,6 +41,7 @@ internal sealed class ScheduleRepository : IScheduleRepository
         entity.Status = EnumNames.Of(header.Status);
         entity.Revision = header.Revision;
         entity.PublishedVersion = header.PublishedVersion;
+        entity.PublishedRevision = header.PublishedRevision;
         entity.PublishedAt = header.PublishedAt;
     }
 
@@ -176,5 +177,5 @@ internal sealed class ScheduleRepository : IScheduleRepository
     }
 
     private static ScheduleHeader ToHeader(ScheduleEntity s) =>
-        new(new YearMonth(s.Year, s.Month), EnumNames.ToScheduleStatus(s.Status), s.Revision, s.PublishedAt, s.PublishedVersion);
+        new(new YearMonth(s.Year, s.Month), EnumNames.ToScheduleStatus(s.Status), s.Revision, s.PublishedAt, s.PublishedVersion, s.PublishedRevision);
 }
