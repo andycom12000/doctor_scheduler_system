@@ -26,7 +26,7 @@ import { cellKindOf, groupColorIndex } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
 import { parseSwapCellKey, swapCellKey } from './lib/writeFlow'
-import { publicHolidayNote } from './lib/printSheet'
+import { holidayNote } from './lib/printSheet'
 import { usePointerDragSwap } from '@/composables/usePointerDragSwap'
 
 const props = defineProps<{
@@ -99,10 +99,12 @@ function cellClass(areaId: string, date: string, isHoliday: boolean): Record<str
     'ad-grid__cell--violation-stripe': kind === 'violation-stripe',
     'ad-grid__cell--violation-bg': kind === 'violation-bg',
   }
-  // 有人的格子一律帶身分組 class：畫面上違規樣式寫在後面、照樣蓋掉它；列印時違規底色拿掉，靠它留住組別色。
   const groupIndex = directoryOf(staffId)?.groupIndex
   if (staffId && groupIndex !== null && groupIndex !== undefined) {
-    classes[`ad-grid__cell--group-${groupColorIndex(groupIndex)}`] = true
+    const color = groupColorIndex(groupIndex)
+    if (kind === 'duty' || kind === 'duty-holiday') classes[`ad-grid__cell--group-${color}`] = true
+    // 列印時違規／空缺底色拿掉，有人的格子都要回到組別色；只在 @media print 有樣式，畫面不受影響。
+    classes[`ad-grid__cell--print-group-${color}`] = true
   }
   const drag = dragSwap.state.value
   const key = swapCellKey(areaId, date)
@@ -127,7 +129,8 @@ function dayClass(day: DayColumn): Record<string, boolean> {
   }
 }
 
-const holidayNote = computed(() => publicHolidayNote(props.days))
+const publicNote = computed(() => holidayNote(props.days, 'public'))
+const otherHolidayNote = computed(() => holidayNote(props.days, 'other'))
 
 function filled(areaId: string): number {
   return props.days.filter((day) => staffIdAt(areaId, day.date)).length
@@ -209,9 +212,9 @@ function filled(areaId: string): number {
       <span v-for="g in groupLegend" :key="g.colorIndex" class="ad-legend__item">
         <span class="ad-legend__swatch" :class="`ad-legend__swatch--group-${g.colorIndex}`" />{{ g.name }}
       </span>
-      <span class="ad-legend__item"><span class="ad-legend__swatch print-legend__holiday" />假日（週六、週日）</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch print-legend__holiday" />假日（國定假日除外）{{ otherHolidayNote ? `：${otherHolidayNote}` : '' }}</span>
       <span class="ad-legend__item">
-        <span class="ad-legend__swatch print-legend__public-holiday" />國定假日{{ holidayNote ? `：${holidayNote}` : '' }}
+        <span class="ad-legend__swatch print-legend__public-holiday" />國定假日{{ publicNote ? `：${publicNote}` : '' }}
       </span>
       <span class="dp-note">格內為姓名簡稱 · 缺＝空缺</span>
     </div>
@@ -529,22 +532,22 @@ function filled(areaId: string): number {
     background: var(--print-public-holiday-bg);
   }
 
-  .ad-grid__cell--group-1 {
+  .ad-grid__cell--print-group-1 {
     background: var(--group-1);
     color: var(--group-1-fg);
   }
 
-  .ad-grid__cell--group-2 {
+  .ad-grid__cell--print-group-2 {
     background: var(--group-2);
     color: var(--group-2-fg);
   }
 
-  .ad-grid__cell--group-3 {
+  .ad-grid__cell--print-group-3 {
     background: var(--group-3);
     color: var(--group-3-fg);
   }
 
-  .ad-grid__cell--group-4 {
+  .ad-grid__cell--print-group-4 {
     background: var(--group-4);
     color: var(--group-4-fg);
   }

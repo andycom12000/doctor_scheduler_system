@@ -4,7 +4,7 @@
  * 加上寫入流程（issue #34）：發布／重新發布、驗證約束、匯出、拖拉對調、已發布確認。
  * 列印（issue #32）：純 `@media print`，A4 橫式一頁一個月；印目前的格線檢視，單日詳表改印日 × 人。
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/PageLayout.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
@@ -383,6 +383,15 @@ async function runPrint(): Promise<void> {
   if (isStale(month)) return
   window.print()
 }
+
+// Ctrl+P／右鍵選單列印不經過 runPrint（擋 X1、草稿提示都繞過去了，beforeprint 也取消不了列印），
+// 至少把單日詳表切成日 × 人，才不會印出沒有列印版面的畫面。Vue 的 DOM 更新是 microtask，
+// 在事件處理結束、瀏覽器排版列印之前就會完成。
+function onBeforePrint(): void {
+  if (schedule.data.value) activeTab.value = printTabFor(activeTab.value)
+}
+onMounted(() => window.addEventListener('beforeprint', onBeforePrint))
+onBeforeUnmount(() => window.removeEventListener('beforeprint', onBeforePrint))
 
 const writeBusy = computed(() => swapping.value || validating.value || publishing.value || exporting.value)
 

@@ -27,7 +27,7 @@ import {
 import { cellKindOf } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
-import { publicHolidayNote } from './lib/printSheet'
+import { holidayNote } from './lib/printSheet'
 
 const props = defineProps<{
   areas: Area[]
@@ -79,7 +79,8 @@ function dayClass(day: DayColumn): Record<string, boolean> {
   }
 }
 
-const holidayNote = computed(() => publicHolidayNote(props.days))
+const publicNote = computed(() => holidayNote(props.days, 'public'))
+const otherHolidayNote = computed(() => holidayNote(props.days, 'other'))
 
 /** 當天的區域；同人同日兩區（X1，#68）時有多個。 */
 function areasAt(staffId: string, date: string): string[] {
@@ -226,9 +227,9 @@ function cellClick(staffId: string, date: string): void {
     </div>
 
     <div class="ad-legend print-legend print-only">
-      <span class="ad-legend__item"><span class="ad-legend__swatch print-legend__holiday" />假日（週六、週日）</span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch print-legend__holiday" />假日（國定假日除外）{{ otherHolidayNote ? `：${otherHolidayNote}` : '' }}</span>
       <span class="ad-legend__item">
-        <span class="ad-legend__swatch print-legend__public-holiday" />國定假日{{ holidayNote ? `：${holidayNote}` : '' }}
+        <span class="ad-legend__swatch print-legend__public-holiday" />國定假日{{ publicNote ? `：${publicNote}` : '' }}
       </span>
       <span class="dp-note">格內為區域代號 · 空白＝未值班 · 空缺欄＝當日未填補區域數</span>
     </div>
