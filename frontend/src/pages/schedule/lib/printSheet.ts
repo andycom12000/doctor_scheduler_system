@@ -21,11 +21,15 @@ export function isPrintShortcut(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'meta
   return (e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'p'
 }
 
-/** 紙本標題。草稿也能印（草稿提示選「直接列印草稿」），所以狀態一定要印出來。 */
-export function printHeading(ym: string, status: ScheduleStatus, publishedVersion: number): string {
+/**
+ * 紙本標題。草稿也能印（草稿提示選「直接列印草稿」），所以狀態一定要印出來；
+ * 發布後又改過（#75）也要寫，紙上不能宣稱是那一版。
+ */
+export function printHeading(ym: string, status: ScheduleStatus, publishedVersion: number, edited: boolean): string {
   const month = `${Number(ym.slice(0, 4))} 年 ${Number(ym.slice(5, 7))} 月值班表`
   if (status !== 'published') return `${month}（草稿）`
-  return publishedVersion ? `${month}（已發布 v${publishedVersion}）` : `${month}（已發布）`
+  const version = publishedVersion ? `已發布 v${publishedVersion}` : '已發布'
+  return edited ? `${month}（${version}，之後有修改）` : `${month}（${version}）`
 }
 
 /**

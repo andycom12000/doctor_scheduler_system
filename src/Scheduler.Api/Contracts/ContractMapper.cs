@@ -22,7 +22,7 @@ internal static class ContractMapper
     // -- 值班表 -------------------------------------------------------------
 
     public static ScheduleListDto ToContract(this IReadOnlyList<ScheduleSummary> months) =>
-        new(months.Select(m => new ScheduleSummaryDto(m.YearMonth.ToString(), ContractNames.Of(m.Status), m.Revision, m.PublishedVersion, m.PublishedAt, m.HardViolationCount)).ToArray());
+        new(months.Select(m => new ScheduleSummaryDto(m.YearMonth.ToString(), ContractNames.Of(m.Status), m.Revision, m.PublishedVersion, m.EditedSincePublish, m.PublishedAt, m.HardViolationCount)).ToArray());
 
     public static ScheduleDto ToContract(this ScheduleView s) =>
         new(
@@ -30,6 +30,7 @@ internal static class ContractMapper
             ContractNames.Of(s.Status),
             s.Revision,
             s.PublishedVersion,
+            s.EditedSincePublish,
             s.PublishedAt,
             s.DayCount,
             s.StaffCount,

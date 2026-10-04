@@ -55,7 +55,7 @@ public sealed class InMemoryStore : IScheduleRepository, IBlockedDayRepository, 
 
     public InMemoryStore WithPublished(YearMonth month, params CarryOverEntry[] carryOver)
     {
-        Headers[month] = new ScheduleHeader(month, ScheduleStatus.Published, 1, new DateTimeOffset(month.LastDay.AddDays(-3), TimeOnly.MinValue, TimeSpan.FromHours(8)), 1);
+        Headers[month] = new ScheduleHeader(month, ScheduleStatus.Published, 1, new DateTimeOffset(month.LastDay.AddDays(-3), TimeOnly.MinValue, TimeSpan.FromHours(8)), 1, PublishedRevision: 1);
         CarryOver[month] = carryOver.ToList();
         return this;
     }

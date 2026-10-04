@@ -45,12 +45,16 @@ describe('isPrintShortcut', () => {
 
 describe('printHeading', () => {
   it('紙本要看得出是草稿還是哪一版定版', () => {
-    expect(printHeading('2026-10', 'draft', 0)).toBe('2026 年 10 月值班表（草稿）')
-    expect(printHeading('2026-10', 'published', 3)).toBe('2026 年 10 月值班表（已發布 v3）')
+    expect(printHeading('2026-10', 'draft', 0, false)).toBe('2026 年 10 月值班表（草稿）')
+    expect(printHeading('2026-10', 'published', 3, false)).toBe('2026 年 10 月值班表（已發布 v3）')
+  })
+
+  it('發布後又改過：紙上不能宣稱是那一版（#75）', () => {
+    expect(printHeading('2026-10', 'published', 3, true)).toBe('2026 年 10 月值班表（已發布 v3，之後有修改）')
   })
 
   it('已發布但沒有版本號時只寫已發布，跟狀態 badge 一致', () => {
-    expect(printHeading('2026-01', 'published', 0)).toBe('2026 年 1 月值班表（已發布）')
+    expect(printHeading('2026-01', 'published', 0, false)).toBe('2026 年 1 月值班表（已發布）')
   })
 })
 

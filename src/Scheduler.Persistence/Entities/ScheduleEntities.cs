@@ -11,6 +11,7 @@ public sealed class ScheduleEntity
     public string Status { get; set; } = "";
     public int Revision { get; set; }
     public int PublishedVersion { get; set; }
+    public int PublishedRevision { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
 }
 

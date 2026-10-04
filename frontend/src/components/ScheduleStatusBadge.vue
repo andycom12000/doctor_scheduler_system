@@ -6,15 +6,18 @@
  */
 import { computed } from 'vue'
 import { CircleCheck, PencilLine } from 'lucide-vue-next'
+import { scheduleStatusLabel } from './scheduleStatusLabel'
 
 const props = defineProps<{
   status: 'draft' | 'published'
   /** 定版版本號（契約 `publishedVersion`）；只在已發布時顯示。 */
   publishedVersion?: number
+  /** 發布後又改過（契約 `editedSincePublish`，#75）。 */
+  edited?: boolean
 }>()
 
 const published = computed(() => props.status === 'published')
-const label = computed(() => (published.value ? props.publishedVersion ? `已發布 v${props.publishedVersion}` : '已發布' : '草稿'))
+const label = computed(() => scheduleStatusLabel(props.status, props.publishedVersion, props.edited ?? false))
 </script>
 
 <template>

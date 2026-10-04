@@ -34,7 +34,7 @@ import CandidatePanel from './CandidatePanel.vue'
 import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancyCountMap } from './lib/scheduleGrid'
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
-import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
+import { downloadBlob, outputPromptKind, promptDraftOutput, type DraftOutputDecision } from './lib/draftOutput'
 import { doubleBookingBlockMessage, printBlockMessage } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
 import { isPrintShortcut, printHeading, printTabFor, type ScheduleTab } from './lib/printSheet'
@@ -137,9 +137,17 @@ const subtitle = computed(() => {
   return `${s.areas.length} 區 · ${s.staffCount ?? 0} 人`
 })
 const isPublished = computed(() => schedule.data.value?.status === 'published')
+
+/** 匯出、列印前的提示：草稿問先發布，發布後有修改問先重新發布（#75），已發布沒改過不問。 */
+async function confirmOutput(label: string): Promise<DraftOutputDecision> {
+  const s = schedule.data.value
+  const kind = s ? outputPromptKind(s.status, s.editedSincePublish) : 'draft'
+  if (kind === null) return 'direct'
+  return promptDraftOutput(label, kind === 'edited' ? { editedFrom: s?.publishedVersion } : {})
+}
 const printTitle = computed(() => {
   const s = schedule.data.value
-  return s ? printHeading(ym.value, s.status, s.publishedVersion) : ''
+  return s ? printHeading(ym.value, s.status, s.publishedVersion, s.editedSincePublish) : ''
 })
 const publishLabel = computed(() => (isPublished.value ? '重新發布' : '發布'))
 
@@ -343,11 +351,9 @@ async function runExport(): Promise<void> {
   }
   exporting.value = true
   try {
-    if (!isPublished.value) {
-      const decision = await promptDraftOutput('匯出')
-      if (decision === 'cancel') return
-      if (decision === 'publish-first' && !(await runPublish(month))) return
-    }
+    const decision = await confirmOutput('匯出')
+    if (decision === 'cancel') return
+    if (decision === 'publish-first' && !(await runPublish(month))) return
     await downloadExport(month)
   } catch (err) {
     fail(month, err)
@@ -383,11 +389,9 @@ async function printFlow(): Promise<void> {
     toast.error(blocked)
     return
   }
-  if (!isPublished.value) {
-    const decision = await promptDraftOutput('列印')
-    if (decision === 'cancel') return
-    if (decision === 'publish-first' && !(await runPublish(month))) return
-  }
+  const decision = await confirmOutput('列印')
+  if (decision === 'cancel') return
+  if (decision === 'publish-first' && !(await runPublish(month))) return
   // 等待期間換了月份，畫面已不是使用者要印的那個月。
   if (isStale(month)) return
   // 格線是 v-if，切了分頁要等 DOM 換好才印。切過去就留在那個分頁，使用者看得到印的是什麼。

@@ -72,7 +72,7 @@ public sealed class ApiFixture : IAsyncLifetime
         await staff.AddAsync(new Staff("s-gone", "E008", "已離職", "R1", StaffStatus.Inactive));
 
         var aug = new YearMonth(2026, 8);
-        await schedules.UpsertAsync(new ScheduleHeader(aug, ScheduleStatus.Published, 3, new DateTimeOffset(2026, 7, 28, 10, 0, 0, TimeSpan.FromHours(8)), 1));
+        await schedules.UpsertAsync(new ScheduleHeader(aug, ScheduleStatus.Published, 3, new DateTimeOffset(2026, 7, 28, 10, 0, 0, TimeSpan.FromHours(8)), 1, PublishedRevision: 3));
         await schedules.SetDutyAsync(aug, "area-chief", new DateOnly(2026, 8, 31), "s-r5");
         await schedules.ReplaceCarryOverAsync(aug, new[] { new CarryOverEntry("s-r4", 2) });
 
