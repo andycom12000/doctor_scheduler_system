@@ -93,6 +93,13 @@ public static class WebViewBridge
     }
 
     /// <summary>
+    /// 右鍵選單要拿掉的項目（<c>CoreWebView2ContextMenuItem.Name</c>，區分大小寫）。列印一律走排班主表的
+    /// 「列印」按鈕：那條路會擋同人同日兩區、草稿先問、單日詳表切到日 × 人（#32），選單的列印全部繞過。
+    /// Ctrl+P 由前端攔下改走同一條路。
+    /// </summary>
+    public static bool IsBlockedContextMenuItem(string name) => name == "print";
+
+    /// <summary>
     /// 組出送進 TestServer 的請求：相對路徑（TestServer 的 BaseAddress 是 <c>http://localhost/</c>）、
     /// 本體先整份讀進記憶體（WebView2 的 COM 串流不可重讀）、內容類標頭放到 <see cref="HttpContent.Headers"/>，
     /// 其餘標頭原樣搬；<c>Host</c> 丟掉，TestServer 自己會填。

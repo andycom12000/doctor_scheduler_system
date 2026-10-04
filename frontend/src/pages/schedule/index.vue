@@ -37,7 +37,7 @@ import { resolveJumpTarget } from './lib/cellNav'
 import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
 import { doubleBookingBlockMessage, printBlockMessage } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
-import { printHeading, printTabFor, type ScheduleTab } from './lib/printSheet'
+import { isPrintShortcut, printHeading, printTabFor, type ScheduleTab } from './lib/printSheet'
 
 const { ym } = useYearMonth()
 const router = useRouter()
@@ -358,7 +358,20 @@ async function runExport(): Promise<void> {
 
 // -- 列印：有 X1 或確認不了違規清單就擋（前端列印前重抓，見 printBlockMessage）。版面是各格線元件與
 // styles.css 的 `@media print`（#32）；這裡決定印哪個檢視，單日詳表沒有列印版面，先切到日 × 人再印 ------------
+// Ctrl+P 不受模態對話框擋，草稿提示還開著時再按一次不能再進來一輪。
+const printing = ref(false)
+
 async function runPrint(): Promise<void> {
+  if (printing.value) return
+  printing.value = true
+  try {
+    await printFlow()
+  } finally {
+    printing.value = false
+  }
+}
+
+async function printFlow(): Promise<void> {
   toast.clearErrors()
   const month = ym.value
   // 列印沒有後端守門：先重新抓一次違規清單再判斷（fail-closed，抓不到就不印）。
@@ -384,16 +397,33 @@ async function runPrint(): Promise<void> {
   window.print()
 }
 
-// Ctrl+P／右鍵選單列印不經過 runPrint（擋 X1、草稿提示都繞過去了，beforeprint 也取消不了列印），
-// 至少把單日詳表切成日 × 人，才不會印出沒有列印版面的畫面。Vue 的 DOM 更新是 microtask，
-// 在事件處理結束、瀏覽器排版列印之前就會完成。
+// Ctrl+P 攔下來改走 runPrint（擋 X1、草稿提示）；右鍵選單的列印由 Shell 拿掉。沒有班表、寫入中、
+// 或候選人面板開著（按鈕被面板遮罩蓋住，面板裡的指派可能正在送出）就只吞掉，不印。
+function onKeyDown(e: KeyboardEvent): void {
+  if (!isPrintShortcut(e)) return
+  e.preventDefault()
+  if (e.repeat || !schedule.data.value || writeBusy.value || candidateTarget.value) return
+  void runPrint()
+}
+
+// 仍有漏網的列印（例如開發期瀏覽器的選單）：至少把單日詳表切成日 × 人，才不會印出沒有列印版面的畫面。
+// Vue 的 DOM 更新是 microtask，在事件處理結束、瀏覽器排版列印之前就會完成。
 function onBeforePrint(): void {
   if (schedule.data.value) activeTab.value = printTabFor(activeTab.value)
 }
-onMounted(() => window.addEventListener('beforeprint', onBeforePrint))
-onBeforeUnmount(() => window.removeEventListener('beforeprint', onBeforePrint))
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('beforeprint', onBeforePrint)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('beforeprint', onBeforePrint)
+})
 
-const writeBusy = computed(() => swapping.value || validating.value || publishing.value || exporting.value)
+// 列印也算：重抓違規清單、確認可以印的這段期間不能拖拉對調，免得檢查完又冒出同人同日兩區。
+const writeBusy = computed(
+  () => swapping.value || validating.value || publishing.value || exporting.value || printing.value,
+)
 
 // -- 工具列：重新求解導去變體頁；其餘寫入流程見上 ------------------------------------------
 // 任務指示與空月份的「求解」連結都導向 /variants/{ym}；issue 內文另寫「SCREEN 05」，

@@ -72,6 +72,7 @@ public partial class MainWindow : Window
             core.AddWebResourceRequestedFilter($"{WebViewBridge.Origin}*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
             core.WebResourceRequested += OnWebResourceRequested;
             core.DownloadStarting += OnDownloadStarting;
+            core.ContextMenuRequested += OnContextMenuRequested;
 #if DEBUG
             core.Settings.AreDevToolsEnabled = true;
 #else
@@ -133,6 +134,16 @@ public partial class MainWindow : Window
         finally
         {
             deferral.Complete();
+        }
+    }
+
+    /// <summary>拿掉右鍵選單的列印（#32）：列印要走排班主表的按鈕，見 <see cref="WebViewBridge.IsBlockedContextMenuItem"/>。</summary>
+    private static void OnContextMenuRequested(object? sender, CoreWebView2ContextMenuRequestedEventArgs e)
+    {
+        var items = e.MenuItems;
+        for (var i = items.Count - 1; i >= 0; i--)
+        {
+            if (WebViewBridge.IsBlockedContextMenuItem(items[i].Name)) items.RemoveAt(i);
         }
     }
 

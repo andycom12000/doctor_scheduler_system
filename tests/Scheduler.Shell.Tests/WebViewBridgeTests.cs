@@ -130,6 +130,14 @@ public class WebViewBridgeTests
         Assert.Equal(filter, dialog.Filter);
     }
 
+    [Theory]
+    [InlineData("print", true)]
+    [InlineData("saveAs", false)]
+    [InlineData("copy", false)]
+    [InlineData("Print", false)]
+    public void 右鍵選單_只拿掉列印_列印要走排班主表的按鈕(string name, bool expected)
+        => Assert.Equal(expected, WebViewBridge.IsBlockedContextMenuItem(name));
+
     /// <summary>WebView2 給的 COM 串流不可 seek，轉換要自己緩衝。</summary>
     private sealed class NonSeekableStream : MemoryStream
     {

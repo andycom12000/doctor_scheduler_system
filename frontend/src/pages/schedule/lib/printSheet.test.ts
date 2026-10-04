@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { holidayNote, printHeading, printTabFor } from './printSheet'
+import { holidayNote, isPrintShortcut, printHeading, printTabFor } from './printSheet'
 import type { DayColumn } from './scheduleGrid'
 
 const col = (over: Partial<DayColumn>): DayColumn => ({
@@ -18,6 +18,28 @@ describe('printTabFor', () => {
     expect(printTabFor('area-by-day')).toBe('area-by-day')
     expect(printTabFor('day-by-staff')).toBe('day-by-staff')
     expect(printTabFor('day-detail')).toBe('day-by-staff')
+  })
+})
+
+describe('isPrintShortcut', () => {
+  const key = (k: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean }> = {}) => ({
+    key: k,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    ...mods,
+  })
+
+  it('Ctrl+P、Ctrl+Shift+P（系統列印對話框）都算，大小寫不拘', () => {
+    expect(isPrintShortcut(key('p', { ctrlKey: true }))).toBe(true)
+    expect(isPrintShortcut(key('P', { ctrlKey: true }))).toBe(true)
+    expect(isPrintShortcut(key('p', { metaKey: true }))).toBe(true)
+  })
+
+  it('沒按 Ctrl、或加了 Alt、或別的鍵都不算', () => {
+    expect(isPrintShortcut(key('p'))).toBe(false)
+    expect(isPrintShortcut(key('p', { ctrlKey: true, altKey: true }))).toBe(false)
+    expect(isPrintShortcut(key('o', { ctrlKey: true }))).toBe(false)
   })
 })
 
