@@ -27,7 +27,7 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
 
 <template>
   <div class="page-layout">
-    <header class="page-layout__header">
+    <header class="page-layout__header screen-only">
       <YearMonthSwitcher v-if="showYearMonth" class="page-layout__ym" />
       <div class="page-layout__heading">
         <h1 class="page-layout__title">{{ title }}</h1>
@@ -98,5 +98,18 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
   overflow: hidden;
   display: flex;
   padding: 0;
+}
+
+/* 列印（#32）：標題列整條不印（頁面自己印紙本標題），本體不再是捲動容器 */
+@media print {
+  .page-layout {
+    display: block;
+    height: auto;
+  }
+
+  .page-layout__body {
+    overflow: visible;
+    padding: 0;
+  }
 }
 </style>

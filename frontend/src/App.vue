@@ -33,7 +33,7 @@ const currentName = computed(() => route.name?.toString())
 
 <template>
   <div class="shell">
-    <header class="shell__topbar">
+    <header class="shell__topbar screen-only">
       <div class="shell__brand">
         <span class="shell__brand-mark" aria-hidden="true"></span>
         <span class="shell__brand-name">醫師值班排班系統</span>
@@ -56,8 +56,8 @@ const currentName = computed(() => route.name?.toString())
       <RouterView />
     </main>
 
-    <ConfirmDialog />
-    <ToastHost />
+    <ConfirmDialog class="screen-only" />
+    <ToastHost class="screen-only" />
   </div>
 </template>
 
@@ -137,5 +137,16 @@ const currentName = computed(() => route.name?.toString())
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+@media print {
+  .shell {
+    display: block;
+    height: auto;
+  }
+
+  .shell__content {
+    overflow: visible;
+  }
 }
 </style>

@@ -172,6 +172,14 @@
   --group-3-fg: var(--color-bg);
   --group-4: var(--color-accent-800);
   --group-4-fg: var(--color-bg);
+
+  /*
+    列印（#32）：黑白印表機也要分得出兩種假日。國定假日是斜線（落在週末的也用斜線），
+    其餘假日（週六、週日與逐日覆寫的臨時放假）是平塗淺灰；不靠顏色，只靠灰階與紋路。
+  */
+  --print-rule: #9a9a9a;
+  --print-holiday-bg: #dcdcdc;
+  --print-public-holiday-bg: repeating-linear-gradient(135deg, #a6a6a6 0 1px, #fff 1px 5px);
 }
 
 *,
@@ -291,4 +299,42 @@ a {
 .tag-accent {
   background: var(--color-accent-100);
   color: var(--color-accent-800);
+}
+
+/*
+  列印（#32）：A4 橫式。畫面版面是「填滿視窗、內部捲動」，印的時候整條捲動容器
+  （body → App.vue → PageLayout → 各畫面）都要解開，否則只印得出一個視窗高。
+  各元件自己的捲動容器在各自的 scoped `@media print` 裡解。
+*/
+@page {
+  size: A4 landscape;
+  margin: 8mm;
+}
+
+/* !important：元件 scoped 的 display（例如圖例的 flex）權重比這裡高，不加會在畫面上冒出來 */
+@media not print {
+  .print-only {
+    display: none !important;
+  }
+}
+
+@media print {
+  html,
+  body,
+  #app {
+    height: auto;
+  }
+
+  body {
+    overflow: visible;
+    background: #fff;
+    color: #000;
+    /* 底色與斜線是資訊（假日、身分組），預設的「省墨」會把它們全部丟掉 */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
 }

@@ -8,6 +8,9 @@
  * 拖拉對調（issue #34）：值班格按住拖到另一格（空格也行，等於搬移）放開即 emit `swap`；
  * 來源格與目標格有預覽樣式、Esc 取消、位移很小仍是點擊（開候選人面板）。
  * 格子鍵就是 CellRef（`areaId|date`），本元件不呼叫 API，由 index.vue 接 `swap`。
+ *
+ * 列印（#32）：驗收以日 × 人為準，這裡給一份同規格的紙本（A4 橫式一頁）。印的時候拿掉違規與
+ * 空缺的底色（空缺格仍印「缺」），值班格留身分組色階，兩種假日畫在日期表頭與空格上。
  */
 import { computed } from 'vue'
 import type { Area, AreaType, PointBoardGroup } from '@/api/types'
@@ -23,6 +26,7 @@ import { cellKindOf, groupColorIndex } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
 import { parseSwapCellKey, swapCellKey } from './lib/writeFlow'
+import { holidayNote } from './lib/printSheet'
 import { usePointerDragSwap } from '@/composables/usePointerDragSwap'
 
 const props = defineProps<{
@@ -96,8 +100,11 @@ function cellClass(areaId: string, date: string, isHoliday: boolean): Record<str
     'ad-grid__cell--violation-bg': kind === 'violation-bg',
   }
   const groupIndex = directoryOf(staffId)?.groupIndex
-  if ((kind === 'duty' || kind === 'duty-holiday') && groupIndex !== null && groupIndex !== undefined) {
-    classes[`ad-grid__cell--group-${groupColorIndex(groupIndex)}`] = true
+  if (staffId && groupIndex !== null && groupIndex !== undefined) {
+    const color = groupColorIndex(groupIndex)
+    if (kind === 'duty' || kind === 'duty-holiday') classes[`ad-grid__cell--group-${color}`] = true
+    // 列印時違規／空缺底色拿掉，有人的格子都要回到組別色；只在 @media print 有樣式，畫面不受影響。
+    classes[`ad-grid__cell--print-group-${color}`] = true
   }
   const drag = dragSwap.state.value
   const key = swapCellKey(areaId, date)
@@ -114,6 +121,17 @@ function cellText(areaId: string, date: string): string {
   return dir ? abbreviate(dir.name) : shortStaffCode(staffId)
 }
 
+/** 日期欄的假日種類，只有列印用得到（畫面上的假日底色走 `cellKindOf`）。 */
+function dayClass(day: DayColumn): Record<string, boolean> {
+  return {
+    'ad-grid__day--holiday': day.isHoliday && !day.isPublicHoliday,
+    'ad-grid__day--public-holiday': day.isPublicHoliday,
+  }
+}
+
+const publicNote = computed(() => holidayNote(props.days, 'public'))
+const otherHolidayNote = computed(() => holidayNote(props.days, 'other'))
+
 function filled(areaId: string): number {
   return props.days.filter((day) => staffIdAt(areaId, day.date)).length
 }
@@ -124,13 +142,15 @@ function filled(areaId: string): number {
     <div
       class="ad-grid"
       :class="{ 'ad-grid--dragging': dragSwap.state.value !== null }"
-      :style="{ gridTemplateColumns: `132px repeat(${days.length}, 26px) 44px` }"
+      :style="{ gridTemplateColumns: `132px repeat(${days.length}, var(--ad-col, 26px)) 44px` }"
       @pointermove="dragSwap.onPointerMove"
       @pointerup="dragSwap.onPointerUp"
       @pointercancel="dragSwap.onPointerCancel"
     >
       <div class="ad-grid__corner">區域 / 日期</div>
-      <div v-for="day in days" :key="day.date" class="ad-grid__head" :class="{ 'ad-grid__head--holiday': day.isHoliday }">
+      <div v-for="day in days" :key="day.date" class="ad-grid__head"
+        :class="[{ 'ad-grid__head--holiday': day.isHoliday }, dayClass(day)]"
+      >
         <span class="ad-grid__wd">{{ day.weekday }}</span>
         <span class="ad-grid__dd">{{ day.dd }}</span>
         <span class="ad-grid__pt">{{ day.quotaPointValue }}</span>
@@ -151,7 +171,7 @@ function filled(areaId: string): number {
             :key="day.date"
             type="button"
             class="ad-grid__cell"
-            :class="cellClass(area.id, day.date, day.isHoliday)"
+            :class="[cellClass(area.id, day.date, day.isHoliday), dayClass(day)]"
             :data-swap-key="swapCellKey(area.id, day.date)"
             @pointerdown="dragSwap.onCellPointerDown($event, swapCellKey(area.id, day.date))"
             @click="onCellClick(area.id, day.date)"
@@ -169,7 +189,7 @@ function filled(areaId: string): number {
       <div class="ad-grid__fill"></div>
     </div>
 
-    <div class="ad-legend">
+    <div class="ad-legend screen-only">
       <span class="k">身分組</span>
       <span v-for="g in groupLegend" :key="g.colorIndex" class="ad-legend__item">
         <span class="ad-legend__swatch" :class="`ad-legend__swatch--group-${g.colorIndex}`" />{{ g.name }}
@@ -185,6 +205,18 @@ function filled(areaId: string): number {
         <span class="ad-legend__swatch ad-legend__swatch--violation" />排到已登記的不可排班日（H5）
       </span>
       <span class="dp-note">格內為姓名簡稱 · 假日值班疊外框</span>
+    </div>
+
+    <div class="ad-legend print-legend print-only">
+      <span class="k">身分組</span>
+      <span v-for="g in groupLegend" :key="g.colorIndex" class="ad-legend__item">
+        <span class="ad-legend__swatch" :class="`ad-legend__swatch--group-${g.colorIndex}`" />{{ g.name }}
+      </span>
+      <span class="ad-legend__item"><span class="ad-legend__swatch print-legend__holiday" />假日（國定假日除外）{{ otherHolidayNote ? `：${otherHolidayNote}` : '' }}</span>
+      <span class="ad-legend__item">
+        <span class="ad-legend__swatch print-legend__public-holiday" />國定假日{{ publicNote ? `：${publicNote}` : '' }}
+      </span>
+      <span class="dp-note">格內為姓名簡稱 · 缺＝空缺</span>
     </div>
   </div>
 </template>
@@ -446,5 +478,97 @@ function filled(areaId: string): number {
 .dp-note {
   font-size: 11px;
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/* 列印（#32）：解掉矩陣自己的捲動框與 sticky，欄寬平分整頁寬（`--ad-col`，表頭欄數是 inline style）。 */
+@media print {
+  .ad-grid {
+    --ad-col: minmax(0, 1fr);
+    overflow: visible;
+    max-height: none;
+    border-color: var(--print-rule);
+  }
+
+  .ad-grid__corner,
+  .ad-grid__head,
+  .ad-grid__group,
+  .ad-grid__label,
+  .ad-grid__cell,
+  .ad-grid__stat,
+  .ad-grid__fill {
+    position: static;
+    border-color: var(--print-rule);
+    color: #000;
+  }
+
+  .ad-grid__corner,
+  .ad-grid__head,
+  .ad-grid__group,
+  .ad-grid__label {
+    background: #fff;
+  }
+
+  .ad-grid__wd,
+  .ad-grid__pt {
+    color: #000;
+  }
+
+  /* 違規與空缺的底色、外框一律拿掉，再依序疊回假日底紋與身分組色階 */
+  .ad-grid__cell {
+    background: #fff;
+    box-shadow: none;
+    outline: none;
+  }
+
+  .ad-grid__cell--vacancy {
+    font-weight: 700;
+  }
+
+  .ad-grid__day--holiday {
+    background: var(--print-holiday-bg);
+  }
+
+  .ad-grid__day--public-holiday {
+    background: var(--print-public-holiday-bg);
+  }
+
+  .ad-grid__cell--print-group-1 {
+    background: var(--group-1);
+    color: var(--group-1-fg);
+  }
+
+  .ad-grid__cell--print-group-2 {
+    background: var(--group-2);
+    color: var(--group-2-fg);
+  }
+
+  .ad-grid__cell--print-group-3 {
+    background: var(--group-3);
+    color: var(--group-3-fg);
+  }
+
+  .ad-grid__cell--print-group-4 {
+    background: var(--group-4);
+    color: var(--group-4-fg);
+  }
+
+  .print-legend {
+    display: flex;
+    font-size: 10px;
+  }
+
+  .print-legend .dp-note,
+  .print-legend .k {
+    font-size: 10px;
+    color: #000;
+  }
+
+  .print-legend__holiday {
+    background: var(--print-holiday-bg);
+  }
+
+  .print-legend__public-holiday {
+    background: var(--print-public-holiday-bg);
+  }
 }
 </style>

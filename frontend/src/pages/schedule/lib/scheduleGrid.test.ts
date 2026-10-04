@@ -151,8 +151,30 @@ describe('toDayColumns', () => {
       },
     ]
     expect(toDayColumns(days)).toEqual([
-      { date: '2026-09-06', dd: '06', weekday: '日', isHoliday: true, quotaPointValue: 2 },
+      {
+        date: '2026-09-06',
+        dd: '06',
+        weekday: '日',
+        isHoliday: true,
+        isPublicHoliday: false,
+        holidayName: null,
+        quotaPointValue: 2,
+      },
     ])
+  })
+
+  it('國定假日帶出旗標與名稱，列印才分得出兩種假日', () => {
+    const days: CalendarDay[] = [
+      {
+        date: '2026-10-10',
+        weekday: 6,
+        isHoliday: true,
+        isPublicHoliday: true,
+        holidayName: '國慶日',
+        quotaPointValue: 2,
+      },
+    ]
+    expect(toDayColumns(days)[0]).toMatchObject({ isHoliday: true, isPublicHoliday: true, holidayName: '國慶日' })
   })
 })
 

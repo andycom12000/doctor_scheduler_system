@@ -2,9 +2,9 @@
 /**
  * SCREEN 01 排班主表：三個檢視分頁、點數看板、點格指派（issue #31），
  * 加上寫入流程（issue #34）：發布／重新發布、驗證約束、匯出、拖拉對調、已發布確認。
- * 列印按鈕只留位置（`window.print()` ＋草稿提示），列印樣式在 #32。
+ * 列印（issue #32）：純 `@media print`，A4 橫式一頁一個月；印目前的格線檢視，單日詳表改印日 × 人。
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/PageLayout.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
@@ -37,6 +37,7 @@ import { resolveJumpTarget } from './lib/cellNav'
 import { downloadBlob, promptDraftOutput } from './lib/draftOutput'
 import { doubleBookingBlockMessage, printBlockMessage } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
+import { printHeading, printTabFor, type ScheduleTab } from './lib/printSheet'
 
 const { ym } = useYearMonth()
 const router = useRouter()
@@ -136,10 +137,13 @@ const subtitle = computed(() => {
   return `${s.areas.length} 區 · ${s.staffCount ?? 0} 人`
 })
 const isPublished = computed(() => schedule.data.value?.status === 'published')
+const printTitle = computed(() => {
+  const s = schedule.data.value
+  return s ? printHeading(ym.value, s.status, s.publishedVersion) : ''
+})
 const publishLabel = computed(() => (isPublished.value ? '重新發布' : '發布'))
 
 // -- 分頁 ---------------------------------------------------------------------------
-type ScheduleTab = 'area-by-day' | 'day-by-staff' | 'day-detail'
 const activeTab = ref<ScheduleTab>('area-by-day')
 
 // -- 單日詳表：選取日期預設本月第一天，前一日／次一日在月內夾住 ----------------------
@@ -352,7 +356,8 @@ async function runExport(): Promise<void> {
   }
 }
 
-// -- 列印：有 X1 或確認不了違規清單就擋（前端列印前重抓，見 printBlockMessage）。只留位置給 #32（列印樣式與接線在那邊），這裡只有草稿提示與 window.print() ------------
+// -- 列印：有 X1 或確認不了違規清單就擋（前端列印前重抓，見 printBlockMessage）。版面是各格線元件與
+// styles.css 的 `@media print`（#32）；這裡決定印哪個檢視，單日詳表沒有列印版面，先切到日 × 人再印 ------------
 async function runPrint(): Promise<void> {
   toast.clearErrors()
   const month = ym.value
@@ -372,8 +377,21 @@ async function runPrint(): Promise<void> {
   }
   // 等待期間換了月份，畫面已不是使用者要印的那個月。
   if (isStale(month)) return
+  // 格線是 v-if，切了分頁要等 DOM 換好才印。切過去就留在那個分頁，使用者看得到印的是什麼。
+  activeTab.value = printTabFor(activeTab.value)
+  await nextTick()
+  if (isStale(month)) return
   window.print()
 }
+
+// Ctrl+P／右鍵選單列印不經過 runPrint（擋 X1、草稿提示都繞過去了，beforeprint 也取消不了列印），
+// 至少把單日詳表切成日 × 人，才不會印出沒有列印版面的畫面。Vue 的 DOM 更新是 microtask，
+// 在事件處理結束、瀏覽器排版列印之前就會完成。
+function onBeforePrint(): void {
+  if (schedule.data.value) activeTab.value = printTabFor(activeTab.value)
+}
+onMounted(() => window.addEventListener('beforeprint', onBeforePrint))
+onBeforeUnmount(() => window.removeEventListener('beforeprint', onBeforePrint))
 
 const writeBusy = computed(() => swapping.value || validating.value || publishing.value || exporting.value)
 
@@ -505,6 +523,7 @@ const emptyStateLoading = computed(
     />
 
     <div v-else class="schedule">
+      <h1 class="print-only schedule__print-title">{{ printTitle }}</h1>
       <div class="schedule__content">
         <div class="schedule__main">
           <AreaByDayGrid
@@ -550,6 +569,7 @@ const emptyStateLoading = computed(
 
           <PointBoardPanel
             v-if="pointBoardGroups.length > 0"
+            class="screen-only"
             :groups="pointBoardGroups"
             :fair-on="fairOn"
             :published="schedule.data.value?.status === 'published'"
@@ -557,7 +577,7 @@ const emptyStateLoading = computed(
           />
         </div>
 
-        <aside v-if="activeTab === 'area-by-day'" class="schedule__aside">
+        <aside v-if="activeTab === 'area-by-day'" class="schedule__aside screen-only">
           <UtilizationPanel :groups="pointBoardGroups" />
           <ViolationSidebar :violations="violationsRes.data.value?.violations ?? []" @jump="jumpToViolation" />
         </aside>
@@ -566,6 +586,7 @@ const emptyStateLoading = computed(
 
     <CandidatePanel
       v-if="candidateTarget"
+      class="screen-only"
       :ym="ym"
       :area-id="candidateTarget.areaId"
       :area-label="candidateAreaLabel"
@@ -643,5 +664,24 @@ const emptyStateLoading = computed(
   padding-left: var(--space-4);
   border-left: 1px solid var(--color-divider);
   overflow-y: auto;
+}
+
+.schedule__print-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+/* 列印（#32）：解掉整條捲動容器，格線才不會被裁成一個視窗高 */
+@media print {
+  .schedule,
+  .schedule__content {
+    display: block;
+    height: auto;
+  }
+
+  .schedule__main {
+    overflow: visible;
+    gap: 0;
+  }
 }
 </style>
