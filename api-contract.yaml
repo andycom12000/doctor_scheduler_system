@@ -1252,7 +1252,7 @@ components:
         editedSincePublish:
           type: boolean
           description: |
-            已發布之後又改過（改格、對調、套用變體）。狀態仍是 `published`、`publishedVersion`
+            已發布之後又改過（改格、對調；整份套用變體只開放給草稿，不會進到這個狀態）。狀態仍是 `published`、`publishedVersion`
             不變，但內容已經不是那一版；畫面要標出來，列印與匯出前要像草稿一樣先問要不要重新發布。
             草稿一律 false，重新發布後回到 false。
         publishedAt: { type: [string, 'null'], format: date-time }
@@ -1280,7 +1280,7 @@ components:
         editedSincePublish:
           type: boolean
           description: |
-            已發布之後又改過（改格、對調、套用變體）。狀態仍是 `published`、`publishedVersion`
+            已發布之後又改過（改格、對調；整份套用變體只開放給草稿，不會進到這個狀態）。狀態仍是 `published`、`publishedVersion`
             不變，但內容已經不是那一版；畫面要標出來，列印與匯出前要像草稿一樣先問要不要重新發布。
             草稿一律 false，重新發布後回到 false。
         publishedAt: { type: [string, 'null'], format: date-time }

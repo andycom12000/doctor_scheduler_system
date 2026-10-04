@@ -72,11 +72,18 @@ const showYearMonth = computed(() => route.params.ym !== undefined)
 .page-layout__title {
   margin: 0;
   font-size: 20px;
+  /* 視窗窄時左右兩組都不縮，標題是唯一能讓的：截斷，不要溢出蓋到按鈕 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .page-layout__subtitle {
   margin: 4px 0 0;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 

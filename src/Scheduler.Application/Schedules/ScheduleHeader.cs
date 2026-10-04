@@ -29,7 +29,7 @@ public sealed record ScheduleHeader(
         new(yearMonth, ScheduleStatus.Draft, Revision: 0, PublishedAt: null, PublishedVersion: 0, PublishedRevision: 0);
 
     /// <summary>
-    /// 已發布、但之後又改過（改格、對調、套用變體都會動 Revision）。狀態仍是已發布、版本號不變，
+    /// 已發布、但之後又改過（改格、對調會動 Revision；已發布不准整份套用變體）。狀態仍是已發布、版本號不變，
     /// 畫面與紙本要另外標出來，輸出前也要像草稿一樣先問要不要重新發布（#75）。
     /// </summary>
     public bool EditedSincePublish => Status == ScheduleStatus.Published && Revision != PublishedRevision;

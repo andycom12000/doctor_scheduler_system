@@ -7,5 +7,5 @@ import type { ScheduleStatus } from '@/api/types'
 export function scheduleStatusLabel(status: ScheduleStatus, publishedVersion: number | undefined, edited: boolean): string {
   if (status !== 'published') return '草稿'
   const base = publishedVersion ? `已發布 v${publishedVersion}` : '已發布'
-  return edited ? `${base} · 有未發布的修改` : base
+  return edited ? `${base} · 有修改` : base
 }

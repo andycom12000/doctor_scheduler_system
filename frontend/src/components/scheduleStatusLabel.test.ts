@@ -9,7 +9,7 @@ describe('scheduleStatusLabel', () => {
   })
 
   it('發布後有修改要標出來（#75）；草稿不會有這個狀態', () => {
-    expect(scheduleStatusLabel('published', 3, true)).toBe('已發布 v3 · 有未發布的修改')
+    expect(scheduleStatusLabel('published', 3, true)).toBe('已發布 v3 · 有修改')
     expect(scheduleStatusLabel('draft', 0, true)).toBe('草稿')
   })
 })
