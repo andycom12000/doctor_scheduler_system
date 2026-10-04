@@ -116,7 +116,11 @@ export interface DayColumn {
   date: string
   dd: string
   weekday: string
+  /** 假日：週六、週日與國定假日的總稱（CONTEXT.md）。 */
   isHoliday: boolean
+  /** 國定假日，不含一般週末；列印用不同樣式跟週末假日區分（#32）。 */
+  isPublicHoliday: boolean
+  holidayName: string | null
   quotaPointValue: number
 }
 
@@ -126,6 +130,8 @@ export function toDayColumns(days: readonly CalendarDay[]): DayColumn[] {
     dd: dayOfMonth(day.date),
     weekday: weekdayLabel(day.weekday),
     isHoliday: day.isHoliday,
+    isPublicHoliday: day.isPublicHoliday,
+    holidayName: day.holidayName ?? null,
     quotaPointValue: day.quotaPointValue,
   }))
 }

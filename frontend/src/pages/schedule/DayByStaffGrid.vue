@@ -11,6 +11,9 @@
  *
  * 「當月有班、但已停用」的人不在點數看板裡（點數看板只列在職），額外併一欄「停用」，
  * 不讓他的班憑空從畫面消失；底部「班數」「額度」兩列一併補上他的班數（額度顯示 `—`）。
+ *
+ * 列印（#32）是案主指定的紙本格式：A4 橫式一頁一個月。印的時候拿掉違規、登記、空缺的
+ * 底色（紙本是張貼用的班表，不是工作畫面），只留兩種假日的整列底紋與格內區域代號。
  */
 import { computed } from 'vue'
 import type { Area, PointBoardGroup } from '@/api/types'
@@ -24,6 +27,7 @@ import {
 import { cellKindOf } from './lib/cellStyle'
 import type { CellRenderKind } from './lib/violationStyle'
 import { domIdForCellKey } from './lib/cellNav'
+import { publicHolidayNote } from './lib/printSheet'
 
 const props = defineProps<{
   areas: Area[]
@@ -67,6 +71,16 @@ const staffColumns = computed(() =>
   staffFooterColumns(props.pointBoardGroups, extraStaffRows.value, props.dutiesByStaff),
 )
 
+/** 整列的假日種類，只有列印用得到（畫面上的假日底色走 `cellKindOf`）。 */
+function dayClass(day: DayColumn): Record<string, boolean> {
+  return {
+    'dp-grid__day--holiday': day.isHoliday && !day.isPublicHoliday,
+    'dp-grid__day--public-holiday': day.isPublicHoliday,
+  }
+}
+
+const holidayNote = computed(() => publicHolidayNote(props.days))
+
 /** 當天的區域；同人同日兩區（X1，#68）時有多個。 */
 function areasAt(staffId: string, date: string): string[] {
   return props.dutiesByStaff.get(`${staffId}|${date}`) ?? []
@@ -108,7 +122,7 @@ function cellClick(staffId: string, date: string): void {
 
 <template>
   <div class="day-by-staff">
-    <div class="dp-grid" :style="{ gridTemplateColumns: `44px repeat(${totalColumns}, 23px) 56px` }">
+    <div class="dp-grid" :style="{ gridTemplateColumns: `44px repeat(${totalColumns}, var(--dp-col, 23px)) 56px` }">
       <div class="dp-grid__corner"></div>
       <template v-for="group in pointBoardGroups" :key="group.groupCode">
         <div class="dp-grid__group" :style="{ gridColumn: `span ${group.rows.length}` }">
@@ -143,7 +157,7 @@ function cellClick(staffId: string, date: string): void {
       <div class="dp-grid__corner dp-grid__corner--label dp-grid__corner--vac-sub">未填補<br />區域</div>
 
       <template v-for="day in days" :key="day.date">
-        <div class="dp-grid__label" :class="{ 'dp-grid__label--holiday': day.isHoliday }">
+        <div class="dp-grid__label" :class="[{ 'dp-grid__label--holiday': day.isHoliday }, dayClass(day)]">
           {{ day.dd }}<span class="dp-grid__wd">{{ day.weekday }}</span>
         </div>
         <template v-for="group in pointBoardGroups" :key="`${group.groupCode}-${day.date}`">
@@ -153,7 +167,7 @@ function cellClick(staffId: string, date: string): void {
             :key="row.staffId"
             type="button"
             class="dp-grid__cell"
-            :class="cellClass(row.staffId, day.date, day.isHoliday)"
+            :class="[cellClass(row.staffId, day.date, day.isHoliday), dayClass(day)]"
             :title="cellTitle(row.staffId, day.date)"
             @click="cellClick(row.staffId, day.date)"
           >
@@ -166,13 +180,16 @@ function cellClick(staffId: string, date: string): void {
           :key="`extra-${row.staffId}-${day.date}`"
           type="button"
           class="dp-grid__cell"
-          :class="cellClass(row.staffId, day.date, day.isHoliday)"
+          :class="[cellClass(row.staffId, day.date, day.isHoliday), dayClass(day)]"
           :title="cellTitle(row.staffId, day.date)"
           @click="cellClick(row.staffId, day.date)"
         >
           {{ cellText(row.staffId, day.date) }}
         </button>
-        <div class="dp-grid__vac" :class="{ 'dp-grid__vac--some': (vacancyCounts.get(day.date) ?? 0) > 0 }">
+        <div
+          class="dp-grid__vac"
+          :class="[{ 'dp-grid__vac--some': (vacancyCounts.get(day.date) ?? 0) > 0 }, dayClass(day)]"
+        >
           {{ vacancyCountLabel(vacancyCounts.get(day.date) ?? 0) }}
         </div>
       </template>
@@ -192,7 +209,7 @@ function cellClick(staffId: string, date: string): void {
       <div class="dp-grid__foot"></div>
     </div>
 
-    <div class="ad-legend">
+    <div class="ad-legend screen-only">
       <span class="k">圖例</span>
       <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty" />平日值班（格內為區域代號）</span>
       <span class="ad-legend__item"><span class="ad-legend__swatch ad-legend__swatch--duty-holiday" />假日值班</span>
@@ -206,6 +223,14 @@ function cellClick(staffId: string, date: string): void {
         <span class="ad-legend__swatch ad-legend__swatch--violation" />排到已登記的不可排班日（H5）
       </span>
       <span class="dp-note">格內為區域代號 · 空白＝未值班 · 「停用」欄是當月仍有班、後來被停用的人</span>
+    </div>
+
+    <div class="ad-legend print-legend print-only">
+      <span class="ad-legend__item"><span class="ad-legend__swatch print-legend__holiday" />假日（週六、週日）</span>
+      <span class="ad-legend__item">
+        <span class="ad-legend__swatch print-legend__public-holiday" />國定假日{{ holidayNote ? `：${holidayNote}` : '' }}
+      </span>
+      <span class="dp-note">格內為區域代號 · 空白＝未值班 · 空缺欄＝當日未填補區域數</span>
     </div>
   </div>
 </template>
@@ -487,5 +512,111 @@ function cellClick(staffId: string, date: string): void {
 .dp-note {
   font-size: 11px;
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/*
+  列印（#32）：A4 橫式可印範圍約 281 × 194 mm。31 天 × 34 人要一頁放完，列高與表頭都要比
+  畫面矮；欄寬改成平分整頁寬（`--dp-col`，表頭欄數是 inline style，只能透過變數改）。
+  sticky 在紙上沒有意義，全部改回一般排版。
+*/
+@media print {
+  .day-by-staff {
+    gap: 4px;
+  }
+
+  .dp-grid {
+    --dp-col: minmax(0, 1fr);
+    border-color: var(--print-rule);
+  }
+
+  .dp-grid__corner,
+  .dp-grid__group,
+  .dp-grid__head,
+  .dp-grid__label,
+  .dp-grid__cell,
+  .dp-grid__vac,
+  .dp-grid__foot-label,
+  .dp-grid__foot {
+    position: static;
+    border-color: var(--print-rule);
+    color: #000;
+  }
+
+  .dp-grid__group {
+    padding: 1px 0;
+    background: #fff;
+    font-size: 9px;
+  }
+
+  .dp-grid__head {
+    height: 58px;
+    padding: 2px 0;
+    gap: 2px;
+  }
+
+  .dp-grid__head-name {
+    font-size: 9.5px;
+    letter-spacing: 0;
+  }
+
+  .dp-grid__head-rank {
+    font-size: 8px;
+    color: #000;
+  }
+
+  .dp-grid__label,
+  .dp-grid__corner {
+    background: #fff;
+  }
+
+  .dp-grid__wd {
+    color: #000;
+  }
+
+  /* 違規、不可排班日登記、空缺的底色與外框一律拿掉，只留整列假日底紋（見下） */
+  .dp-grid__cell,
+  .dp-grid__vac {
+    height: 17px;
+    background: #fff;
+    box-shadow: none;
+    font-size: 9.5px;
+  }
+
+  .dp-grid__vac--some {
+    font-weight: 700;
+  }
+
+  .dp-grid__day--holiday {
+    background: var(--print-holiday-bg);
+  }
+
+  .dp-grid__day--public-holiday {
+    background: var(--print-public-holiday-bg);
+  }
+
+  .dp-grid__foot-label,
+  .dp-grid__foot {
+    padding: 1px 0;
+    font-size: 9px;
+  }
+
+  .print-legend {
+    display: flex;
+    gap: var(--space-4);
+    font-size: 10px;
+  }
+
+  .print-legend .dp-note {
+    font-size: 10px;
+    color: #000;
+  }
+
+  .print-legend__holiday {
+    background: var(--print-holiday-bg);
+  }
+
+  .print-legend__public-holiday {
+    background: var(--print-public-holiday-bg);
+  }
 }
 </style>
