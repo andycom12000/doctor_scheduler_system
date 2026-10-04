@@ -397,11 +397,12 @@ async function printFlow(): Promise<void> {
   window.print()
 }
 
-// Ctrl+P 攔下來改走 runPrint（擋 X1、草稿提示）；右鍵選單的列印由 Shell 拿掉。沒有班表或寫入中就只吞掉，不印。
+// Ctrl+P 攔下來改走 runPrint（擋 X1、草稿提示）；右鍵選單的列印由 Shell 拿掉。沒有班表、寫入中、
+// 或候選人面板開著（按鈕被面板遮罩蓋住，面板裡的指派可能正在送出）就只吞掉，不印。
 function onKeyDown(e: KeyboardEvent): void {
   if (!isPrintShortcut(e)) return
   e.preventDefault()
-  if (e.repeat || !schedule.data.value || writeBusy.value) return
+  if (e.repeat || !schedule.data.value || writeBusy.value || candidateTarget.value) return
   void runPrint()
 }
 
@@ -419,7 +420,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeprint', onBeforePrint)
 })
 
-const writeBusy = computed(() => swapping.value || validating.value || publishing.value || exporting.value)
+// 列印也算：重抓違規清單、確認可以印的這段期間不能拖拉對調，免得檢查完又冒出同人同日兩區。
+const writeBusy = computed(
+  () => swapping.value || validating.value || publishing.value || exporting.value || printing.value,
+)
 
 // -- 工具列：重新求解導去變體頁；其餘寫入流程見上 ------------------------------------------
 // 任務指示與空月份的「求解」連結都導向 /variants/{ym}；issue 內文另寫「SCREEN 05」，
