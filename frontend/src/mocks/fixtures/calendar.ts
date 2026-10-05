@@ -4,7 +4,7 @@
  * 2026 年（2027 見下方表）的國定假日與補假日依行政院人事總處核定的「115 年政府行政機關辦公日曆表」
  * （https://www.dgpa.gov.tw/information?uid=82&pid=12574）。該年度起放假日逢例假日
  * 改為補假、不再調移上班，所以 2026 沒有補班日。排班者仍可用
- * `PATCH /calendars/{year}/{date}` 逐日覆寫。其餘年份沒有國定假日資料，
+ * `PATCH /calendars/{year}/{date}` 逐日覆寫。2026、2027 以外的年份沒有國定假日資料，
  * 只依週六日判斷 `isHoliday`——這是刻意的近似，不是遺漏。
  *
  * `quotaPointValue` 不在這裡算——它相依於 `PointRules`，由 `domain.ts` 在讀取時
@@ -80,6 +80,8 @@ const publicHolidays2027: Record<string, string> = {
 
 /** 2026 年沒有補班日（放假日逢例假日一律補假，不再調移上班）。保留集合讓其他年份可填。 */
 const makeUpWorkdays2026: Set<string> = new Set()
+/** 2027 年同樣沒有補班日。 */
+const makeUpWorkdays2027: Set<string> = new Set()
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -102,7 +104,8 @@ export function calendarDayFacts(dateStr: string): CalendarDayFacts {
   const year = dateStr.slice(0, 4)
   const table = year === '2026' ? publicHolidays2026 : year === '2027' ? publicHolidays2027 : undefined
   const isPublicHoliday = table ? Object.hasOwn(table, dateStr) : false
-  const isMakeUpWorkday = year === '2026' ? makeUpWorkdays2026.has(dateStr) : false
+  const makeUp = year === '2026' ? makeUpWorkdays2026 : year === '2027' ? makeUpWorkdays2027 : undefined
+  const isMakeUpWorkday = makeUp?.has(dateStr) ?? false
   const holidayName = table?.[dateStr] ?? null
   return {
     date: dateStr,

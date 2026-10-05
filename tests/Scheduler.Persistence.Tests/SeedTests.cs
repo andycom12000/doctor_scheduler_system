@@ -71,6 +71,8 @@ public class SeedTests
     {
         await using var db = await SqliteDatabase.CreateAsync();
         var overriddenDate = new DateOnly(2026, 9, 28);
+        var overridden2027 = new Domain.Model.CalendarDay(
+            new DateOnly(2027, 1, 1), IsHoliday: false, IsPublicHoliday: false, IsMakeUpWorkday: false, HolidayName: null);
         var overriddenDay = new Domain.Model.CalendarDay(
             overriddenDate, IsHoliday: false, IsPublicHoliday: false, IsMakeUpWorkday: true, HolidayName: null);
 
@@ -82,6 +84,7 @@ public class SeedTests
             await ctx.SaveChangesAsync();
             var calendar = scope.ServiceProvider.GetRequiredService<ICalendarRepository>();
             await calendar.UpsertAsync(new CalendarException(overriddenDay, Overridden: true));
+            await calendar.UpsertAsync(new CalendarException(overridden2027, Overridden: true));
             await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
         }
 
@@ -97,6 +100,11 @@ public class SeedTests
             var kept = Assert.Single(all, e => e.Day.Date == overriddenDate);
             Assert.True(kept.Overridden);
             Assert.Equal(overriddenDay, kept.Day);
+
+            // 2027 年內使用者已覆寫的日子也不被內建值蓋掉，其餘 23 天補齊
+            var kept2027 = Assert.Single(all, e => e.Day.Date == overridden2027.Date);
+            Assert.True(kept2027.Overridden);
+            Assert.Equal(overridden2027, kept2027.Day);
         }
     }
 
