@@ -55,6 +55,8 @@ test('全新資料庫：建人員 → 登記不可排班日 → 求解套用 →
   await page.route('**/api/solver-jobs', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback()
     const body = route.request().postDataJSON() as Record<string, unknown>
+    // 契約改名時要大聲失敗，不能默默變回 3 份 × 15 秒
+    expect(Object.keys(body)).toEqual(expect.arrayContaining(['variantCount', 'timeLimitSecPerVariant']))
     await route.continue({ postData: JSON.stringify({ ...body, variantCount: 2, timeLimitSecPerVariant: 8 }) })
   })
 
@@ -70,7 +72,7 @@ test('全新資料庫：建人員 → 登記不可排班日 → 求解套用 →
   await page.getByRole('button', { name: /新增人員/ }).click()
   await page.getByRole('textbox', { name: '姓名', exact: true }).fill(UI_PERSON.name)
   await page.getByRole('textbox', { name: '員編', exact: true }).fill(UI_PERSON.employeeNo)
-  await page.locator('select.input').selectOption(UI_PERSON.rankCode)
+  await page.locator('label.field').filter({ has: page.getByText('身分', { exact: true }) }).locator('select').selectOption(UI_PERSON.rankCode)
   await page.getByRole('button', { name: '儲存變更' }).click()
   await expect(page.getByRole('button', { name: new RegExp(UI_PERSON.name) })).toBeVisible()
 
@@ -108,6 +110,8 @@ test('全新資料庫：建人員 → 登記不可排班日 → 求解套用 →
   await expect(page).toHaveURL(new RegExp(`/variants/${MONTH}\\?job=`))
   const pick = page.getByRole('button', { name: '選定此變體' }).first()
   await expect(pick).toBeVisible({ timeout: 90_000 })
+  // 壓短後的請求確實生效：2 份變體
+  await expect(page.getByRole('button', { name: '選定此變體' })).toHaveCount(2)
   await expect(pick).toBeEnabled()
   await pick.click()
   await expect(page).toHaveURL(new RegExp(`/schedules/${MONTH}$`))
@@ -144,5 +148,7 @@ test('全新資料庫：建人員 → 登記不可排班日 → 求解套用 →
   // 7. 匯出：API 回 200（存檔對話框是 Shell 的事，不測）
   const exported = page.waitForResponse((r) => r.url().includes(`/api/schedules/${MONTH}/export`))
   await page.getByRole('button', { name: '匯出 Excel' }).click()
-  expect((await exported).status()).toBe(200)
+  const exportResponse = await exported
+  expect(exportResponse.status()).toBe(200)
+  expect(exportResponse.headers()['content-type']).toContain('spreadsheetml.sheet')
 })

@@ -13,10 +13,13 @@ using Scheduler.Api;
 // 畫面層 E2E（frontend/scripts/e2e.ts，#84）要一顆全新資料庫、空名冊的後端，用兩個環境變數切換；
 // 沒設就是上面的預設（data/scheduler.db + 參考名單），只影響這個開發期進入點，不影響 Shell。
 //   SCHEDULER_DATABASE_PATH         SQLite 檔案路徑（沒設＝程式旁的 data/scheduler.db）
-//   SCHEDULER_SEED_REFERENCE_ROSTER 設成 false 就不種參考名單（沒設或其他值＝種）
+//   SCHEDULER_SEED_REFERENCE_ROSTER true／false（不分大小寫）；false 就不種參考名單（沒設＝true，其他值丟例外）
 var databasePath = Environment.GetEnvironmentVariable("SCHEDULER_DATABASE_PATH");
-var seedReferenceRoster = !string.Equals(
-    Environment.GetEnvironmentVariable("SCHEDULER_SEED_REFERENCE_ROSTER"), "false", StringComparison.OrdinalIgnoreCase);
+var seedFlag = Environment.GetEnvironmentVariable("SCHEDULER_SEED_REFERENCE_ROSTER");
+var seedReferenceRoster = string.IsNullOrWhiteSpace(seedFlag)
+    || (bool.TryParse(seedFlag, out var parsedSeed)
+        ? parsedSeed
+        : throw new ArgumentException($"SCHEDULER_SEED_REFERENCE_ROSTER 只接受 true 或 false，收到「{seedFlag}」"));
 
 var app = await ApiHost.BuildAsync(new ApiHostOptions(
     Args: args,
