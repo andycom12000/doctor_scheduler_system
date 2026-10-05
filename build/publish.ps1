@@ -17,7 +17,10 @@
     產出結構見 docs/ARCHITECTURE.md §3.2。使用者解壓即用，無需安裝任何東西。
 
 .PARAMETER OutputPath
-    發佈目錄，預設 publish/HospitalScheduler。
+    發佈目錄，預設 publish/DoctorScheduler-v<版本>，版本取自 Directory.Build.props 的 <Version>。
+
+.PARAMETER Zip
+    發佈完成後再壓成與資料夾同名的 zip（publish/DoctorScheduler-v<版本>.zip）。
 
 .PARAMETER SkipFrontend
     跳過前端建置（wwwroot 已是最新時可用）。
@@ -32,6 +35,7 @@
 [CmdletBinding()]
 param(
     [string] $OutputPath,
+    [switch] $Zip,
     [switch] $SkipFrontend,
     [string] $VcRedistPath
 )
@@ -39,9 +43,18 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
-if (-not $OutputPath) {
-    $OutputPath = Join-Path $repoRoot 'publish/HospitalScheduler'
+
+# 版本號唯一來源：Directory.Build.props 的 <Version>（exe 檔案版本與前端畫面也從它來）
+$propsText = Get-Content (Join-Path $repoRoot 'Directory.Build.props') -Raw -Encoding UTF8
+if ($propsText -notmatch '<Version>\s*([^<\s]+)\s*</Version>') {
+    throw 'Directory.Build.props 找不到 <Version>'
 }
+$version = $Matches[1]
+$packageName = "DoctorScheduler-v$version"
+if (-not $OutputPath) {
+    $OutputPath = Join-Path $repoRoot "publish/$packageName"
+}
+Write-Host "版本 $version → $packageName" -ForegroundColor Cyan
 
 # --- 1. 前端 ---
 if ($SkipFrontend) {
@@ -145,6 +158,13 @@ New-Item -ItemType Directory -Path (Join-Path $OutputPath 'data') -Force | Out-N
 Write-Host '[6/6] 檢查 native 相依 …' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'check-native-deps.ps1') -Path $OutputPath
 if ($LASTEXITCODE -ne 0) { throw 'native 相依檢查失敗，發佈包在乾淨的 Windows 上跑不起來' }
+
+if ($Zip) {
+    $zipPath = Join-Path (Split-Path $OutputPath -Parent) "$(Split-Path $OutputPath -Leaf).zip"
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Write-Host "壓縮 → $zipPath" -ForegroundColor Cyan
+    Compress-Archive -Path $OutputPath -DestinationPath $zipPath -CompressionLevel Optimal
+}
 
 $size = [math]::Round((Get-ChildItem $OutputPath -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
 Write-Host ''

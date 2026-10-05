@@ -203,6 +203,7 @@ gh pr create        # base 自動是 develop（預設分支已設定）
 合併後再收尾：`git switch develop && git pull && git branch -d feature/<slug>`。
 
 本專案的版本號對應 portable 發佈包的資料夾版本，tag 只打在 `main` 上。
+版本號只存 `Directory.Build.props` 的 `<Version>`，發佈步驟見 `docs/release-process.md`。
 
 ## 專案特有的坑
 

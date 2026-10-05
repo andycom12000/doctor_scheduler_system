@@ -518,7 +518,7 @@ core.Settings.AreDevToolsEnabled = true;   // Debug 建置開啟，Release 關�
 發佈產物：
 
 ```
-HospitalScheduler/
+DoctorScheduler-v<版本>/
 ├─ HospitalScheduler.exe
 ├─ *.dll                         # .NET self-contained runtime + 受管組件
 ├─ ortools.dll, google-ortools-native.dll, abseil_dll.dll, libprotobuf.dll,

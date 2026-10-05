@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { join, isAbsolute, resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
@@ -35,7 +35,27 @@ function excludeMockServiceWorker(): Plugin {
  */
 const WEBVIEW2_CHROMIUM_TARGET = 'chrome152' // build/webview2.json：152.0.4191.62
 
-export default defineConfig({
+/**
+ * 版本號唯一來源是 repo 根目錄 Directory.Build.props 的 <Version>。
+ * 建置時注入成 `__APP_VERSION__`；開發伺服器（dev、dev:mock）加 `-dev` 後綴，與發佈包區分。
+ */
+function readAppVersion(): string {
+  const props = readFileSync(
+    fileURLToPath(new URL('../Directory.Build.props', import.meta.url)),
+    'utf8',
+  )
+  const m = props.match(/<Version>\s*([^<\s]+)\s*<\/Version>/)
+  if (!m) throw new Error('Directory.Build.props 找不到 <Version>')
+  return m[1]
+}
+
+export default defineConfig(({ command }) => ({
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      command === 'serve' ? `${readAppVersion()}-dev` : readAppVersion(),
+    ),
+  },
+
   plugins: [vue(), excludeMockServiceWorker()],
 
   resolve: {
@@ -64,4 +84,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
