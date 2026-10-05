@@ -151,9 +151,9 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            // 視窗關閉中的取消／dispose 不記；其餘（含 HttpClient 逾時、Api 內部丟的 OCE）都要記。
-            // ObjectDisposedException 只會發生在 _shutdown 已 dispose 之後，也就是關閉中。
-            if (!_shutdown.IsCancellationRequested && ex is not ObjectDisposedException) ShellSafety.Report("WebResourceRequested", ex);
+            // 視窗關閉中的取消不記（關閉中的 dispose 例外由 ShellSafety.Closing 擋住）；
+            // 其餘（含 HttpClient 逾時、Api 內部丟的 OCE 與 ODE）都要記。
+            if (!_shutdown.IsCancellationRequested) ShellSafety.Report("WebResourceRequested", ex);
             // 請求被前端中止時，連設定 500 回應也可能丟；失敗就放棄，只留 Trace 不再寫檔
             ShellSafety.Try(() => e.Response = Text(core, HttpStatusCode.InternalServerError, "Shell Error", ex.Message), "WebResourceRequested.Response", toFile: false);
         }

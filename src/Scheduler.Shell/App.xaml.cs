@@ -33,6 +33,7 @@ public partial class App : System.Windows.Application
     {
         ShellSafety.Report("Dispatcher", e.Exception);
         e.Handled = true;
+        if (ShellSafety.Closing) return; // 關閉中不跳對話框
 
         var app = Current;
         if (StartupCompleted && app?.MainWindow is not null && app.Windows.Count > 0) return;
@@ -46,7 +47,7 @@ public partial class App : System.Windows.Application
     /// <summary>非 UI 執行緒的例外擋不住（runtime 一定終止），只能留一行紀錄。</summary>
     private static void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        if (e.ExceptionObject is Exception ex) ShellSafety.Report(e.IsTerminating ? "AppDomain(terminating)" : "AppDomain", ex);
+        if (e.ExceptionObject is Exception ex) ShellSafety.Report(e.IsTerminating ? "AppDomain(terminating)" : "AppDomain", ex, force: true);
     }
 
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)

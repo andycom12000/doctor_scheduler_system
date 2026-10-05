@@ -41,13 +41,14 @@ internal static class ShellSafety
 
     /// <summary>
     /// 記一筆。絕不丟例外：記錄本身失敗（唯讀、磁碟滿）就只剩 Trace。
+    /// <paramref name="force"/> 為 true 時不受 <see cref="Closing"/> 影響（process 即將終止的例外一定要留）。
     /// <paramref name="toFile"/> 為 false 時只寫 Trace（次要的連帶失敗，避免一次中止寫好幾行）。
     /// </summary>
-    public static void Report(string source, Exception ex, bool toFile = true)
+    public static void Report(string source, Exception ex, bool toFile = true, bool force = false)
     {
         try
         {
-            if (Closing) return;
+            if (Closing && !force) return;
             var line = FormatLine(DateTimeOffset.UtcNow, source, ex);
             System.Diagnostics.Trace.TraceWarning(line);
             var path = LogPath;
@@ -57,7 +58,18 @@ internal static class ShellSafety
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 var info = new FileInfo(path);
-                if (info.Exists && info.Length > MaxLogBytes) File.Move(path, path + ".1", overwrite: true);
+                if (info.Exists && info.Length > MaxLogBytes)
+                {
+                    try
+                    {
+                        File.Move(path, path + ".1", overwrite: true);
+                    }
+                    catch
+                    {
+                        // 舊檔被鎖住等：搬不動就照樣 append 到主檔，不能因此丟掉這一筆
+                    }
+                }
+
                 File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
             }
         }

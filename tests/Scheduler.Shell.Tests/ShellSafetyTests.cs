@@ -120,6 +120,31 @@ public class ShellSafetyTests : IDisposable
     }
 
     [Fact]
+    public void Report_force不受Closing影響()
+    {
+        ShellSafety.LogPath = Path.Combine(_dir, ShellSafety.LogFileName);
+        ShellSafety.Closing = true;
+        try { ShellSafety.Report("T", new InvalidOperationException("fatal"), force: true); }
+        finally { ShellSafety.Closing = false; }
+        Assert.Contains("fatal", File.ReadAllText(ShellSafety.LogPath));
+    }
+
+    [Fact]
+    public void Report_輪替搬不動_1時仍寫入主檔()
+    {
+        var path = Path.Combine(_dir, ShellSafety.LogFileName);
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(path, new string('a', 300));
+        using var locked = new FileStream(path + ".1", FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+        ShellSafety.LogPath = path;
+        ShellSafety.MaxLogBytes = 100;
+        try { ShellSafety.Report("T", new InvalidOperationException("still-written")); }
+        finally { ShellSafety.MaxLogBytes = 1024 * 1024; }
+
+        Assert.Contains("still-written", File.ReadAllText(path));
+    }
+
+    [Fact]
     public void Report_多執行緒同時寫不遺失行()
     {
         ShellSafety.LogPath = Path.Combine(_dir, ShellSafety.LogFileName);
