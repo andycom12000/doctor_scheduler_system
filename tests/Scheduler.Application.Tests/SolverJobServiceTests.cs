@@ -189,14 +189,33 @@ public class SolverJobServiceTests
     [Fact]
     public async Task 看得到終態就能立刻建下一個工作_不需重試()
     {
-        // 競態守門：終態對外可見（GetAsync）的那一刻 slot 必須已經空出來。連跑多輪，每輪都不容許 SOLVER_BUSY
-        var (service, _, _) = Setup();
+        // 競態守門：終態對外可見（GetAsync）的那一刻 slot 必須已經空出來。
+        // 把終態落盤卡住，製造「終態已算出、落盤未完」的窗口：此時若 GetAsync 已回終態，就必須能建下一個工作
+        var (service, store, _) = Setup();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        // scope 呼叫順序：撈 context(1)、新增紀錄(2)、轉 running(3)、存變體(4)、終態落盤(5)
+        var gated = new GatedScopeFactory(store, entered, release, gateAtCall: 5);
+        service = new SolverJobService(gated, new FakeSolver((r, _) => Task.FromResult(OneDuty(r))), TimeProvider.System);
 
-        for (var i = 0; i < 25; i++)
+        var created = await service.CreateAsync(Oct, 1, 1);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        var view = await service.GetAsync(created.Record.JobId);
+        if (view.Record.Status is SolverJobStatus.Succeeded or SolverJobStatus.Failed or SolverJobStatus.Cancelled)
         {
-            var created = await service.CreateAsync(Oct, 1, 1);
-            await WaitForTerminalAsync(service, created.Record.JobId);
+            var second = await service.CreateAsync(Oct, 1, 1); // 舊順序在這裡丟 SOLVER_BUSY
+            release.Set();
+            await WaitForTerminalAsync(service, second.Record.JobId);
         }
+        else
+        {
+            release.Set();
+        }
+
+        await WaitForTerminalAsync(service, created.Record.JobId);
+        var next = await service.CreateAsync(Oct, 1, 1);
+        await WaitForTerminalAsync(service, next.Record.JobId);
     }
 
     [Fact]
@@ -222,14 +241,14 @@ public class SolverJobServiceTests
         await WaitForTerminalAsync(service, first.Record.JobId);
     }
 
-    /// <summary>第一次 <see cref="Create"/> 卡住直到放行，其餘直接轉給記憶體 store。</summary>
-    private sealed class GatedScopeFactory(ISolverScopeFactory inner, ManualResetEventSlim entered, ManualResetEventSlim release) : ISolverScopeFactory
+    /// <summary>第 <paramref name="gateAtCall"/> 次 <see cref="Create"/> 卡住直到放行，其餘直接轉給記憶體 store。</summary>
+    private sealed class GatedScopeFactory(ISolverScopeFactory inner, ManualResetEventSlim entered, ManualResetEventSlim release, int gateAtCall = 1) : ISolverScopeFactory
     {
         private int _calls;
 
         public ISolverScope Create()
         {
-            if (Interlocked.Increment(ref _calls) == 1)
+            if (Interlocked.Increment(ref _calls) == gateAtCall)
             {
                 entered.Set();
                 release.Wait(TimeSpan.FromSeconds(10));
