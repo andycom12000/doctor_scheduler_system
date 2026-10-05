@@ -202,16 +202,10 @@ public class SolverJobServiceTests
         Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
 
         var view = await service.GetAsync(created.Record.JobId);
-        if (view.Record.Status is SolverJobStatus.Succeeded or SolverJobStatus.Failed or SolverJobStatus.Cancelled)
-        {
-            var second = await service.CreateAsync(Oct, 1, 1); // 舊順序在這裡丟 SOLVER_BUSY
-            release.Set();
-            await WaitForTerminalAsync(service, second.Record.JobId);
-        }
-        else
-        {
-            release.Set();
-        }
+        // 新順序下此時一定還沒到終態（終態要等落盤後才與放 slot 一起對外可見）；
+        // 舊順序在這裡已是 succeeded 但 slot 仍佔著，此斷言會失敗
+        Assert.Equal(SolverJobStatus.Running, view.Record.Status);
+        release.Set();
 
         await WaitForTerminalAsync(service, created.Record.JobId);
         var next = await service.CreateAsync(Oct, 1, 1);

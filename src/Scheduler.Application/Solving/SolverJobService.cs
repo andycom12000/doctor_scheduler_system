@@ -158,7 +158,7 @@ public sealed class SolverJobService
         return new SolverJobView(record, TerminalSnapshot(record));
     }
 
-    /// <summary>中止。已結束的工作是冪等的，回目前狀態。回傳時狀態已經是 cancelled（等背景工作收尾，最多等幾秒）。</summary>
+    /// <summary>中止。已結束的工作是冪等的，回目前狀態。回傳時狀態通常已是 cancelled（等背景工作收尾，最多等幾秒；落盤慢時可能仍是 running）。</summary>
     public async Task<SolverJobView> CancelAsync(string jobId, CancellationToken cancellationToken = default)
     {
         LiveJob? live;
