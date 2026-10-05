@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
+using Scheduler.Application.Scheduling;
 using Scheduler.Domain.Defaults;
 using Scheduler.Persistence;
 using Scheduler.Persistence.Seed;
@@ -107,10 +108,10 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         var idByEmployeeNo = new Dictionary<string, string>();
         foreach (var person in roster)
         {
-            var created = await CallAsync(HttpMethod.Post, "/api/staff",
+            var newStaff = await CallAsync(HttpMethod.Post, "/api/staff",
                 $$"""{"employeeNo":"{{person.EmployeeNo}}","name":"{{person.Name}}","rankCode":"{{person.RankCode}}"}""",
                 "createStaff", HttpStatusCode.Created);
-            idByEmployeeNo[person.EmployeeNo] = created["id"]!.GetValue<string>();
+            idByEmployeeNo[person.EmployeeNo] = newStaff["id"]!.GetValue<string>();
         }
 
         var staff = (await GetAsync("/api/staff", "listStaff"))["items"]!.AsArray();
@@ -127,14 +128,16 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         Assert.True(spring["isHoliday"]!.GetValue<bool>());
         Assert.Equal("春節", spring["holidayName"]!.GetValue<string>());
 
-        // 4. 登記不可排班日：6 位醫師、各 2 天（全是一般平日，每人遠低於上限）
+        // 4. 登記不可排班日：6 位醫師、各 2 天。2026-02 的平日（非假日）：2–6、9–13、23–26 日
+        // （2/1 是週日、2/7–8、14–15、21–22 是週末，2/16–20 是春節連假與補假，2/27–28 是和平紀念日連假）
+        var weekdays = new[] { 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 23, 24 };
         var blocked = new List<(string StaffId, string Date)>();
         var rosterByRank = roster.GroupBy(p => p.RankCode).ToDictionary(g => g.Key, g => g.ToList());
         var picks = new[] { DefaultRanks.R4, DefaultRanks.R5, DefaultRanks.R2, DefaultRanks.R3, DefaultRanks.R1, DefaultRanks.PGY2 };
         for (var i = 0; i < picks.Length; i++)
         {
             var id = idByEmployeeNo[rosterByRank[picks[i]][0].EmployeeNo];
-            foreach (var day in new[] { 3 + i, 10 + i })
+            foreach (var day in new[] { weekdays[2 * i], weekdays[2 * i + 1] })
             {
                 var date = $"{Month}-{day:00}";
                 await CallAsync(HttpMethod.Put, $"/api/blocked-days/{Month}/{id}/{date}", null, "setBlockedDay", HttpStatusCode.OK);
@@ -147,9 +150,10 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         Assert.True(feasibility["feasible"]!.GetValue<bool>());
 
         // 6. 求解（要斷言空缺 0，時限給足）
-        var job = await SolveAsync(Month, timeLimitSec: 20);
-        Assert.Equal(34, job["scale"]!["staff"]!.GetValue<int>());
-        var jobId = job["jobId"]!.GetValue<string>();
+        var created = await SolveAsync(Month, timeLimitSec: 20);
+        Assert.Equal(34, created["scale"]!["staff"]!.GetValue<int>());
+        Assert.Contains(SchedulingContextLoader.PreviousMonthNotPublishedWarning, Warnings(created));
+        var jobId = created["jobId"]!.GetValue<string>();
         var variants = (await GetAsync($"/api/solver-jobs/{jobId}/variants", "listVariants"))["variants"]!.AsArray();
         var variant = Assert.Single(variants)!;
 
@@ -170,34 +174,54 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         Assert.Equal("draft", applied["status"]!.GetValue<string>());
         Assert.Equal(duties.Count, applied["duties"]!.AsArray().Count);
 
-        // 9. 發布：空缺 0 且硬違規 0，不需 ack
-        var published = await CallAsync(HttpMethod.Post, $"/api/schedules/{Month}/publish", null, "publishSchedule", HttpStatusCode.OK);
+        // 9. 發布。求解輸出的解每次不同，月結轉可能全 0，所以先在 JUNIOR 組挑剩餘額度最大者、
+        // 清掉他一格值班（造一個空缺），他的剩餘額度就嚴格大於組內任何人，同組其他人的月結轉必 > 0。
+        // 清格造了空缺（硬違規），發布要帶 acknowledgeViolations。
+        var draftBoard = await GetAsync($"/api/schedules/{Month}/point-board", "getPointBoard");
+        var dutiesByStaff = applied["duties"]!.AsArray().Where(d => d!["staffId"] is not null).GroupBy(d => d!["staffId"]!.GetValue<string>()).ToDictionary(g => g.Key, g => g.First()!);
+        var group = draftBoard["groups"]!.AsArray()
+            .Single(g => g!["groupCode"]!.GetValue<string>() == "JUNIOR")!["rows"]!.AsArray();
+        var picked = group.Where(r => dutiesByStaff.ContainsKey(r!["staffId"]!.GetValue<string>()))
+            .MaxBy(r => r!["quotaRemaining"]!.GetValue<int>())!;
+        var pickedId = picked["staffId"]!.GetValue<string>();
+        var cell = dutiesByStaff[pickedId];
+        await CallAsync(HttpMethod.Patch, $"/api/schedules/{Month}/duties",
+            $$"""{"areaId":"{{cell["areaId"]!.GetValue<string>()}}","date":"{{cell["date"]!.GetValue<string>()}}","staffId":null}""",
+            "setDuty", HttpStatusCode.OK);
+
+        var published = await CallAsync(HttpMethod.Post, $"/api/schedules/{Month}/publish", """{"acknowledgeViolations":true}""", "publishSchedule", HttpStatusCode.OK);
         Assert.Equal("published", published["status"]!.GetValue<string>());
         Assert.Equal(1, published["publishedVersion"]!.GetValue<int>());
         var carryOver = published["carryOver"]!.AsArray();
         Assert.NotEmpty(carryOver);
+        var actual = carryOver.ToDictionary(e => e!["staffId"]!.GetValue<string>(), e => e!["points"]!.GetValue<int>());
 
-        // 月結轉 = 同組內「剩餘額度最多的人」為 0、其他人與他的差額（NP 不計）。用發布後的看板重算對照；
-        // 求解有執行緒與時限，每次的解不同，所以不假設誰非 0
+        // 月結轉 = 同組內「剩餘額度最多的人」為 0、其他人與他的差額（NP 不計）。剩餘額度的尺是
+        // 上限 − 已排 − 起始偏移（Domain 的 QuotaRemaining），看板的 quotaRemaining 是 cap − quotaPoints，
+        // 所以用 quotaRemaining − carryOverApplied 重算。2 月沒有上月結轉，偏移是 0，但欄位必須存在。
         var febBoard = await GetAsync($"/api/schedules/{Month}/point-board", "getPointBoard");
         var expected = new Dictionary<string, int>();
-        foreach (var group in febBoard["groups"]!.AsArray())
+        foreach (var g in febBoard["groups"]!.AsArray())
         {
-            var rows = group!["rows"]!.AsArray().Where(r => r!["quotaRemaining"] is not null).ToList();
+            var rows = g!["rows"]!.AsArray().Where(r => r!["quotaRemaining"] is not null).ToList();
             if (rows.Count == 0)
             {
                 continue;
             }
 
-            var max = rows.Max(r => r!["quotaRemaining"]!.GetValue<int>());
+            int Remaining(JsonNode r) => r["quotaRemaining"]!.GetValue<int>() - r["carryOverApplied"]!.GetValue<int>();
+            var max = rows.Max(r => Remaining(r!));
             foreach (var r in rows)
             {
-                expected[r!["staffId"]!.GetValue<string>()] = max - r["quotaRemaining"]!.GetValue<int>();
+                expected[r!["staffId"]!.GetValue<string>()] = max - Remaining(r!);
             }
         }
 
-        var actual = carryOver.ToDictionary(e => e!["staffId"]!.GetValue<string>(), e => e!["points"]!.GetValue<int>());
         Assert.Equal(expected.OrderBy(kv => kv.Key), actual.OrderBy(kv => kv.Key));
+        // 確定性的部分：被清格的人是 JUNIOR 組的唯一最大者，同組其他人都 > 0
+        var juniorIds = febBoard["groups"]!.AsArray().Single(g => g!["groupCode"]!.GetValue<string>() == "JUNIOR")!["rows"]!.AsArray().Select(r => r!["staffId"]!.GetValue<string>()).ToList();
+        Assert.Equal(0, actual[pickedId]);
+        Assert.All(juniorIds.Where(id => id != pickedId), id => Assert.True(actual[id] > 0, $"{id} 的月結轉應 > 0"));
 
         // 10. 匯出
         using (var response = await _client.GetAsync($"/api/schedules/{Month}/export"))
@@ -210,7 +234,7 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
 
         // 11. 下個月：不再警告上月尚未發布，點數看板帶得到上月月結轉
         var next = await SolveAsync(NextMonth, timeLimitSec: 5);
-        Assert.DoesNotContain(Warnings(next), w => w.Contains("上月尚未發布"));
+        Assert.DoesNotContain(SchedulingContextLoader.PreviousMonthNotPublishedWarning, Warnings(next));
         // 點數看板要有值班表才查得到：把下個月的變體套成草稿（草稿時看板即時讀上月）
         var nextId = next["jobId"]!.GetValue<string>();
         var nextVariant = Assert.Single((await GetAsync($"/api/solver-jobs/{nextId}/variants", "listVariants"))["variants"]!.AsArray())!;
@@ -219,7 +243,7 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         var board = await GetAsync($"/api/schedules/{NextMonth}/point-board", "getPointBoard");
         var applied2 = board["groups"]!.AsArray()
             .SelectMany(g => g!["rows"]!.AsArray())
-            .ToDictionary(r => r!["staffId"]!.GetValue<string>(), r => r!["carryOverApplied"]?.GetValue<int>() ?? 0);
+            .ToDictionary(r => r!["staffId"]!.GetValue<string>(), r => r!["carryOverApplied"]!.GetValue<int>());
         foreach (var entry in carryOver)
         {
             Assert.Equal(entry!["points"]!.GetValue<int>(), applied2[entry["staffId"]!.GetValue<string>()]);
