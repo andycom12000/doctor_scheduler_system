@@ -1187,11 +1187,19 @@ export function computeVariantMetrics(store: MockStore, ym: string, dutyMap: Map
     if (['R4', 'R5', 'R6'].includes(staff.rankCode) && area.areaTypeCode !== 'CHIEF') rankPreference++
   }
 
-  let fairnessPoint = 0
+  // 對齊 Domain 的 ScheduleScores.FairnessByGroup：各身分組內公平性點數 max − min，再加總。
+  // 停用者與算不出點數的人（NP 為 null）不進比較。
+  const fairnessByGroup = new Map<string, number[]>()
   for (const staff of store.staff) {
-    if (staff.rankCode === 'NP') continue
-    fairnessPoint += fairnessPointsForStaffInMonth(store, ym, staff.id, dutyMap) ?? 0
+    if (staff.status !== 'active') continue
+    const points = fairnessPointsForStaffInMonth(store, ym, staff.id, dutyMap)
+    if (points === null) continue
+    const groupCode = store.ranks.find((r) => r.code === staff.rankCode)?.groupCode
+    if (!groupCode) continue
+    fairnessByGroup.set(groupCode, [...(fairnessByGroup.get(groupCode) ?? []), points])
   }
+  let fairnessPoint = 0
+  for (const values of fairnessByGroup.values()) fairnessPoint += Math.max(...values) - Math.min(...values)
 
   return { vacancies, quotaFairness, areaConsistency, rankPreference, fairnessPoint }
 }

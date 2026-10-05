@@ -423,25 +423,28 @@ function toSolverJobResponse(job: SolverJobState): SolverJob {
 }
 
 /** 序列模擬 3 份變體的求解：每份約 2 秒，總長約 6 秒（ADR-0003）。 */
-function scheduleSolverJob(jobId: string, ym: string, variantCount: number, timeLimitSecPerVariant: number) {
+export function scheduleSolverJob(jobId: string, ym: string, variantCount: number, timeLimitSecPerVariant: number) {
   const startMs = Date.now()
   const timers: ReturnType<typeof setTimeout>[] = []
   // 終態快照沿用最後一份變體的 objective／bound，不是憑空的 100/100——
   // 跟 running 時的最後一筆數字接得起來，gap 也照同一份 gapOf 算。
   let lastObjective = 100
   let lastBound = 95
+  // progress.elapsedSec 是「本份變體」耗時、換份歸零；job.elapsedSec 才是總耗時（對齊真後端 LiveJob）。
+  let variantStartMs = startMs
 
   const startRunning = setTimeout(() => {
     const job = store.solverJobs.get(jobId)
     if (!job || job.status === 'cancelled') return
     job.status = 'running'
-    job.elapsedSec = (Date.now() - startMs) / 1000
+    variantStartMs = Date.now()
+    job.elapsedSec = (variantStartMs - startMs) / 1000
     job.progress = {
       jobId,
       status: 'running',
       variantIndex: 1,
       variantCount,
-      elapsedSec: job.elapsedSec,
+      elapsedSec: 0,
       timeLimitSec: timeLimitSecPerVariant,
       solutionCount: 1,
       bestObjective: null,
@@ -460,19 +463,21 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
       lastObjective = bestObjective
       lastBound = bestBound
       job.status = 'running'
-      job.elapsedSec = (Date.now() - startMs) / 1000
+      const nowMs = Date.now()
+      job.elapsedSec = (nowMs - startMs) / 1000
       job.progress = {
         jobId,
         status: 'running',
         variantIndex: i,
         variantCount,
-        elapsedSec: job.elapsedSec,
+        elapsedSec: (nowMs - variantStartMs) / 1000,
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: i + 1,
         bestObjective,
         bestBound,
         gap: gapOf(bestObjective, bestBound),
       }
+      if (i < variantCount) variantStartMs = nowMs // 下一份從這刻起算；最後一份留著給終態用
     }, i * 2000)
     timers.push(t)
   }
@@ -484,13 +489,14 @@ function scheduleSolverJob(jobId: string, ym: string, variantCount: number, time
       const variants = generateVariants(store, ym, variantWeightProfiles, variantLabels, variantCount)
       store.variants.set(jobId, variants)
       job.status = 'succeeded'
-      job.elapsedSec = (Date.now() - startMs) / 1000
+      const nowMs = Date.now()
+      job.elapsedSec = (nowMs - startMs) / 1000
       job.progress = {
         jobId,
         status: 'succeeded',
         variantIndex: variantCount,
         variantCount,
-        elapsedSec: job.elapsedSec,
+        elapsedSec: (nowMs - variantStartMs) / 1000,
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: variantCount,
         bestObjective: lastObjective,
