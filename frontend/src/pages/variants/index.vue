@@ -74,7 +74,7 @@ const staffResource = useResource(
 )
 const scheduleResource = useResource(
   computed(() => `schedules/${ym.value}`),
-  () => getSchedule(ym.value),
+  (signal) => getSchedule(ym.value, signal),
 )
 
 // 名冊沒有在職人員（issue #81）：不給任何求解入口，改引導去人員維護。

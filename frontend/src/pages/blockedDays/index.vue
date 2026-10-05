@@ -56,10 +56,10 @@ const {
   data: registration,
   loading: registrationLoading,
   error: registrationError,
-} = useResource(registrationKey, () => getBlockedDays(ym.value))
+} = useResource(registrationKey, (signal) => getBlockedDays(ym.value, signal))
 
 const feasibilityKey = computed(() => `blocked-days/${ym.value}/feasibility`)
-const { data: feasibility } = useResource(feasibilityKey, () => getFeasibility(ym.value))
+const { data: feasibility } = useResource(feasibilityKey, (signal) => getFeasibility(ym.value, signal))
 
 const staffKey = ref('staff')
 const { data: staffResponse } = useResource(staffKey, () => listStaff())
@@ -81,7 +81,7 @@ const eligibilityKey = ref('settings/eligibility-matrix')
 const { data: eligibilityMatrix } = useResource(eligibilityKey, () => getEligibilityMatrix())
 
 const scheduleKey = computed(() => `schedules/${ym.value}`)
-const { data: schedule, error: scheduleError } = useResource(scheduleKey, () => getSchedule(ym.value))
+const { data: schedule, error: scheduleError } = useResource(scheduleKey, (signal) => getSchedule(ym.value, signal))
 
 const areaTypeNameByCode = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {}
