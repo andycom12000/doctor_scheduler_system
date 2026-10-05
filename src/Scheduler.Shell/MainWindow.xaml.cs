@@ -18,7 +18,7 @@ namespace Scheduler.Shell;
 public partial class MainWindow : Window
 {
     private static readonly string BaseDirectory = AppContext.BaseDirectory;
-    private static readonly string DataDirectory = Path.Combine(BaseDirectory, "data");
+    internal static readonly string DataDirectory = Path.Combine(BaseDirectory, "data");
     private static readonly string WwwRoot = Path.Combine(BaseDirectory, "wwwroot");
     private static readonly string BundledRuntime = Path.Combine(BaseDirectory, "webview2");
 
@@ -102,7 +102,10 @@ public partial class MainWindow : Window
 
         // 啟動完成後才開始推進度。這個迴圈活到關閉為止，刻意不放在上面的 try 裡：
         // 推送途中出錯（例如 browser process 崩潰）不該被當成「程式無法啟動」而關掉整個程式。
-        await PumpProgressAsync(WebView.CoreWebView2, _app.Services.GetRequiredService<ISolverProgressFeed>());
+        // async void：任何例外外洩都會結束 process（#101），整段包起來，失敗就記錄後放棄推送
+        await ShellSafety.TryAsync(
+            () => PumpProgressAsync(WebView.CoreWebView2, _app.Services.GetRequiredService<ISolverProgressFeed>()),
+            "PumpProgress", () => _shutdown.IsCancellationRequested);
     }
 
     /// <summary>所有執行期狀態都在程式旁的 data/；放在唯讀位置（光碟、Program Files）要在這裡就講清楚。</summary>
@@ -119,6 +122,12 @@ public partial class MainWindow : Window
     /// 其餘讀 wwwroot 的檔案。非同步所以要 deferral；任何例外都變成 500 回應而不是往上拋。
     /// </summary>
     private async void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        // async void 沒有呼叫端可接例外（#101）：整個處理器保證不外洩，失敗就放棄這次回應
+        await ShellSafety.TryAsync(() => HandleWebResourceRequestedAsync(sender, e), "WebResourceRequested");
+    }
+
+    private async Task HandleWebResourceRequestedAsync(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
         var core = (CoreWebView2)sender!;
         var deferral = e.GetDeferral();
@@ -140,22 +149,27 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            e.Response = Text(core, HttpStatusCode.InternalServerError, "Shell Error", ex.Message);
+            // 請求被前端中止或視窗關閉中時，連設定 500 回應也可能丟；失敗就放棄
+            if (ex is not OperationCanceledException) ShellSafety.Report("WebResourceRequested", ex);
+            ShellSafety.Try(() => e.Response = Text(core, HttpStatusCode.InternalServerError, "Shell Error", ex.Message), "WebResourceRequested.Response");
         }
         finally
         {
-            deferral.Complete();
+            ShellSafety.Try(deferral.Complete, "WebResourceRequested.Complete");
         }
     }
 
     /// <summary>拿掉右鍵選單的列印（#32）：列印要走排班主表的按鈕，見 <see cref="WebViewBridge.IsBlockedContextMenuItem"/>。</summary>
     private static void OnContextMenuRequested(object? sender, CoreWebView2ContextMenuRequestedEventArgs e)
     {
-        var items = e.MenuItems;
-        for (var i = items.Count - 1; i >= 0; i--)
+        ShellSafety.Try(() =>
         {
-            if (WebViewBridge.IsBlockedContextMenuItem(items[i].Name)) items.RemoveAt(i);
-        }
+            var items = e.MenuItems;
+            for (var i = items.Count - 1; i >= 0; i--)
+            {
+                if (WebViewBridge.IsBlockedContextMenuItem(items[i].Name)) items.RemoveAt(i);
+            }
+        }, "ContextMenuRequested");
     }
 
     /// <summary>
@@ -168,9 +182,20 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
     {
-        e.Handled = true;
-        var deferral = e.GetDeferral();
-        Dispatcher.InvokeAsync(() =>
+        CoreWebView2Deferral deferral;
+        try
+        {
+            e.Handled = true;
+            deferral = e.GetDeferral();
+        }
+        catch (Exception ex)
+        {
+            ShellSafety.Report("DownloadStarting", ex);
+            return;
+        }
+
+        // InvokeAsync 的 Task 不會有人 await；內部每一步都已自己 try，這裡只回傳不觀察
+        _ = Dispatcher.InvokeAsync(() =>
         {
             try
             {
@@ -198,27 +223,15 @@ public partial class MainWindow : Window
             catch (Exception ex)
             {
                 // 對話框開不起來就不下載，總比默默存到使用者不知道的地方好
-                System.Diagnostics.Trace.TraceWarning($"存檔對話框失敗：{ex.Message}");
-                TryOrWarn(() => e.Cancel = true);
+                ShellSafety.Report("DownloadStarting.Dialog", ex);
+                ShellSafety.Try(() => e.Cancel = true, "DownloadStarting.Cancel");
             }
             finally
             {
                 // args 已失效（例如 WebView2 關閉中）時這兩個 COM 呼叫也會丟；Shell 沒有全域例外處理，不能讓它炸掉 process
-                TryOrWarn(deferral.Complete);
+                ShellSafety.Try(deferral.Complete, "DownloadStarting.Complete");
             }
         });
-    }
-
-    private static void TryOrWarn(Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Trace.TraceWarning($"下載收尾失敗：{ex.Message}");
-        }
     }
 
     private async Task<CoreWebView2WebResourceResponse> ForwardToApiAsync(CoreWebView2 core, Uri uri, CoreWebView2WebResourceRequest request)
@@ -258,7 +271,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    System.Diagnostics.Trace.TraceWarning($"進度推送失敗：{ex.Message}");
+                    ShellSafety.Report("PumpProgress.Post", ex);
                 }
             }
         }
@@ -274,21 +287,18 @@ public partial class MainWindow : Window
     /// </summary>
     private async void OnClosed(object? sender, EventArgs e)
     {
-        _shutdown.Cancel();
-        _api?.Dispose();
-        if (_app is not null)
+        // async void：關閉中每一步都可能丟（Cancel 的回呼、Dispose），不能外洩
+        await ShellSafety.TryAsync(async () =>
         {
-            try
+            ShellSafety.Try(_shutdown.Cancel, "Closed.Cancel");
+            ShellSafety.Try(() => _api?.Dispose(), "Closed.Api");
+            if (_app is not null)
             {
-                await _app.DisposeAsync();
+                await ShellSafety.TryAsync(async () => await _app.DisposeAsync(), "Closed.App");
             }
-            catch
-            {
-                // 關閉中，沒人在看
-            }
-        }
 
-        _shutdown.Dispose();
-        WebView.Dispose();
+            ShellSafety.Try(_shutdown.Dispose, "Closed.Shutdown");
+            ShellSafety.Try(WebView.Dispose, "Closed.WebView");
+        }, "Closed");
     }
 }
