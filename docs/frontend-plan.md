@@ -18,7 +18,7 @@
 | Domain / Persistence / Application / Api | 契約 42 個操作全部落地，契約守法測試（`tests/Scheduler.Api.Tests`）每個端點都驗 |
 | Solver | CP-SAT 落地，漂移守門與目標值方向守門都在 CI 跑 |
 | Shell | WebView2 host 同一個 `ApiHost`；`/api/` 攔截、靜態檔、無副檔名路徑回 `index.html`（deep link 可用）、進度用 `PostWebMessageAsJson` 推 |
-| 種子 | 設定、行事曆與參考名單 34 人（#25）。名單是否種由 `ApiHostOptions.SeedReferenceRoster` 控制，發佈包關閉（#37）。開發期後端（`dotnet run`）預設仍種，前端可照舊依賴 |
+| 種子 | 設定、行事曆與參考名單 34 人（#25）。名單是否種由 `ApiHostOptions.SeedReferenceRoster` 控制，發佈包關閉（#37），發佈包改由名冊檔匯入（#82）。開發期後端（`dotnet run`）預設仍種，前端可照舊依賴 |
 | WebView2 使用者資料夾 | 已導到 `data/wv2data`，前端用 `sessionStorage`／`localStorage` 不違反 portable 規則 |
 
 ### 0.2 前端：只有骨架與 mock

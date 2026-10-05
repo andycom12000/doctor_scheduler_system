@@ -8,7 +8,7 @@ namespace Scheduler.Persistence.Seed;
 /// 組成、順序與姓名照 <c>frontend/src/mocks/fixtures/staff.ts</c> 抄，兩邊的
 /// <c>npm run mock:smoke</c>／<c>npm run api:smoke</c> 才能共用同一份斷言。
 /// 人數組成照 <see cref="DefaultRanks.ReferenceHeadcount"/>（唯一來源）。
-/// 是否種由 <c>ApiHostOptions.SeedReferenceRoster</c> 決定，發佈包關閉（#37）。
+/// 是否種由 <c>ApiHostOptions.SeedReferenceRoster</c> 決定，發佈包關閉（#37）；發佈包改從名冊檔匯入真實名冊（#82，見 <see cref="RosterImporter"/>）。
 /// </summary>
 public static class ReferenceRoster
 {

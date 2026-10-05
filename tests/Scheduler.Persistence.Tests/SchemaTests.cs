@@ -25,7 +25,7 @@ public class SchemaTests
         var expected = new[]
         {
             "schedule", "duty", "blocked_day", "carry_over", "carry_over_applied",
-            "staff", "area_type", "area", "rank_group", "rank", "eligibility",
+            "staff", "app_meta", "area_type", "area", "rank_group", "rank", "eligibility",
             "point_rule", "fairness_point_table", "constraint_definition", "constraint_scope_entry",
             "monthly_override", "calendar_day",
             "solver_job", "solver_job_warning", "variant", "variant_weight", "variant_duty",

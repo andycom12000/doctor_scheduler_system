@@ -24,6 +24,7 @@ public sealed class SchedulerDbContext : DbContext
     public DbSet<CarryOverAppliedEntity> CarryOversApplied => Set<CarryOverAppliedEntity>();
 
     public DbSet<StaffEntity> Staff => Set<StaffEntity>();
+    public DbSet<AppMetaEntity> AppMeta => Set<AppMetaEntity>();
     public DbSet<AreaTypeEntity> AreaTypes => Set<AreaTypeEntity>();
     public DbSet<AreaEntity> Areas => Set<AreaEntity>();
     public DbSet<RankGroupEntity> RankGroups => Set<RankGroupEntity>();
@@ -91,6 +92,12 @@ public sealed class SchedulerDbContext : DbContext
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.EmployeeNo).IsUnique();
             e.Property(x => x.Status).HasMaxLength(16);
+        });
+
+        modelBuilder.Entity<AppMetaEntity>(e =>
+        {
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(64);
         });
 
         modelBuilder.Entity<AreaTypeEntity>(e => e.HasKey(x => x.Code));

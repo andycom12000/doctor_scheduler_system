@@ -13,6 +13,7 @@ namespace Scheduler.Persistence.Seed;
 /// 參考名單只在開發期需要（前端手動測試、demo）；正式發佈包由
 /// <c>ApiHostOptions.SeedReferenceRoster</c>（Shell 端依 DEBUG/RELEASE 編譯期決定，見 #37）關閉，
 /// <paramref name="seedReferenceRoster"/> 為 false 時完全不寫人員表，行事曆與約束等出廠設定不受影響。
+/// 發佈包的真實名冊不走這裡，由 <see cref="RosterImporter"/> 在 seed 之後從名冊檔匯入一次（#82）。
 /// 每份設定文件各自判空、各自 seed：契約允許 PUT 空的區域清單，若共用一個閘門，
 /// 使用者清空區域後下次啟動會把身分、點數、約束全部蓋回出廠值。
 /// </summary>
