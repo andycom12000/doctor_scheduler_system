@@ -17,7 +17,14 @@
     產出結構見 docs/ARCHITECTURE.md §3.2。使用者解壓即用，無需安裝任何東西。
 
 .PARAMETER OutputPath
-    發佈目錄，預設 publish/HospitalScheduler。
+    發佈目錄，預設 publish/DoctorScheduler-v<版本>，版本取自 Directory.Build.props 的 <Version>。
+
+.PARAMETER UserGuidePath
+    使用者說明資料夾，預設 docs/user-guide/（#80）。存在就整份複製到發佈包的「使用者說明/」，
+    不存在只印警告（交付版本不該缺，由發佈流程文件的步驟把關）。
+
+.PARAMETER Zip
+    發佈完成後再壓成與資料夾同名的 zip（publish/DoctorScheduler-v<版本>.zip）。
 
 .PARAMETER SkipFrontend
     跳過前端建置（wwwroot 已是最新時可用）。
@@ -32,6 +39,8 @@
 [CmdletBinding()]
 param(
     [string] $OutputPath,
+    [string] $UserGuidePath,
+    [switch] $Zip,
     [switch] $SkipFrontend,
     [string] $VcRedistPath
 )
@@ -39,9 +48,20 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
-if (-not $OutputPath) {
-    $OutputPath = Join-Path $repoRoot 'publish/HospitalScheduler'
+
+# 版本號唯一來源：Directory.Build.props 的 <Version>（exe 檔案版本與前端畫面也從它來）
+# 先去掉 XML 註解（props 的說明文字裡就有「<Version>」字樣），vite.config.ts 同樣處理
+$propsText = Get-Content (Join-Path $repoRoot 'Directory.Build.props') -Raw -Encoding UTF8
+$propsText = [regex]::Replace($propsText, '(?s)<!--.*?-->', '')
+if ($propsText -notmatch '<Version>\s*([^<\s]+)\s*</Version>') {
+    throw 'Directory.Build.props 找不到 <Version>'
 }
+$version = $Matches[1]
+$packageName = "DoctorScheduler-v$version"
+if (-not $OutputPath) {
+    $OutputPath = Join-Path $repoRoot "publish/$packageName"
+}
+Write-Host "版本 $version → $packageName" -ForegroundColor Cyan
 
 # --- 1. 前端 ---
 if ($SkipFrontend) {
@@ -61,6 +81,15 @@ if ($SkipFrontend) {
 $wwwroot = Join-Path $repoRoot 'src/Scheduler.Shell/wwwroot/index.html'
 if (-not (Test-Path $wwwroot)) {
     throw "找不到 $wwwroot。前端建置產物缺失，殼會載入空白畫面。"
+}
+
+# 略過前端建置時，wwwroot 可能是舊版號的產物：畫面上的版本會和 exe 對不上，直接擋下
+if ($SkipFrontend) {
+    $jsFiles = Get-ChildItem (Join-Path $repoRoot 'src/Scheduler.Shell/wwwroot/assets') -Filter '*.js' -ErrorAction SilentlyContinue
+    $needle = [regex]::Escape($version)
+    if (-not ($jsFiles | Select-String -Pattern ('[`"'']' + $needle + '[`"'']') -List)) {
+        throw "wwwroot 的 JS 不含目前版本字串 $version（前端是舊版號建的）。請去掉 -SkipFrontend 重建。"
+    }
 }
 
 # --- 2. .NET ---
@@ -141,10 +170,39 @@ Copy-Item $runtimeSource (Join-Path $OutputPath 'webview2') -Recurse -Force
 Write-Host '[5/6] 建立 data/ …' -ForegroundColor Cyan
 New-Item -ItemType Directory -Path (Join-Path $OutputPath 'data') -Force | Out-Null
 
+# --- 5b. 使用者說明（#80）---
+if (-not $UserGuidePath) { $UserGuidePath = Join-Path $repoRoot 'docs/user-guide' }
+if (Test-Path $UserGuidePath) {
+    Copy-Item $UserGuidePath (Join-Path $OutputPath '使用者說明') -Recurse -Force
+    Write-Host "      使用者說明：$UserGuidePath" -ForegroundColor DarkGray
+} else {
+    Write-Warning "找不到使用者說明資料夾 $UserGuidePath，發佈包不含使用者說明（交付版本不該缺）"
+}
+
+# exe 的產品版本必須等於 <Version>（有人在 csproj 覆寫 Version 時會在這裡被擋下）
+$exePath = Join-Path $OutputPath 'HospitalScheduler.exe'
+$productVersion = (Get-Item $exePath).VersionInfo.ProductVersion
+if ($productVersion -ne $version) {
+    throw "HospitalScheduler.exe 的 ProductVersion 是 '$productVersion'，不等於 $version。檢查是否有專案覆寫了 Version。"
+}
+
 # --- 6. native 相依檢查 ---
 Write-Host '[6/6] 檢查 native 相依 …' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'check-native-deps.ps1') -Path $OutputPath
 if ($LASTEXITCODE -ne 0) { throw 'native 相依檢查失敗，發佈包在乾淨的 Windows 上跑不起來' }
+
+if ($Zip) {
+    $zipPath = Join-Path (Split-Path $OutputPath -Parent) "$(Split-Path $OutputPath -Leaf).zip"
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Write-Host "壓縮 → $zipPath" -ForegroundColor Cyan
+    Compress-Archive -LiteralPath $OutputPath -DestinationPath $zipPath -CompressionLevel Optimal
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $za = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try { $zipFiles = @($za.Entries | Where-Object { $_.Name -ne '' }).Count } finally { $za.Dispose() }
+    $dirFiles = @(Get-ChildItem -LiteralPath $OutputPath -Recurse -File).Count
+    if ($zipFiles -ne $dirFiles) { throw "zip 內檔案數 $zipFiles 與資料夾 $dirFiles 不一致" }
+    Write-Host "      zip 檔案數 $zipFiles，與資料夾一致" -ForegroundColor DarkGray
+}
 
 $size = [math]::Round((Get-ChildItem $OutputPath -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
 Write-Host ''

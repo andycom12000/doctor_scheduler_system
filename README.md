@@ -89,7 +89,7 @@ main
 
 ```powershell
 pwsh build/fetch-webview2.ps1   # 一次性：準備 WebView2 Fixed Version runtime
-pwsh build/publish.ps1          # 產出 publish/HospitalScheduler/
+pwsh build/publish.ps1          # 產出 publish/DoctorScheduler-v<版本>/
 ```
 
 `fetch-webview2.ps1` 需要手動下載一次 `.cab`（Microsoft 未提供穩定的直接下載網址），

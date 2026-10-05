@@ -20,7 +20,7 @@
     發佈目錄。
 
 .EXAMPLE
-    pwsh build/check-native-deps.ps1 -Path publish/HospitalScheduler
+    pwsh build/check-native-deps.ps1 -Path publish/DoctorScheduler-v1.0.0
 #>
 [CmdletBinding()]
 param(

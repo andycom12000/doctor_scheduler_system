@@ -13,6 +13,9 @@ import { useYearMonth } from '@/composables/useYearMonth'
 const route = useRoute()
 const { ym } = useYearMonth()
 
+// 建置時由 vite.config.ts 注入（來源：Directory.Build.props 的 <Version>；dev 伺服器帶 -dev）
+const appVersion = __APP_VERSION__
+
 interface NavItem {
   name: string
   label: string
@@ -49,7 +52,10 @@ const currentName = computed(() => route.name?.toString())
           {{ item.label }}
         </RouterLink>
       </nav>
-      <span class="tag tag-neutral shell__badge">本機執行 · 免安裝</span>
+      <div class="shell__badge">
+        <span class="tag tag-neutral">本機執行 · 免安裝</span>
+        <span class="shell__version" title="版本">v{{ appVersion }}</span>
+      </div>
     </header>
 
     <main class="shell__content">
@@ -128,8 +134,17 @@ const currentName = computed(() => route.name?.toString())
 }
 
 .shell__badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   flex: none;
   margin-left: auto;
+}
+
+.shell__version {
+  font-size: 11px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .shell__content {
@@ -137,6 +152,13 @@ const currentName = computed(() => route.name?.toString())
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+/* 窄視窗先讓出版本號，導覽不能被擠掉 */
+@media (max-width: 900px) {
+  .shell__version {
+    display: none;
+  }
 }
 
 @media print {
