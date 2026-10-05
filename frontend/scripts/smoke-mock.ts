@@ -99,6 +99,18 @@ async function main() {
       assert(eligibility.status === 200, 'GET /settings/eligibility-matrix → 200')
     }
 
+    console.log('2a. GET /calendars/2027')
+    {
+      const res = await fetch(`${BASE}/calendars/2027`)
+      assert(res.status === 200, 'GET /calendars/2027 → 200')
+      const body = await res.json()
+      const publicHolidays = body.days.filter((d: { isPublicHoliday: boolean }) => d.isPublicHoliday)
+      assert(publicHolidays.length === 24, 'calendar 2027 國定假日 24 天')
+      assert(!body.days.some((d: { isMakeUpWorkday: boolean }) => d.isMakeUpWorkday), 'calendar 2027 沒有補班日')
+      const newYear = body.days.find((d: { date: string }) => d.date === '2027-01-01')
+      assert(newYear?.holidayName === '元旦', '2027-01-01 元旦')
+    }
+
     console.log('2. GET /calendars/2026')
     {
       const calendar = await fetch(`${BASE}/calendars/2026`)

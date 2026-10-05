@@ -309,6 +309,19 @@ public sealed class ReadEndpointTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
+    public async Task 行事曆_2027_國定假日剛好24天_沒有補班日()
+    {
+        var body = await _api.GetAsync("/api/calendars/2027", "getCalendar");
+        var days = body["days"]!.AsArray();
+        Assert.Equal(365, days.Count);
+        Assert.Equal(24, days.Count(d => d!["isPublicHoliday"]!.GetValue<bool>()));
+        Assert.DoesNotContain(days, d => d!["isMakeUpWorkday"]!.GetValue<bool>());
+        var newYear = days.Single(d => d!["date"]!.GetValue<string>() == "2027-01-01")!;
+        Assert.Equal("元旦", newYear["holidayName"]!.GetValue<string>());
+        Assert.True(newYear["isHoliday"]!.GetValue<bool>());
+    }
+
+    [Fact]
     public async Task 行事曆_沒有例外日的年份_純週末()
     {
         var body = await _api.GetAsync("/api/calendars/2031", "getCalendar");

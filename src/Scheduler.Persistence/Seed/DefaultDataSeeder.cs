@@ -50,12 +50,12 @@ public static class DefaultDataSeeder
             await settings.ReplaceConstraintsAsync(DefaultConstraints.Settings, cancellationToken);
         }
 
-        if (!await db.CalendarDays.AnyAsync(cancellationToken))
+        // 逐日補缺：內建表有、資料庫沒有的日子才寫；資料庫已有的（含使用者覆寫）一律不動，
+        // 這樣新版加進來的年份舊資料庫也拿得到。
+        var existingDates = (await db.CalendarDays.Select(d => d.Date).ToListAsync(cancellationToken)).ToHashSet();
+        foreach (var day in BuiltInCalendar.Days.Where(d => !existingDates.Contains(d.Date)))
         {
-            foreach (var day in BuiltInCalendar.Days)
-            {
-                await calendar.UpsertAsync(new CalendarException(day, Overridden: false), cancellationToken);
-            }
+            await calendar.UpsertAsync(new CalendarException(day, Overridden: false), cancellationToken);
         }
 
         if (seedReferenceRoster && !await db.Staff.AnyAsync(cancellationToken))

@@ -1,7 +1,7 @@
 /**
  * 行事曆的事實來源（週六日 + 國定假日 + 補班日）。
  *
- * 2026 年的國定假日與補假日依行政院人事總處核定的「115 年政府行政機關辦公日曆表」
+ * 2026 年（2027 見下方表）的國定假日與補假日依行政院人事總處核定的「115 年政府行政機關辦公日曆表」
  * （https://www.dgpa.gov.tw/information?uid=82&pid=12574）。該年度起放假日逢例假日
  * 改為補假、不再調移上班，所以 2026 沒有補班日。排班者仍可用
  * `PATCH /calendars/{year}/{date}` 逐日覆寫。其餘年份沒有國定假日資料，
@@ -50,6 +50,34 @@ const publicHolidays2026: Record<string, string> = {
   '2026-12-25': '行憲紀念日',
 }
 
+/** 2027 年國定假日與補假日（人事總處「116 年政府行政機關辦公日曆表」，院授人培字第 1153026132 號）。無補班日。 */
+const publicHolidays2027: Record<string, string> = {
+  '2027-01-01': '元旦',
+  '2027-02-04': '小年夜',
+  '2027-02-05': '除夕',
+  '2027-02-06': '春節',
+  '2027-02-07': '春節',
+  '2027-02-08': '春節',
+  '2027-02-09': '春節補假',
+  '2027-02-10': '春節補假',
+  '2027-02-28': '和平紀念日',
+  '2027-03-01': '和平紀念日補假',
+  '2027-04-04': '兒童節',
+  '2027-04-05': '清明節',
+  '2027-04-06': '兒童節補假',
+  '2027-04-30': '勞動節補假',
+  '2027-05-01': '勞動節',
+  '2027-06-09': '端午節',
+  '2027-09-15': '中秋節',
+  '2027-09-28': '教師節',
+  '2027-10-10': '國慶日',
+  '2027-10-11': '國慶日補假',
+  '2027-10-25': '臺灣光復暨金門古寧頭大捷紀念日',
+  '2027-12-24': '行憲紀念日補假',
+  '2027-12-25': '行憲紀念日',
+  '2027-12-31': '元旦補假（117 年元旦逢週六）',
+}
+
 /** 2026 年沒有補班日（放假日逢例假日一律補假，不再調移上班）。保留集合讓其他年份可填。 */
 const makeUpWorkdays2026: Set<string> = new Set()
 
@@ -69,12 +97,13 @@ function weekdayOf(dateStr: string): number {
   return new Date(`${dateStr}T00:00:00Z`).getUTCDay()
 }
 
-/** 單日的行事曆事實。目前只有 2026 年有國定假日／補班日資料，其餘年份只判斷週六日。 */
+/** 單日的行事曆事實。目前只有 2026、2027 年有國定假日／補班日資料，其餘年份只判斷週六日。 */
 export function calendarDayFacts(dateStr: string): CalendarDayFacts {
   const year = dateStr.slice(0, 4)
-  const isPublicHoliday = year === '2026' ? Object.hasOwn(publicHolidays2026, dateStr) : false
+  const table = year === '2026' ? publicHolidays2026 : year === '2027' ? publicHolidays2027 : undefined
+  const isPublicHoliday = table ? Object.hasOwn(table, dateStr) : false
   const isMakeUpWorkday = year === '2026' ? makeUpWorkdays2026.has(dateStr) : false
-  const holidayName = (year === '2026' ? publicHolidays2026[dateStr] : undefined) ?? null
+  const holidayName = table?.[dateStr] ?? null
   return {
     date: dateStr,
     weekday: weekdayOf(dateStr),

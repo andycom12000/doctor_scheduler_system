@@ -37,7 +37,7 @@ public class SeedTests
     }
 
     [Fact]
-    public async Task 行事曆只_seed_2026_的例外日_含落在週末的國定假日()
+    public async Task 行事曆_seed_2026與2027的例外日_含落在週末的國定假日()
     {
         await using var db = await SqliteDatabase.CreateAsync();
         using var scope = db.Scope();
@@ -46,7 +46,8 @@ public class SeedTests
         var all = await calendar.GetExceptionsAsync(new DateOnly(2000, 1, 1), new DateOnly(2100, 12, 31));
         Assert.Equal(BuiltInCalendar.Days.Count, all.Count);
         Assert.All(all, e => Assert.False(e.Overridden));
-        Assert.All(all, e => Assert.Equal(2026, e.Day.Date.Year));
+        Assert.All(all, e => Assert.Contains(e.Day.Date.Year, new[] { 2026, 2027 }));
+        Assert.Equal(24, all.Count(e => e.Day.Date.Year == 2027));
 
         // 2026-02-15 是週日也是小年夜：同時是假日與國定假日
         var lunarEve = Assert.Single(all, e => e.Day.Date == new DateOnly(2026, 2, 15));
@@ -57,8 +58,46 @@ public class SeedTests
         // 9/28 教師節是 2026 起新增的假日，行事曆權威來源已校正
         Assert.Contains(all, e => e.Day.Date == new DateOnly(2026, 9, 28) && e.Day.HolidayName == "教師節");
 
-        // 2026 沒有補班日
+        // 2027-01-01 元旦（週五）、2027-12-31 元旦補假
+        Assert.Contains(all, e => e.Day.Date == new DateOnly(2027, 1, 1) && e.Day.HolidayName == "元旦" && e.Day.IsPublicHoliday);
+        Assert.Contains(all, e => e.Day.Date == new DateOnly(2027, 12, 31) && e.Day.IsPublicHoliday);
+
+        // 2026、2027 都沒有補班日
         Assert.DoesNotContain(all, e => e.Day.IsMakeUpWorkday);
+    }
+
+    [Fact]
+    public async Task 只有2026年的既有資料庫升級後補齊2027_使用者覆寫的日子不動()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        var overriddenDate = new DateOnly(2026, 9, 28);
+        var overriddenDay = new Domain.Model.CalendarDay(
+            overriddenDate, IsHoliday: false, IsPublicHoliday: false, IsMakeUpWorkday: true, HolidayName: null);
+
+        // 模擬舊版資料庫：只剩 2026 年，且其中一天被使用者覆寫。
+        using (var scope = db.Scope())
+        {
+            var ctx = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
+            ctx.CalendarDays.RemoveRange(ctx.CalendarDays.Where(d => d.Date.Year == 2027));
+            await ctx.SaveChangesAsync();
+            var calendar = scope.ServiceProvider.GetRequiredService<ICalendarRepository>();
+            await calendar.UpsertAsync(new CalendarException(overriddenDay, Overridden: true));
+            await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync();
+        }
+
+        await SchedulerDatabase.InitializeAsync(db.Services);
+
+        using (var scope = db.Scope())
+        {
+            var calendar = scope.ServiceProvider.GetRequiredService<ICalendarRepository>();
+            var all = await calendar.GetExceptionsAsync(new DateOnly(2000, 1, 1), new DateOnly(2100, 12, 31));
+            Assert.Equal(BuiltInCalendar.Days.Count, all.Count);
+            Assert.Equal(24, all.Count(e => e.Day.Date.Year == 2027));
+
+            var kept = Assert.Single(all, e => e.Day.Date == overriddenDate);
+            Assert.True(kept.Overridden);
+            Assert.Equal(overriddenDay, kept.Day);
+        }
     }
 
     [Fact]
