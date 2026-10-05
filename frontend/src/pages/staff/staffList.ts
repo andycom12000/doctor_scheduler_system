@@ -83,7 +83,7 @@ export function sortByRankGroup(staff: Staff[], ranks: Rank[], groups: RankGroup
   })
 }
 
-/** 姓名排序走繁中語系（注音序），不用 UTF-16 碼位——後者對中文是無意義的順序。 */
+/** 姓名排序走 `zh-Hant` 語系（CLDR 預設為筆畫序），不用 UTF-16 碼位——後者對中文是無意義的順序。 */
 export function compareName(a: string, b: string): number {
   return a.localeCompare(b, 'zh-Hant')
 }

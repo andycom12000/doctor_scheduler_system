@@ -253,7 +253,7 @@ describe('isNotFoundError', () => {
 })
 
 describe('姓名排序', () => {
-  it('中文姓名走語系排序，不是碼位順序（碼位 張 < 李，語系序 李 在 張 前）', () => {
+  it('中文姓名走語系排序，不是碼位順序（碼位 張 < 李，語系序 李 在 張 前；筆畫 7 < 11）', () => {
     expect('張' < '李').toBe(true) // 碼位順序，這正是舊寫法的結果
     expect(compareName('張', '李')).toBeGreaterThan(0)
     const people = [

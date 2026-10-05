@@ -4,7 +4,7 @@
  * 身分組 ／ 狀態篩選，全在前端做，`GET /staff` 一次全帶）＋ 右表單（新增／編輯／
  * 狀態切換／刪除）。純函式在 `staffList.ts`，這裡只接資料與畫面。
  */
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { Plus, Search } from 'lucide-vue-next'
 import PageLayout from '@/components/PageLayout.vue'
 import { useConfirm } from '@/composables/useConfirm'
@@ -153,6 +153,14 @@ async function selectStaff(staff: Staff): Promise<void> {
   })
   clearMessages()
 }
+
+// 新增表單開著時身分清單才載入完（或按了「重新載入」）：把還空著的身分補上第一個，
+// 同步進基準值，不讓「補預設值」被當成使用者改過。
+watch(ranks, (list) => {
+  if (mode.value !== 'create' || draft.rankCode !== '' || !list[0]) return
+  draft.rankCode = list[0].code
+  if (baseline.value) baseline.value.rankCode = list[0].code
+})
 
 // 身分設定載入失敗時，新增人員的身分下拉是空的、儲存鈕恆灰——明說原因，不讓使用者猜。
 const ranksProblem = computed(() =>

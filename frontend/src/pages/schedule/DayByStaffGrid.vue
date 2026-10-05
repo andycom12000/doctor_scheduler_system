@@ -305,6 +305,9 @@ function cellClick(staffId: string, date: string): void {
   text-align: center;
   box-sizing: border-box;
   height: var(--dp-group-row-h);
+  /* 固定列高：窄組（例如 NP 只有 1 欄）的標題不換行，超出就截掉，不撐高、也不蓋到下面的表頭列。 */
+  white-space: nowrap;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
