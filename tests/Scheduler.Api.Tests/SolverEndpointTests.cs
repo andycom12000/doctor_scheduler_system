@@ -6,7 +6,7 @@ using Scheduler.Api.Solving;
 namespace Scheduler.Api.Tests;
 
 /// <summary>
-/// 求解端點的契約守法，跑的是真的 CP-SAT（時間上限 1–2 秒，情境是 fixture 的 8 位人員）。
+/// 求解端點的契約守法，跑的是真的 CP-SAT（時間上限 1–5 秒，情境是 fixture 的 8 位人員）。
 /// 自己一顆資料庫、自己一個 <c>SolverJobService</c>（單一 slot），class 內的測試依序跑，不會互相搶 slot。
 /// </summary>
 public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
@@ -42,7 +42,7 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task 建立_查詢_變體_套用_一路走完()
     {
-        var created = await PostAsync("/api/solver-jobs", """{"yearMonth":"2026-10","variantCount":1,"timeLimitSecPerVariant":2}""", "createSolverJob", HttpStatusCode.Accepted);
+        var created = await PostAsync("/api/solver-jobs", """{"yearMonth":"2026-10","variantCount":1,"timeLimitSecPerVariant":5}""", "createSolverJob", HttpStatusCode.Accepted);
         var jobId = created["jobId"]!.GetValue<string>();
         Assert.Equal("2026-10", created["yearMonth"]!.GetValue<string>());
         Assert.Contains(created["status"]!.GetValue<string>(), new[] { "queued", "running" });
@@ -52,7 +52,12 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
         Assert.Contains("上月尚未發布", created["warnings"]!.AsArray().Select(w => w!.GetValue<string>()).Single(w => w.Contains("月結轉")));
 
         var done = await WaitForTerminalAsync(jobId);
-        Assert.Equal("succeeded", done["status"]!.GetValue<string>());
+        // 先斷言「求解有解出來」：CPU 被搶時時限內可能沒有任何解，讓失敗訊息直接指出這件事（#88）
+        Assert.True(
+            done["status"]!.GetValue<string>() == "succeeded",
+            $"求解沒有成功：status={done["status"]}, failureReason={done["failureReason"]}");
+        var solved = (await _api.GetAsync($"/api/solver-jobs/{jobId}/variants", "listVariants"))["variants"]!.AsArray();
+        Assert.True(solved.Count >= 1, "求解沒解出任何變體（時限內無可行解，可能是 CPU 被搶）");
         Assert.True(done["elapsedSec"]!.GetValue<double>() >= 0);
         Assert.Equal("succeeded", done["progress"]!["status"]!.GetValue<string>());
         Assert.Null(done["failureReason"]);
@@ -162,7 +167,7 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task 進度串流_是_SSE_每筆都符合契約_終態後結束()
     {
-        var created = await PostAsync("/api/solver-jobs", """{"yearMonth":"2026-10","variantCount":1,"timeLimitSecPerVariant":2}""", "createSolverJob", HttpStatusCode.Accepted);
+        var created = await PostAsync("/api/solver-jobs", """{"yearMonth":"2026-10","variantCount":1,"timeLimitSecPerVariant":5}""", "createSolverJob", HttpStatusCode.Accepted);
         var jobId = created["jobId"]!.GetValue<string>();
 
         using var response = await _api.Client.GetAsync($"/api/solver-jobs/{jobId}/stream", HttpCompletionOption.ResponseHeadersRead);
