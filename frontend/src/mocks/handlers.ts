@@ -15,6 +15,7 @@ import type {
   ScheduleSummary,
   SetDutyRequest,
   SolverJob,
+  SolverProgress,
   Staff,
   StaffCounts,
   StaffStatus,
@@ -407,7 +408,19 @@ function clearJobTimers(jobId: string) {
   jobTimers.delete(jobId)
 }
 
-function toSolverJobResponse(job: SolverJobState): SolverJob {
+function isTerminal(status: SolverJobState['status']): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'cancelled'
+}
+
+/**
+ * 進行中的 progress.elapsedSec 是本份變體耗時；工作結束後真後端走 TerminalSnapshot，
+ * progress.elapsedSec 變成整個工作的總耗時（紀錄裡只有這個）。GET、DELETE、stream 都經過這裡。
+ */
+function progressOf(job: SolverJobState): SolverProgress {
+  return isTerminal(job.status) ? { ...job.progress, elapsedSec: job.elapsedSec } : job.progress
+}
+
+export function toSolverJobResponse(job: SolverJobState): SolverJob {
   return {
     jobId: job.jobId,
     yearMonth: job.yearMonth,
@@ -416,7 +429,7 @@ function toSolverJobResponse(job: SolverJobState): SolverJob {
     elapsedSec: job.elapsedSec,
     scale: job.scale,
     constraintCount: job.constraintCount,
-    progress: job.progress,
+    progress: progressOf(job),
     warnings: job.warnings,
     failureReason: job.failureReason,
   }
@@ -438,7 +451,8 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
     if (!job || job.status === 'cancelled') return
     job.status = 'running'
     variantStartMs = Date.now()
-    job.elapsedSec = (variantStartMs - startMs) / 1000
+    job.runningStartedAtMs = variantStartMs
+    job.elapsedSec = 0
     job.progress = {
       jobId,
       status: 'running',
@@ -464,7 +478,7 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
       lastBound = bestBound
       job.status = 'running'
       const nowMs = Date.now()
-      job.elapsedSec = (nowMs - startMs) / 1000
+      job.elapsedSec = (nowMs - (job.runningStartedAtMs ?? nowMs)) / 1000
       job.progress = {
         jobId,
         status: 'running',
@@ -490,7 +504,7 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
       store.variants.set(jobId, variants)
       job.status = 'succeeded'
       const nowMs = Date.now()
-      job.elapsedSec = (nowMs - startMs) / 1000
+      job.elapsedSec = (nowMs - (job.runningStartedAtMs ?? nowMs)) / 1000
       job.progress = {
         jobId,
         status: 'succeeded',
@@ -510,6 +524,17 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
   timers.push(finish)
 
   jobTimers.set(jobId, timers)
+}
+
+/** 中止：總耗時記到這一刻（從轉 running 起算），已結束的工作冪等。 */
+export function cancelSolverJob(job: SolverJobState) {
+  if (job.status !== 'queued' && job.status !== 'running') return
+  clearJobTimers(job.jobId)
+  job.elapsedSec = job.runningStartedAtMs === undefined ? 0 : (Date.now() - job.runningStartedAtMs) / 1000
+  job.status = 'cancelled'
+  // job.progress 是巢狀物件，頂層 status 改了它也要跟著改，否則回應裡外層
+  // status: 'cancelled' 但 progress.status 還留著 'running'，前端與 SSE 讀到的不一致。
+  job.progress = { ...job.progress, status: 'cancelled' }
 }
 
 const solverHandlers = [
@@ -568,13 +593,7 @@ const solverHandlers = [
   http.delete('/api/solver-jobs/:jobId', ({ params }) => {
     const job = store.solverJobs.get(params.jobId as string)
     if (!job) return errorResponse(404, 'NOT_FOUND', '找不到求解工作')
-    if (job.status === 'queued' || job.status === 'running') {
-      clearJobTimers(job.jobId)
-      job.status = 'cancelled'
-      // job.progress 是巢狀物件，頂層 status 改了它也要跟著改，否則回應裡外層
-      // status: 'cancelled' 但 progress.status 還留著 'running'，前端與 SSE 讀到的不一致。
-      job.progress = { ...job.progress, status: 'cancelled' }
-    }
+    cancelSolverJob(job)
     return HttpResponse.json(toSolverJobResponse(job))
   }),
 
@@ -593,8 +612,8 @@ const solverHandlers = [
             stopped = true
             return
           }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(job.progress)}\n\n`))
-          if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(progressOf(job))}\n\n`))
+          if (isTerminal(job.status)) {
             controller.close()
             stopped = true
             return

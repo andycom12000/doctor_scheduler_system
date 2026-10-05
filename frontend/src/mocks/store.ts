@@ -44,6 +44,8 @@ export interface SolverJobState {
   /** 內部排程用，不出現在 API 回應裡。 */
   timeLimitSecPerVariant: number
   startedAtMs: number
+  /** 轉 running 的那一刻（真後端 StartedAt）；job.elapsedSec 從這裡起算，不含 queued。 */
+  runningStartedAtMs?: number
 }
 
 export interface MockStore {
