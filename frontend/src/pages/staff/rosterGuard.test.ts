@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node'
 import { handlers } from '@/mocks/handlers'
 import { resetStore } from '@/mocks/store'
 import type { ListStaffResponse } from '@/api/types'
-import { hasNoActiveStaff } from './rosterGuard'
+import { allStaffInactive, hasNoActiveStaff } from './rosterGuard'
 
 function response(active: number, inactive = 0): ListStaffResponse {
   return { items: [], counts: { active, inactive } }
@@ -23,6 +23,22 @@ describe('hasNoActiveStaff', () => {
 
   it('只有停用人員時仍算沒有在職人員', () => {
     expect(hasNoActiveStaff(response(0, 5))).toBe(true)
+  })
+})
+
+describe('求解入口開放條件（只在 === false 時開放，null 與 true 都關）', () => {
+  const canSolve = (r: ListStaffResponse | null) => hasNoActiveStaff(r) === false
+  it('未載入或載入失敗（null）不開放', () => expect(canSolve(null)).toBe(false))
+  it('0 人不開放', () => expect(canSolve(response(0))).toBe(false))
+  it('有人才開放', () => expect(canSolve(response(3))).toBe(true))
+})
+
+describe('allStaffInactive', () => {
+  it('有人但全停用才是 true', () => {
+    expect(allStaffInactive(response(0, 4))).toBe(true)
+    expect(allStaffInactive(response(0, 0))).toBe(false)
+    expect(allStaffInactive(response(2, 4))).toBe(false)
+    expect(allStaffInactive(null)).toBe(false)
   })
 })
 

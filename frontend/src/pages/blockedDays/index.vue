@@ -13,7 +13,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/PageLayout.vue'
 import NoStaffGuide from '@/components/NoStaffGuide.vue'
-import { hasNoActiveStaff } from '../staff/rosterGuard'
+import { allStaffInactive, hasNoActiveStaff } from '../staff/rosterGuard'
 import { useYearMonth } from '@/composables/useYearMonth'
 import { useCalendar } from '@/composables/useCalendar'
 import { useConfirm } from '@/composables/useConfirm'
@@ -65,6 +65,9 @@ const { data: staffResponse } = useResource(staffKey, () => listStaff())
 const staff = computed(() => staffResponse.value?.items ?? [])
 // 名冊沒有在職人員（issue #81）：登記沒有對象，改顯示引導、不給求解入口。
 const noActiveStaff = computed(() => hasNoActiveStaff(staffResponse.value) === true)
+// 求解入口與筆刷只在確定有人時露出；名冊還沒載入或載入失敗（null）也不露。
+const canSolve = computed(() => hasNoActiveStaff(staffResponse.value) === false)
+const rosterAllInactive = computed(() => allStaffInactive(staffResponse.value))
 const activeStaffCount = computed(() => staff.value.filter((s) => s.status === 'active').length)
 
 const ranksKey = ref('settings/ranks')
@@ -249,7 +252,7 @@ async function onSolve(): Promise<void> {
 <template>
   <PageLayout :title="`${ym} 不可排班日登記`" :subtitle="scheduleBadge">
     <template #actions>
-      <div v-if="!noActiveStaff" class="brush-toggle">
+      <div v-if="canSolve" class="brush-toggle">
         <button
           type="button"
           class="brush-toggle__btn"
@@ -267,7 +270,7 @@ async function onSolve(): Promise<void> {
           清除
         </button>
       </div>
-      <button v-if="!noActiveStaff" type="button" class="btn btn-primary" @click="onSolve">帶入求解</button>
+      <button v-if="canSolve" type="button" class="btn btn-primary" @click="onSolve">帶入求解</button>
     </template>
 
     <div v-if="toast" class="toast" role="alert">
@@ -275,7 +278,7 @@ async function onSolve(): Promise<void> {
       <button type="button" class="toast__close" @click="toast = null">關閉</button>
     </div>
 
-    <NoStaffGuide v-if="noActiveStaff" />
+    <NoStaffGuide v-if="noActiveStaff" :all-inactive="rosterAllInactive" />
     <p v-else-if="registrationLoading && !registration">載入不可排班日登記中…</p>
     <p v-else-if="registrationError">{{ describeError(registrationError) }}</p>
     <div v-else class="blocked-days">

@@ -8,18 +8,25 @@
  * （docs/design-ref/screen-01-v02-empty-state.md §5.2）。
  */
 import { RouterLink } from 'vue-router'
+
+defineProps<{
+  /** 名冊有人但全部停用：文案改成請去啟用。 */
+  allInactive?: boolean
+}>()
 </script>
 
 <template>
   <div class="no-staff">
-    <div class="no-staff__panel blueprint" role="status" data-testid="no-staff-guide">
+    <div class="no-staff__panel blueprint" role="region" aria-labelledby="no-staff-title" data-testid="no-staff-guide">
       <i class="corner tl" aria-hidden="true"></i>
       <i class="corner tr" aria-hidden="true"></i>
       <i class="corner bl" aria-hidden="true"></i>
       <i class="corner br" aria-hidden="true"></i>
       <span class="no-staff__kicker">NO ACTIVE STAFF</span>
-      <div class="no-staff__title">尚未建立人員</div>
-      <p class="no-staff__hint">名冊裡沒有任何在職人員，無法求解。請先到「人員維護」新增人員。</p>
+      <div id="no-staff-title" class="no-staff__title">{{ allInactive ? '沒有在職人員' : '尚未建立人員' }}</div>
+      <p class="no-staff__hint">
+        {{ allInactive ? '名冊裡的人員都已停用，無法求解。請到「人員維護」啟用人員。' : '名冊裡沒有任何在職人員，無法求解。請先到「人員維護」新增人員。' }}
+      </p>
       <RouterLink class="btn btn-primary no-staff__cta" :to="{ name: 'staff' }">前往人員維護</RouterLink>
     </div>
   </div>
@@ -66,7 +73,7 @@ import { RouterLink } from 'vue-router'
 .no-staff__hint {
   margin: 0;
   font-size: 13px;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  color: var(--color-text);
 }
 
 .no-staff__cta {
