@@ -1,0 +1,55 @@
+name: E2E
+
+# 畫面層 E2E（issue #84）：Playwright 打真後端，約半分鐘到一分鐘。
+# 不放進每個 PR 的 CI：只在手動觸發或 release/* 分支推送時跑。
+on:
+  workflow_dispatch:
+  push:
+    branches: ['release/**']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  e2e:
+    name: 畫面層主線劇本
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安裝
+        run: npm ci
+
+      - name: 安裝 Chromium
+        run: npx playwright install --with-deps chromium
+
+      # npm run e2e 自己 dotnet build 後端、起全新資料庫的後端與 vite、跑完收掉
+      - name: 主線劇本
+        run: npm run e2e
+
+      - name: 上傳失敗時的截圖與 trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: frontend/test-results
+          if-no-files-found: ignore

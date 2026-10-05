@@ -13,6 +13,10 @@ node_modules/
 .npm/
 
 # ---- 建置產物 ----
+# Playwright 畫面層 E2E 的輸出（npm run e2e）
+frontend/test-results/
+frontend/playwright-report/
+
 # 前端 build 產物。vite.config.ts 的 outDir 指向此處，由 npm run build 產生，
 # 不進版控（emptyOutDir 每次建置都會清空）。
 src/Scheduler.Shell/wwwroot/

@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 /**
  * 獨立於 vite.config.ts：測試只測純函式與 composable，不需要 @vitejs/plugin-vue，
@@ -14,5 +14,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // e2e/ 是 Playwright 的 spec，由 npm run e2e 跑，不歸 vitest 管
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 })

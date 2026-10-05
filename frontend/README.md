@@ -32,6 +32,32 @@ npm run dev           # /api 會 proxy 到 http://localhost:5080
 | `npm run build` | 型別檢查 + 建置到 `../src/Scheduler.Shell/wwwroot` |
 | `npm run typecheck` | 只跑型別檢查 |
 | `npm run api:types` | 由 `../api-contract.yaml` 生成 `src/api/schema.d.ts` |
+| `npm test` | vitest 單元測試（不含 `e2e/`） |
+| `npm run e2e` | Playwright 畫面層 E2E 主線劇本，見下節（需要 .NET SDK 8） |
+
+## 畫面層 E2E（`npm run e2e`）
+
+用 Playwright 打真後端，走一條主線：空名冊引導 → 新增人員 → 不可排班日登記 → 變體求解與套用 →
+發布（含硬違規確認）→ 匯出。後端對應的是 `tests/Scheduler.Api.Tests/EndToEndFromZeroTests.cs`（#83），
+這裡驗的是畫面層。Shell 那一層（`WebResourceRequested`、存檔對話框、`PostWebMessageAsJson`）測不到，
+仍由人工驗收。
+
+**前提**（跟其他指令不同，這個需要後端）：
+
+1. Node.js ≥ 20.19、**.NET SDK 8**（`dotnet` 在 PATH 上）
+2. 瀏覽器二選一：
+   - `npx playwright install chromium`（一次性，下載 Playwright 自己的 Chromium）
+   - 機器上已有 Edge、不想下載：`E2E_BROWSER_CHANNEL=msedge npm run e2e`
+     （PowerShell：`$env:E2E_BROWSER_CHANNEL='msedge'; npm run e2e`）
+
+`npm run e2e` 會自動：`dotnet build` 後端 → 在暫存目錄建一顆**全新資料庫**（`SCHEDULER_DATABASE_PATH`）且
+**不種參考名單**（`SCHEDULER_SEED_REFERENCE_ROSTER=false`）→ 起後端 `127.0.0.1:5180` → 起 vite
+`127.0.0.1:5280`（`--strictPort`，`API_PROXY_TARGET` 指到 5180）→ 跑 Playwright → 依 PID 殺掉兩個伺服器並刪掉
+暫存資料庫。整條約 20 秒。
+
+- 不碰 5080／5173，你自己的開發伺服器可以同時開著；5180／5280 被佔用時直接失敗，不會接上別人的伺服器
+- 除錯：`E2E_VERBOSE=1 npm run e2e` 轉出伺服器輸出；失敗時 `test-results/` 有截圖與 trace
+- CI 只在手動觸發或 `release/*` 分支跑（`.github/workflows/e2e.yml`），不是每個 PR 都跑
 
 ## 分支
 

@@ -80,7 +80,9 @@ export default defineConfig(({ command }) => ({
     // 前端程式碼兩者逐字相同 —— 這是遷移路徑每天都在被使用的原因。
     proxy: {
       '/api': {
-        target: 'http://localhost:5080',
+        // 畫面層 E2E（scripts/e2e.ts）把它指到另一顆全新資料庫的後端；沒設就是 :5080。
+        // 刻意不用 VITE_ 前綴，免得被打進 client bundle。
+        target: process.env.API_PROXY_TARGET ?? 'http://localhost:5080',
         changeOrigin: false,
       },
     },

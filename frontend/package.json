@@ -18,7 +18,9 @@
     "api:types": "openapi-typescript ../api-contract.yaml -o src/api/schema.d.ts",
     "mock:smoke": "tsx scripts/smoke-mock.ts",
     "api:smoke": "tsx scripts/smoke-mock.ts --target http://localhost:5080",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pree2e": "npm run api:types && dotnet build ../src/Scheduler.Api/Scheduler.Api.csproj --configuration Release --nologo -v q",
+    "e2e": "tsx scripts/e2e.ts"
   },
   "dependencies": {
     "lucide-vue-next": "^1.0.0",
@@ -26,6 +28,7 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
