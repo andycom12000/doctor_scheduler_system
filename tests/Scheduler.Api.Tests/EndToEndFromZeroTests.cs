@@ -175,7 +175,7 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         Assert.Equal(duties.Count, applied["duties"]!.AsArray().Count);
 
         // 9. 發布。求解輸出的解每次不同，月結轉可能全 0，所以先在 JUNIOR 組挑剩餘額度最大者、
-        // 清掉他一格值班（造一個空缺），他的剩餘額度就嚴格大於組內任何人，同組其他人的月結轉必 > 0。
+        // 清掉他一格值班（造一個空缺），他的剩餘額度就嚴格大於同組任何有值班者，同組其他有值班者的月結轉必 > 0。
         // 清格造了空缺（硬違規），發布要帶 acknowledgeViolations。
         var draftBoard = await GetAsync($"/api/schedules/{Month}/point-board", "getPointBoard");
         var dutiesByStaff = applied["duties"]!.AsArray().Where(d => d!["staffId"] is not null).GroupBy(d => d!["staffId"]!.GetValue<string>()).ToDictionary(g => g.Key, g => g.First()!);
@@ -218,10 +218,14 @@ public sealed class EndToEndFromZeroTests : IAsyncLifetime
         }
 
         Assert.Equal(expected.OrderBy(kv => kv.Key), actual.OrderBy(kv => kv.Key));
-        // 確定性的部分：被清格的人是 JUNIOR 組的唯一最大者，同組其他人都 > 0
+        // 確定性的部分：被清格者的剩餘額度大於同組任何有值班者（原剩餘 r_P 加上該格點數 p ≥ 1，
+        // 而其他人 r_j ≤ r_P），所以同組其他有值班者的月結轉都比他大、必 > 0。
+        // 整月 0 班的人剩餘額度是上限、可能更大，不在這個斷言內，由上面的完整重算把關。
         var juniorIds = febBoard["groups"]!.AsArray().Single(g => g!["groupCode"]!.GetValue<string>() == "JUNIOR")!["rows"]!.AsArray().Select(r => r!["staffId"]!.GetValue<string>()).ToList();
-        Assert.Equal(0, actual[pickedId]);
-        Assert.All(juniorIds.Where(id => id != pickedId), id => Assert.True(actual[id] > 0, $"{id} 的月結轉應 > 0"));
+        var otherWorkers = juniorIds.Where(id => id != pickedId && dutiesByStaff.ContainsKey(id)).ToList();
+        Assert.NotEmpty(otherWorkers);
+        Assert.All(otherWorkers, id => Assert.True(actual[id] > actual[pickedId], $"{id} 的月結轉應大於被清格者"));
+        Assert.All(otherWorkers, id => Assert.True(actual[id] > 0, $"{id} 的月結轉應 > 0"));
 
         // 10. 匯出
         using (var response = await _client.GetAsync($"/api/schedules/{Month}/export"))
