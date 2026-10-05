@@ -346,6 +346,7 @@ EF Core 的規矩：
 | `carry_over` | 某月**發布時結算出**的月結轉（該月的輸出）。重複發布整份覆寫 |
 | `carry_over_applied` | 某月**第一次發布時凍結**的上月月結轉（該月的輸入）。之後重新發布不重拍。見 ADR-0004 |
 | `staff` | 人員名冊 |
+| `app_meta` | 一次性標記（key/value）。目前只有 `roster_imported_at`：名冊檔匯入過就不再匯入（#82） |
 | `area_type` / `area` / `rank_group` / `rank` / `eligibility` / `point_rule*` / `constraint*` / `monthly_override` | 設定，正規化。PUT 整份取代時就地同步（同鍵更新、多的刪、缺的補） |
 | `calendar_day` | 行事曆**只存例外日**：國定假日、補班日、使用者覆寫。週六日讀取時算出來。內建只有 2026，之後年份先由使用者逐日覆寫 |
 | `solver_job` / `variant` / `variant_duty` | 求解紀錄。**全部保留，不做清理**。進度不寫，只寫狀態轉換 |
@@ -531,8 +532,20 @@ DoctorScheduler-v<版本>/
 ├─ runtimes/win-x64/native/      # 只剩 WebView2Loader.dll 的副本（套件行為，無害）
 ├─ webview2/                     # Fixed Version runtime（152 版 ~800MB）
 ├─ wwwroot/                      # 前端 build 產物
+├─ roster/roster.csv             # 名冊檔（選用，#82），publish.ps1 -RosterFile 驗證後放入
 └─ data/                         # 所有狀態，含 scheduler.db 與 WebView2 user data
 ```
+
+**名冊檔（#82）。** 發佈版要內建案主的真實名冊，但真實姓名與員編不進 git。名冊檔放在 repo 外，
+執行 `build/publish.ps1 -RosterFile <path>` 時先驗證（UTF-8 CSV 可帶 BOM、表頭 `員編,姓名,身分`、
+身分用代碼、員編不重複且非空、姓名非空；不通過發佈失敗並指出列號）再複製到發佈包的 `roster/roster.csv`。
+放在 `data/` **旁邊**而不是裡面：`data/` 是執行期狀態，使用者清掉重來時名冊檔要留著。
+第一次啟動（`ApiHostOptions.RosterFilePath` 有值，Release Shell 傳入）時，`SchedulerDatabase.InitializeAsync`
+在出廠 seed 之後呼叫 `RosterImporter`：檔案存在、`app_meta` 沒有 `roster_imported_at`、`staff` 表空的，
+三者同時成立才匯入，並在同一次 `SaveChanges` 寫下標記。之後人員被刪光、檔案還在不在都不再匯入；
+舊資料庫（有人員、沒標記）升級後因為人員表非空不會被塞進名冊，且同樣寫下標記（名冊來源視為已決定，日後刪光人員也不會被匯入）。檔案驗證不過只記一筆警告
+（`data/roster-import.log`，只含列號與原因，不含姓名員編）、不匯入、不寫標記、正常啟動。
+開發期（`Program.cs`、DEBUG Shell）仍用 `SeedReferenceRoster` 種假名參考名單；兩者不可同時指定。
 
 ---
 
@@ -616,7 +629,8 @@ win-x64 publish，解析每個 native DLL 的 PE import table（`build/check-nat
 - [ ] 4K 螢幕與 1080p 外接螢幕間拖曳視窗，DPI 縮放正常
 - [ ] 列印輸出正常（A4）
 - [ ] 前端 build 產物可直接部署至靜態主機，搭配 `Scheduler.Api` 正常運作（遷移路徑驗證）
-- [ ] 發佈包第一次啟動後人員管理畫面的清單為空（或以 SQLite 工具開 `data/scheduler.db`
-      確認 `staff` 表為空）——#37：參考名單種子只在 DEBUG 建置種，`Scheduler.Shell` 的
-      Release 建置關閉；行事曆與約束等其他出廠設定不受影響。發佈包不開 socket，
-      無法直接打 `GET /api/staff`
+- [ ] 發佈包第一次啟動後人員管理畫面的清單：有帶 `-RosterFile` 時人數等於名冊檔的列數，
+      沒帶時為空（或以 SQLite 工具開 `data/scheduler.db` 確認 `staff` 表）——#37：假名參考名單
+      只在 DEBUG 建置種，`Scheduler.Shell` 的 Release 建置關閉；#82：名冊由 `roster/roster.csv`
+      首次啟動匯入一次（§8 的「名冊檔」段）；行事曆與約束等其他出廠設定不受影響。
+      發佈包不開 socket，無法直接打 `GET /api/staff`

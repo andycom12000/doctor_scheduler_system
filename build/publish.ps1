@@ -33,8 +33,17 @@
     含 msvcp140.dll / vcruntime140.dll / vcruntime140_1.dll 的目錄。省略時自動在
     Visual Studio / Build Tools 的 VC\Redist\MSVC\<版本>\x64\Microsoft.VC143.CRT 尋找最新版。
 
+.PARAMETER RosterFile
+    名冊檔（UTF-8 CSV，可帶 BOM，表頭「員編,姓名,身分」，身分用代碼）的路徑（#82）。
+    **名冊檔是真實姓名與員編，不進版控**，永遠由這個參數從 repo 外帶入。先驗證（表頭、員編不重複且非空、
+    姓名非空、身分代碼認得；不通過就讓發佈失敗並指出列號），通過才複製到發佈包的 roster/roster.csv，
+    第一次啟動時匯入、只匯一次。省略時照常發佈但印警告，第一次啟動名冊會是空的。
+
 .EXAMPLE
     pwsh build/publish.ps1
+
+.EXAMPLE
+    pwsh build/publish.ps1 -RosterFile C:\private\roster.csv
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +51,8 @@ param(
     [string] $UserGuidePath,
     [switch] $Zip,
     [switch] $SkipFrontend,
-    [string] $VcRedistPath
+    [string] $VcRedistPath,
+    [string] $RosterFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +72,55 @@ if (-not $OutputPath) {
     $OutputPath = Join-Path $repoRoot "publish/$packageName"
 }
 Write-Host "版本 $version → $packageName" -ForegroundColor Cyan
+
+# --- 0. 名冊檔驗證（#82）---
+# 放在最前面：檔案有問題就不必等前端與 dotnet publish 跑完才知道。
+# 規則與 Scheduler.Persistence 的 RosterImporter.Parse 一致（程式端啟動時會再驗一次）。
+# 身分代碼清單與 DefaultRanks 相同，tests/Scheduler.Persistence.Tests/RosterParseTests 會守住不漂移。
+$knownRankCodes = @('PGY1', 'PGY2', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'PTR', 'NP')
+if ($RosterFile) {
+    if (-not (Test-Path -LiteralPath $RosterFile -PathType Leaf)) { throw "找不到名冊檔：$RosterFile" }
+    # throwOnInvalidBytes：Big5（zh-TW Excel 預設的 CSV）等非 UTF-8 要明確失敗，不能默默讀成亂碼
+    try {
+        $rosterText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $RosterFile).Path, (New-Object System.Text.UTF8Encoding($false, $true)))
+    } catch {
+        $inner = $_.Exception
+        while ($inner.InnerException) { $inner = $inner.InnerException }
+        if ($inner -is [System.Text.DecoderFallbackException]) {
+            throw "名冊檔不是 UTF-8，請用 Excel 另存為「CSV UTF-8（逗號分隔）」後再發佈"
+        }
+        throw
+    }
+    $rosterLines = $rosterText.TrimStart([char]0xFEFF) -split "`n"
+    $rosterErrors = New-Object System.Collections.Generic.List[string]
+    # 錯誤訊息只含列號與原因，不印任何欄位原文（欄位對調時那裡會是姓名，終端輸出可能被截圖或貼出）
+    if (($rosterLines[0].Replace('"', '').Replace(' ', '').Trim()) -ne '員編,姓名,身分') {
+        $rosterErrors.Add('第 1 列：表頭必須是「員編,姓名,身分」')
+    } else {
+        # 區分大小寫，與 RosterImporter 的 StringComparer.Ordinal 一致（@{} 預設不分大小寫，不能用）
+        $seenNos = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+        $rosterRows = 0
+        for ($i = 1; $i -lt $rosterLines.Count; $i++) {
+            $n = $i + 1
+            # 欄位前後的引號會去掉；不處理欄位內含逗號
+            $f = @(($rosterLines[$i].TrimEnd("`r") -split ',') | ForEach-Object { $_.Trim().Trim('"').Trim() })
+            if (-not ($f | Where-Object { $_ -ne '' })) { continue }
+            if ($f.Count -ne 3) { $rosterErrors.Add("第 $n 列：欄位數必須是 3（員編,姓名,身分），實際是 $($f.Count)"); continue }
+            $rosterRows++
+            if ($f[0] -eq '') { $rosterErrors.Add("第 $n 列：員編是空的") }
+            elseif (-not $seenNos.Add($f[0])) { $rosterErrors.Add("第 $n 列：員編與前面的列重複") }
+            if ($f[1] -eq '') { $rosterErrors.Add("第 $n 列：姓名是空的") }
+            if ($knownRankCodes -cnotcontains $f[2]) { $rosterErrors.Add("第 $n 列：身分代碼不在已知清單內（可用：$($knownRankCodes -join ', ')）") }
+        }
+        if ($rosterRows -eq 0 -and $rosterErrors.Count -eq 0) { $rosterErrors.Add('沒有任何人員列') }
+    }
+    if ($rosterErrors.Count -gt 0) {
+        throw ("名冊檔驗證不過，發佈中止：`n  " + ($rosterErrors -join "`n  "))
+    }
+    Write-Host "[0/6] 名冊檔驗證通過（$rosterRows 人）" -ForegroundColor Cyan
+} else {
+    Write-Warning '發佈包不含名冊，第一次啟動名冊會是空的（要帶入請用 -RosterFile）'
+}
 
 # --- 1. 前端 ---
 if ($SkipFrontend) {
@@ -169,6 +228,11 @@ Copy-Item $runtimeSource (Join-Path $OutputPath 'webview2') -Recurse -Force
 # --- 5. portable 資料夾 ---
 Write-Host '[5/6] 建立 data/ …' -ForegroundColor Cyan
 New-Item -ItemType Directory -Path (Join-Path $OutputPath 'data') -Force | Out-Null
+# 名冊檔放 roster/roster.csv，與 data/ 並列（不在 data/ 裡：data/ 是執行期狀態，使用者清掉重來時名冊要留著）
+if ($RosterFile) {
+    New-Item -ItemType Directory -Path (Join-Path $OutputPath 'roster') -Force | Out-Null
+    Copy-Item -LiteralPath $RosterFile (Join-Path $OutputPath 'roster/roster.csv') -Force
+}
 
 # --- 5b. 使用者說明（#80）---
 if (-not $UserGuidePath) { $UserGuidePath = Join-Path $repoRoot 'docs/user-guide' }
@@ -212,5 +276,8 @@ Write-Host '交付前請跑過 docs/ARCHITECTURE.md §10 的驗收清單，尤�
 Write-Host '  - 在一台沒有 .NET / WebView2 / VC++ Redist 的乾淨 Windows 上解壓執行' -ForegroundColor Yellow
 Write-Host '    （上面的 native 相依檢查是靜態分析，只能證明「沒有懸空的 import」，取代不了這一步）' -ForegroundColor Yellow
 Write-Host '  - 確認 %APPDATA% / %LOCALAPPDATA% / 登錄檔沒有任何寫入' -ForegroundColor Yellow
-Write-Host '  - 第一次啟動後人員管理畫面的清單應為空（或以 SQLite 工具開 data/scheduler.db 確認' -ForegroundColor Yellow
-Write-Host '    staff 表為空）——#37：參考名單種子只在 DEBUG 建置種，發佈包不開 socket 打不到 API' -ForegroundColor Yellow
+Write-Host '  - 第一次啟動後人員管理畫面的清單：有帶 -RosterFile 應等於名冊檔的人數，沒帶則為空' -ForegroundColor Yellow
+Write-Host '    （#37：假名參考名單只在 DEBUG 建置種；#82：名冊由 roster/roster.csv 首次啟動匯入一次）' -ForegroundColor Yellow
+if ($RosterFile) {
+    Write-Host '  - 發佈包內含真實名冊（roster/roster.csv），交付與保管請依個資規範處理' -ForegroundColor Yellow
+}

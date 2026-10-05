@@ -40,13 +40,20 @@ namespace Scheduler.Api;
 /// `Scheduler.Shell` 依 DEBUG/RELEASE 編譯期決定，Debug 傳 true、Release 傳 false。
 /// 行事曆例外日、約束等其他出廠設定不受這個旗標影響，永遠照常種。
 /// </param>
+/// <param name="RosterFilePath">
+/// 發佈包的名冊檔路徑（#82，BCL 型別，Shell 才傳得進來）。名冊來源三選一：都不給＝名冊空的（預設）、
+/// <paramref name="SeedReferenceRoster"/>＝假名參考名單（開發期）、這個＝從檔案匯入（Release）。
+/// 檔案存在、資料庫從沒匯入過、人員表空的才匯入，匯入後寫標記不再匯入；檔案不存在或驗證不過就不匯入、正常啟動。
+/// 與 <paramref name="SeedReferenceRoster"/> 同時指定會丟 <see cref="ArgumentException"/>。
+/// </param>
 public sealed record ApiHostOptions(
     bool UseTestServer = false,
     string? DatabasePath = null,
     Action<IServiceCollection>? ConfigurePersistence = null,
     Action<IServiceCollection>? ConfigureServices = null,
     string[]? Args = null,
-    bool SeedReferenceRoster = false);
+    bool SeedReferenceRoster = false,
+    string? RosterFilePath = null);
 
 /// <summary>
 /// 唯一一份 HTTP pipeline 的組裝（ARCHITECTURE §3.2 規則 2）。開發期 Program.cs 與正式版 Shell
@@ -54,8 +61,20 @@ public sealed record ApiHostOptions(
 /// </summary>
 public static class ApiHost
 {
+    /// <summary>
+    /// 發佈包內名冊檔的相對路徑（相對程式資料夾，#82）。唯一一份，來自 Persistence 的 <c>RosterImporter</c>；
+    /// Shell 看不到 Persistence，從這裡拿（BCL string），<c>build/publish.ps1</c> 複製的目的地也要與它一致。
+    /// </summary>
+    public static string RosterFileRelativePath => Scheduler.Persistence.Seed.RosterImporter.RelativePath;
+
     public static async Task<WebApplication> BuildAsync(ApiHostOptions options, CancellationToken cancellationToken = default)
     {
+        // 名冊來源二選一：放在最前面，免得建好 host 才發現選項矛盾
+        if (options.SeedReferenceRoster && options.RosterFilePath is not null)
+        {
+            throw new ArgumentException("SeedReferenceRoster 與 RosterFilePath 不可同時指定", nameof(options));
+        }
+
         // ContentRoot 預設是目前工作目錄；WPF exe 由捷徑啟動時那可以是任何地方。
         // portable 的前提是一切都在程式旁，與 SchedulerDatabase.DefaultPath 一樣以 AppContext.BaseDirectory 為準。
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -94,7 +113,8 @@ public static class ApiHost
         var app = builder.Build();
 
         // 啟動流程：建 data/ → 套 migration → WAL → 首次 seed → 標記中斷的求解工作。可重複執行。
-        await SchedulerDatabase.InitializeAsync(app.Services, options.SeedReferenceRoster, cancellationToken);
+        await SchedulerDatabase.InitializeAsync(
+            app.Services, options.SeedReferenceRoster, cancellationToken, options.RosterFilePath);
 
         app.UseSchedulerErrors();
         app.MapReadEndpoints();

@@ -32,7 +32,9 @@
   行事曆例外日，含參考名單 34 人——33 位醫師 + 1 位 NP，姓名／組成照 `frontend/src/mocks/fixtures/staff.ts`。
   參考名單是否種由 `ApiHostOptions.SeedReferenceRoster` 控制（預設 false，fail-safe；開發期
   `Program.cs` 明確開回 true），`Scheduler.Shell` 依 DEBUG/RELEASE 編譯期常數決定，發佈包
-  （Release）關掉，其他出廠設定不受影響，見 #37）、
+  （Release）關掉，其他出廠設定不受影響，見 #37。發佈包改由 `ApiHostOptions.RosterFilePath`
+  指向程式旁的 `roster/roster.csv`，`RosterImporter` 在「檔案存在＋`app_meta` 無 `roster_imported_at`
+  ＋人員表空」時匯入一次並寫標記，之後不再匯入，見 #82、ARCHITECTURE §8）、
   `Migrations/`（進版控，啟動時自動套用）。`SchedulerDatabase.InitializeAsync`
   是啟動流程，`SchedulerDatabase.DefaultPath` 是程式旁的 `data/scheduler.db`。
   改了 `SchedulerDbContext` 要跑 `dotnet ef migrations add <Name> --project src/Scheduler.Persistence`，
@@ -144,6 +146,11 @@ npm run api:smoke    # 同一份煙霧斷言打 :5080 真後端（先 dotnet run
 發佈：`pwsh build/fetch-webview2.ps1`（一次性）→ `pwsh build/publish.ps1`
 （內含 VC++ runtime app-local 複製與 `build/check-native-deps.ps1` 的 import table 檢查；
 開發機沒有 pwsh 7 時用 `powershell -File` 跑也可以，腳本是 5.1 相容的）。
+
+**名冊檔不進版控、用參數帶入**：發佈要內建真實名冊時，`pwsh build/publish.ps1 -RosterFile <repo 外的 CSV>`
+（UTF-8，表頭 `員編,姓名,身分`，身分用代碼）。腳本先驗證、不通過就失敗並指出列號，通過才複製成發佈包的
+`roster/roster.csv`；沒給參數會印警告、名冊是空的。真實姓名與員編不得出現在程式碼、測試、commit、PR、issue；
+測試只用假名與 `T001…` 員編。`.gitignore` 已擋 `roster.csv`、`*roster*.csv`、`*名冊*.csv`、`/roster/`。CSV 必須是 UTF-8（Excel 請另存「CSV UTF-8（逗號分隔）」，Big5 會被拒），欄位前後的引號會去掉、不支援欄位內含逗號；錯誤訊息只含列號與原因、不印欄位原文。
 
 ## 分支模型（git-flow）
 

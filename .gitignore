@@ -39,3 +39,10 @@ Desktop.ini
 *.db
 *.db-wal
 *.db-shm
+
+# ---- 真實名冊檔（#82）----
+# 含真實姓名與員編，絕不進版控；一律放 repo 外，用 build/publish.ps1 -RosterFile 帶入
+roster.csv
+*roster*.csv
+*名冊*.csv
+/roster/
