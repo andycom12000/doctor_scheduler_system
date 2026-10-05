@@ -12,6 +12,8 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/PageLayout.vue'
+import NoStaffGuide from '@/components/NoStaffGuide.vue'
+import { hasNoActiveStaff } from '../staff/rosterGuard'
 import { useYearMonth } from '@/composables/useYearMonth'
 import { useCalendar } from '@/composables/useCalendar'
 import { useConfirm } from '@/composables/useConfirm'
@@ -61,6 +63,8 @@ const { data: feasibility } = useResource(feasibilityKey, () => getFeasibility(y
 const staffKey = ref('staff')
 const { data: staffResponse } = useResource(staffKey, () => listStaff())
 const staff = computed(() => staffResponse.value?.items ?? [])
+// 名冊沒有在職人員（issue #81）：登記沒有對象，改顯示引導、不給求解入口。
+const noActiveStaff = computed(() => hasNoActiveStaff(staffResponse.value) === true)
 const activeStaffCount = computed(() => staff.value.filter((s) => s.status === 'active').length)
 
 const ranksKey = ref('settings/ranks')
@@ -245,7 +249,7 @@ async function onSolve(): Promise<void> {
 <template>
   <PageLayout :title="`${ym} 不可排班日登記`" :subtitle="scheduleBadge">
     <template #actions>
-      <div class="brush-toggle">
+      <div v-if="!noActiveStaff" class="brush-toggle">
         <button
           type="button"
           class="brush-toggle__btn"
@@ -263,7 +267,7 @@ async function onSolve(): Promise<void> {
           清除
         </button>
       </div>
-      <button type="button" class="btn btn-primary" @click="onSolve">帶入求解</button>
+      <button v-if="!noActiveStaff" type="button" class="btn btn-primary" @click="onSolve">帶入求解</button>
     </template>
 
     <div v-if="toast" class="toast" role="alert">
@@ -271,7 +275,8 @@ async function onSolve(): Promise<void> {
       <button type="button" class="toast__close" @click="toast = null">關閉</button>
     </div>
 
-    <p v-if="registrationLoading && !registration">載入不可排班日登記中…</p>
+    <NoStaffGuide v-if="noActiveStaff" />
+    <p v-else-if="registrationLoading && !registration">載入不可排班日登記中…</p>
     <p v-else-if="registrationError">{{ describeError(registrationError) }}</p>
     <div v-else class="blocked-days">
       <BlockedDayMatrix

@@ -71,7 +71,15 @@ export interface MockStore {
   nextJobSeq: number
 }
 
-function buildInitialStore(): MockStore {
+export interface StoreOptions {
+  /**
+   * 0 人情境（issue #81）：名冊清空，連帶不種值班表種子（種子值班表引用的人員不存在）。
+   * 其餘設定維持出廠值，這樣才分得出「沒人」與「沒設定」。
+   */
+  noStaff?: boolean
+}
+
+function buildInitialStore(options: StoreOptions = {}): MockStore {
   // 矩陣先算好、給 eligibilityMatrix 與 makeStaffFixture 共用同一份——
   // 兩者必須從同一個來源推導，PUT 矩陣之後才不會各吃各的（見 ranks.ts 的 eligibleAreaTypesOf 註解）。
   const matrix = structuredClone(eligibilityMatrixFixture.matrix)
@@ -86,7 +94,7 @@ function buildInitialStore(): MockStore {
     constraints: structuredClone(constraintSettings),
     monthlyOverrides: new Map(),
     calendarOverrides: new Map(),
-    staff: makeStaffFixture(matrix),
+    staff: options.noStaff ? [] : makeStaffFixture(matrix),
     nextStaffSeq: 35,
     schedules: new Map(),
     blockedDays: new Map(),
@@ -96,13 +104,13 @@ function buildInitialStore(): MockStore {
     nextJobSeq: 1,
   }
 
-  buildSeedSchedules(store)
+  if (!options.noStaff) buildSeedSchedules(store)
   return store
 }
 
 export let store: MockStore = buildInitialStore()
 
 /** 重置全部 mock 狀態，供 `mock:smoke` 腳本在每次執行前呼叫。 */
-export function resetStore(): void {
-  store = buildInitialStore()
+export function resetStore(options: StoreOptions = {}): void {
+  store = buildInitialStore(options)
 }

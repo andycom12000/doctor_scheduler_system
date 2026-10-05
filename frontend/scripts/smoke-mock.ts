@@ -655,6 +655,23 @@ async function main() {
       const bytes = new Uint8Array(await exported.arrayBuffer())
       assert(bytes.length > 0, '匯出位元組長度 > 0')
     })
+
+    // issue #81：0 人情境。放在最後，因為會把 mock store 換成空名冊。
+    await mockOnly('16. 0 人情境（resetStore({ noStaff: true })）', '真後端無法重置成空名冊', async () => {
+      resetStore({ noStaff: true })
+      const empty = await (await fetch(`${BASE}/staff`)).json()
+      assert(empty.items.length === 0, '空名冊 GET /staff items = []')
+      assert(empty.counts.active === 0 && empty.counts.inactive === 0, '空名冊 counts.active = 0')
+      const none = await fetch(`${BASE}/schedules/2026-09`)
+      assert(none.status === 404, '空名冊沒有種子值班表 → 404')
+      const first = await fetch(`${BASE}/staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeNo: 'N001', name: '第一位', rankCode: 'PGY1' }),
+      })
+      assert(first.status === 201, '新增第一位人員 → 201')
+      assert((await (await fetch(`${BASE}/staff`)).json()).counts.active === 1, '新增後 counts.active = 1')
+    })
   } finally {
     server?.close()
   }
