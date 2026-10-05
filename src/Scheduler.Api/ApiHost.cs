@@ -61,6 +61,12 @@ public sealed record ApiHostOptions(
 /// </summary>
 public static class ApiHost
 {
+    /// <summary>
+    /// 發佈包內名冊檔的相對路徑（相對程式資料夾，#82）。唯一一份，來自 Persistence 的 <c>RosterImporter</c>；
+    /// Shell 看不到 Persistence，從這裡拿（BCL string），<c>build/publish.ps1</c> 複製的目的地也要與它一致。
+    /// </summary>
+    public static string RosterFileRelativePath => Scheduler.Persistence.Seed.RosterImporter.RelativePath;
+
     public static async Task<WebApplication> BuildAsync(ApiHostOptions options, CancellationToken cancellationToken = default)
     {
         // ContentRoot 預設是目前工作目錄；WPF exe 由捷徑啟動時那可以是任何地方。

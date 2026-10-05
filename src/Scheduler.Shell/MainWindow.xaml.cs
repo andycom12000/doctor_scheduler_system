@@ -37,10 +37,9 @@ public partial class MainWindow : Window
     /// <summary>
     /// 發佈包的名冊檔（#82）：<c>build/publish.ps1 -RosterFile</c> 驗證後複製到這裡。與 <c>data/</c> 並列、
     /// 不放在裡面：data/ 是執行期狀態，使用者清掉它重來時名冊檔要留著。不存在就是空名冊，正常啟動。
-    /// 路徑與 Persistence 的 <c>RosterImporter.RelativePath</c> 相同（Shell 看不到 Persistence，所以這裡寫一份）。
-    /// DEBUG 不匯入（用假名參考名單）。
+    /// 相對路徑由 <see cref="ApiHost.RosterFileRelativePath"/> 提供（單一來源）。DEBUG 不匯入（用假名參考名單）。
     /// </summary>
-    private static readonly string RosterFile = Path.Combine(BaseDirectory, "roster", "roster.csv");
+    private static readonly string RosterFile = Path.Combine(BaseDirectory, ApiHost.RosterFileRelativePath);
 
     private readonly CancellationTokenSource _shutdown = new();
     private WebApplication? _app;

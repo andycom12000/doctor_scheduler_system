@@ -23,7 +23,13 @@
 3. **確認使用者說明在位**：`docs/user-guide/`（#80）要已進版控。`publish.ps1` 會把它整份複製成
    發佈包的 `使用者說明/`，在壓 zip 之前；資料夾不存在只會印警告，**交付版本不可有這個警告**。
    不要手動往 `publish/` 放檔案：腳本開頭會刪掉整個輸出資料夾。
-4. **打包**：`pwsh build/publish.ps1 -Zip`（沒有 pwsh 7 時用 `powershell -File build/publish.ps1 -Zip`）。
+   **名冊檔（#82）**：交付版本要內建真實名冊時，備好 repo 外的名冊 CSV（UTF-8、表頭 `員編,姓名,身分`、
+   身分用代碼），路徑由發佈者在步驟 4 以 `-RosterFile` 指定。**名冊檔不進版控**（含真實姓名與員編），
+   不要放進 repo 目錄。腳本在最前面先驗證，不通過就失敗並指出列號；通過才複製成包內 `roster/roster.csv`
+   （在壓 zip 之前，所以 zip 內含名冊且納入檔案數檢查）。沒給 `-RosterFile` 會印警告，
+   **交付版本不可有這個警告**。zip 含真實名冊，交付與保管依個資規範處理。
+4. **打包**：`pwsh build/publish.ps1 -Zip -RosterFile <repo 外的名冊.csv>`
+   （沒有 pwsh 7 時用 `powershell -File build/publish.ps1 -Zip -RosterFile ...`）。
    產出 `publish/DoctorScheduler-v1.0.0/` 與同名 zip。腳本會自動檢查：`check-native-deps.ps1`、
    exe 的 ProductVersion 等於 `<Version>`、zip 與資料夾檔案數一致；任何一項不過就失敗。
    `-SkipFrontend` 時還會確認 wwwroot 的 JS 含目前版本字串。

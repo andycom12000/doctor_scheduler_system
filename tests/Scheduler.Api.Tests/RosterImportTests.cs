@@ -187,6 +187,21 @@ public sealed class RosterImportTests : IDisposable
     }
 
     [Fact]
+    public void 發佈腳本複製名冊檔的目的地與程式讀取的相對路徑一致()
+    {
+        // Shell 用 ApiHost.RosterFileRelativePath 組路徑（單一來源）；publish.ps1 是另一份寫死的，這裡守住不漂移
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Combine(dir, "build", "publish.ps1")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+        Assert.NotNull(dir);
+        var script = File.ReadAllText(Path.Combine(dir!, "build", "publish.ps1"));
+        var relative = ApiHost.RosterFileRelativePath.Replace('\\', '/');
+        Assert.Contains($"(Join-Path $OutputPath '{relative}')", script);
+    }
+
+    [Fact]
     public async Task 參考名單與名冊檔不可同時指定()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => ApiHost.BuildAsync(new ApiHostOptions(
