@@ -17,6 +17,8 @@ import { describeError } from '@/api/errors'
 import { ApiError } from '@/api/client'
 import { getAreaSettings, getConstraints, getRankSettings } from '@/api/settings'
 import { listStaff } from '@/api/staff'
+import NoStaffGuide from '@/components/NoStaffGuide.vue'
+import { allStaffInactive, hasNoActiveStaff } from '../staff/rosterGuard'
 import { applyVariant, getSchedule } from '@/api/schedules'
 import { cancelSolverJob, createSolverJob, getSolverJob, listVariants } from '@/api/solver'
 import { subscribe, type Unsubscribe } from '@/realtime'
@@ -74,6 +76,11 @@ const scheduleResource = useResource(
   () => getSchedule(ym.value),
 )
 
+// 名冊沒有在職人員（issue #81）：不給任何求解入口，改引導去人員維護。
+const noActiveStaff = computed(() => hasNoActiveStaff(staffResource.data.value) === true)
+// 求解入口只在確定有人時開放；名冊還沒載入或載入失敗（null）也不開。
+const canSolve = computed(() => hasNoActiveStaff(staffResource.data.value) === false)
+const rosterAllInactive = computed(() => allStaffInactive(staffResource.data.value))
 const areas = computed(() => areaSettings.data.value?.areas ?? [])
 const areaIds = computed(() => areas.value.map((a) => a.id))
 const areaLabelById = computed(() => new Map(areas.value.map((a) => [a.id, a.name])))
@@ -481,7 +488,9 @@ function isVariantApplied(variant: Variant): boolean {
   return isVariantSelected(variant.duties, scheduleDuties.value)
 }
 const variantListEmptyNote = computed(() => {
-  if (job.value?.status === 'cancelled' || job.value?.status === 'failed') return '尚無已完成的變體，可以重新求解。'
+  if (job.value?.status === 'cancelled' || job.value?.status === 'failed') {
+    return noActiveStaff.value ? '尚無已完成的變體。' : '尚無已完成的變體，可以重新求解。'
+  }
   return '尚無已完成的變體。'
 })
 </script>
@@ -495,7 +504,9 @@ const variantListEmptyNote = computed(() => {
     </template>
 
     <div class="variants-page">
-      <section v-if="showEmptyState" class="empty-state">
+      <NoStaffGuide v-if="showEmptyState && noActiveStaff" :all-inactive="rosterAllInactive" />
+
+      <section v-else-if="showEmptyState" class="empty-state">
         <p class="empty-state__notice">{{ jobNotice ?? '這個月還沒有求解紀錄。' }}</p>
         <p class="empty-state__hint">
           先到「不可排班日登記」把這個月的登記帶入求解，或直接用目前的登記與設定求解。
@@ -504,7 +515,7 @@ const variantListEmptyNote = computed(() => {
           <RouterLink class="btn btn-secondary" :to="{ name: 'blockedDays', params: { ym } }">
             去登記不可排班日
           </RouterLink>
-          <button type="button" class="btn btn-primary" :disabled="creatingJob" @click="startSolve">
+          <button type="button" class="btn btn-primary" :disabled="creatingJob || !canSolve" @click="startSolve">
             {{ creatingJob ? '求解中…' : '直接求解' }}
           </button>
         </div>
@@ -536,8 +547,8 @@ const variantListEmptyNote = computed(() => {
         <p v-if="variantsError" class="notice notice--error">{{ describeError(variantsError) }}</p>
         <p v-if="applyError" class="notice notice--error">{{ applyError }}</p>
 
-        <div v-if="job.status === 'failed' || job.status === 'cancelled'" class="job-header__actions">
-          <button type="button" class="btn btn-secondary" :disabled="creatingJob" @click="startSolve">
+        <div v-if="(job.status === 'failed' || job.status === 'cancelled') && !noActiveStaff" class="job-header__actions">
+          <button type="button" class="btn btn-secondary" :disabled="creatingJob || !canSolve" @click="startSolve">
             {{ creatingJob ? '求解中…' : '重新求解' }}
           </button>
           <span v-if="createJobError" class="notice notice--error">{{ createJobError }}</span>

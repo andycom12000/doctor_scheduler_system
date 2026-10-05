@@ -23,6 +23,8 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { rememberJobId } from '../variants/jobStorage'
 import { extractBusyJobId } from './lib/solverKickoff'
+import NoStaffGuide from '@/components/NoStaffGuide.vue'
+import { allStaffInactive, hasNoActiveStaff, NO_ACTIVE_STAFF_REASON } from '../staff/rosterGuard'
 import EmptyState from './EmptyState.vue'
 import AreaByDayGrid from './AreaByDayGrid.vue'
 import DayByStaffGrid from './DayByStaffGrid.vue'
@@ -86,6 +88,11 @@ const npDutyCap = computed(() => {
 // 空月份（issue #62）的日 × 人骨架也是靠這支 + rankSettingsRes 畫身分組色帶，不打 /staff 以外的東西 --
 const staffListKey = ref('staff')
 const staffListRes = useResource(staffListKey, () => listStaff())
+// 名冊沒有在職人員（issue #81）：沒人可排，不給求解入口，改引導去人員維護。
+const noActiveStaff = computed(() => hasNoActiveStaff(staffListRes.data.value) === true)
+// 求解入口只在確定有人時開放；名冊還沒載入或載入失敗（null）也不開。
+const canSolve = computed(() => hasNoActiveStaff(staffListRes.data.value) === false)
+const rosterAllInactive = computed(() => allStaffInactive(staffListRes.data.value))
 
 const rankSettingsKey = ref('settings/ranks')
 const rankSettingsRes = useResource(rankSettingsKey, () => getRankSettings())
@@ -532,7 +539,15 @@ const emptyStateLoading = computed(
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runExport">匯出 Excel</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runPrint">列印</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runValidate">驗證約束</button>
-        <button type="button" class="btn btn-secondary" @click="goToVariants">重新求解</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="!canSolve"
+          :title="noActiveStaff ? NO_ACTIVE_STAFF_REASON : undefined"
+          @click="goToVariants"
+        >
+          重新求解
+        </button>
         <button type="button" class="btn btn-primary" :disabled="writeBusy" @click="runPublish()">
           {{ publishLabel }}
         </button>
@@ -542,6 +557,7 @@ const emptyStateLoading = computed(
     <div v-if="schedule.loading.value && !schedule.data.value && !isEmptyMonth" class="schedule-state">載入中…</div>
     <div v-else-if="scheduleErrorMessage" class="schedule-state">{{ scheduleErrorMessage }}</div>
     <div v-else-if="isEmptyMonth && emptyStateBlockingError" class="schedule-state">{{ emptyStateBlockingError }}</div>
+    <NoStaffGuide v-else-if="isEmptyMonth && noActiveStaff" :all-inactive="rosterAllInactive" />
     <div v-else-if="isEmptyMonth && emptyStateLoading" class="schedule-state">載入中…</div>
 
     <EmptyState
