@@ -141,6 +141,7 @@ npm run build        # 型別檢查 + 建置到 ../src/Scheduler.Shell/wwwroot
 npm run api:types    # 由 api-contract.yaml 生成 src/api/schema.d.ts
 npm run mock:smoke   # 同一份煙霧斷言打 MSW mock
 npm run api:smoke    # 同一份煙霧斷言打 :5080 真後端（先 dotnet run）
+npm run e2e          # Playwright 畫面層主線劇本：自起全新資料庫的真後端 :5180 + vite :5280，跑完收掉（需 .NET SDK 8；首次 npx playwright install chromium）
 ```
 
 發佈：`pwsh build/fetch-webview2.ps1`（一次性）→ `pwsh build/publish.ps1`

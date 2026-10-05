@@ -20,6 +20,8 @@
 
 1. **開分支**：`git switch develop && git pull && git switch -c release/v1.0.0`
 2. **改版本號**：只改 `Directory.Build.props` 的 `<Version>`，commit。
+   推上 `release/*` 後會自動跑畫面層 E2E（`.github/workflows/e2e.yml`，#84）；也可在 Actions 手動觸發。
+   打包前確認它是綠的（它測不到 Shell 那一層，那部分仍是步驟 5 的實機驗收）。
 3. **確認使用者說明在位**：`docs/user-guide/`（#80）要已進版控。`publish.ps1` 會把它整份複製成
    發佈包的 `使用者說明/`，在壓 zip 之前；資料夾不存在只會印警告，**交付版本不可有這個警告**。
    **交付前檢查**：`grep -n "TODO(" docs/user-guide/` 的結果都要已經處理；只允許留在 HTML 註解內，
