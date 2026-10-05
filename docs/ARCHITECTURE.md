@@ -533,6 +533,7 @@ DoctorScheduler-v<版本>/
 ├─ webview2/                     # Fixed Version runtime（152 版 ~800MB）
 ├─ wwwroot/                      # 前端 build 產物
 ├─ roster/roster.csv             # 名冊檔（選用，#82），publish.ps1 -RosterFile 驗證後放入
+├─ 使用者說明/                   # 給排班者看的說明（#80），publish.ps1 從 docs/user-guide/ 複製，開 index.html
 └─ data/                         # 所有狀態，含 scheduler.db 與 WebView2 user data
 ```
 

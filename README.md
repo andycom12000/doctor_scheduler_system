@@ -3,100 +3,91 @@
 醫師值班排班求解器。核心是 Google OR-Tools CP-SAT，交付形態是 Windows 上解壓即用的
 portable 桌面程式（WPF 殼 + WebView2 渲染 + Vite SPA 前端）。
 
-**動手前請先讀 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**，特別是第 2 節「已排除方案」——
-技術選型已定案，該文件記錄了每個決定的理由與已被否決的選項。
+## 先讀哪裡
 
-前端開發者請直接看 [`frontend/README.md`](frontend/README.md)，**不需要安裝 .NET 或 WebView2**。
-
----
+| 文件 | 內容 |
+|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | **現況、兩條硬性規則、指令、分支模型、專案特有的坑。** 各層做到哪裡以這份為準，本檔不重複 |
+| [`CONTEXT.md`](CONTEXT.md) | 詞彙表。額度點數與公平性點數、假日與國定假日是不同的東西，不可混用 |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 技術決策（已定案）。第 2 節是已排除方案，提任何技術選型前先看 |
+| [`api-contract.yaml`](api-contract.yaml) | OpenAPI，前後端唯一耦合點 |
+| [`docs/adr/`](docs/adr/) | 領域決策的理由 |
+| [`docs/constraint-defaults.md`](docs/constraint-defaults.md) | 約束、額度點數與公平性點數規則的唯一預設值 |
+| [`docs/release-process.md`](docs/release-process.md) | 發佈流程 |
+| [`frontend/README.md`](frontend/README.md) | 前端開發，**不需要安裝 .NET 或 WebView2** |
+| [`docs/user-guide/index.html`](docs/user-guide/index.html) | 給排班者看的使用者說明，發佈時隨包附上 |
 
 ## 現況
 
-專案骨架已建立，**領域模型、求解建模、API 契約、UI 規格皆尚未開始**，屬下一階段規劃。
-
-| 已完成 | 尚未開始 |
-|---|---|
-| 分層專案結構與相依關係 | 領域模型（`Scheduler.Domain`） |
-| 架構規則的自動化驗證 | CP-SAT 建模（`Scheduler.Solver`） |
-| 前端工作區（Vue 3 + TS + Vite + MSW） | 用例層（`Scheduler.Application`） |
-| 發佈設定與打包腳本 | API 端點（`api-contract.yaml` 只有 `/api/health`） |
-| WebView2 橋接規格（文件） | WebView2 宿主實作（`Scheduler.Shell`） |
+後端各層與前端畫面已落地，契約 42 個操作全數實作，求解、匯出、發佈包腳本都已可用。
+還在進行的工作與各層細節見 [`CLAUDE.md`](CLAUDE.md) 的「現況」與
+[GitHub Issues](https://github.com/andycom12000/doctor_scheduler_system/issues)。
 
 ## 專案結構
 
 ```
 ├─ HospitalScheduler.sln
+├─ Directory.Build.props         # 版本號（<Version>）的唯一來源
 ├─ src/
-│  ├─ Scheduler.Domain/        純領域模型，無任何外部相依
-│  ├─ Scheduler.Application/   用例層，transport 無關
-│  ├─ Scheduler.Solver/        CP-SAT 實作，全專案唯一可引用 OR-Tools 之處
-│  ├─ Scheduler.Api/           開發期 transport：Minimal API（:5080）
-│  └─ Scheduler.Shell/         正式版 transport：WPF + WebView2 殼
-├─ frontend/                   前端工作區（Vue 3 + TypeScript + Vite）
+│  ├─ Scheduler.Domain/          領域模型與約束定義、違規檢查，零套件相依
+│  ├─ Scheduler.Application/     用例層（查詢、命令、求解工作狀態機），repository 與 ISolver 介面
+│  ├─ Scheduler.Persistence/     EF Core + SQLite，repository 實作、migration、出廠 seed
+│  ├─ Scheduler.Solver/          CP-SAT 建模與求解，全專案唯一可引用 OR-Tools 之處
+│  ├─ Scheduler.Api/             唯一一份 HTTP 實作（Minimal API），開發期監聽 :5080
+│  └─ Scheduler.Shell/           WPF + WebView2 殼，在 process 內 host 同一個 Api，不開 socket
 ├─ tests/
-│  └─ Scheduler.ArchitectureTests/   分層規則的自動化驗證
-├─ build/                      打包腳本、WebView2 fixed runtime
-├─ docs/ARCHITECTURE.md        技術決策紀錄（先讀這份）
-└─ api-contract.yaml           OpenAPI，前後端唯一耦合點
+│  ├─ Scheduler.ArchitectureTests/   分層規則
+│  ├─ Scheduler.Domain.Tests/        九個約束原語與違規檢查
+│  ├─ Scheduler.Persistence.Tests/   存取層與 migration snapshot
+│  ├─ Scheduler.Application.Tests/   讀取、寫入、求解狀態機
+│  ├─ Scheduler.Api.Tests/           以 api-contract.yaml 驗每個端點的回應
+│  ├─ Scheduler.Solver.Tests/        求解器與檢查器的漂移守門
+│  └─ Scheduler.Shell.Tests/         殼的純轉換邏輯
+├─ frontend/                     前端（Vue 3 + TypeScript + Vite + MSW mock）
+├─ build/                        發佈腳本、WebView2 Fixed Version 設定
+├─ docs/                         架構、ADR、約束預設值、發佈流程、使用者說明
+└─ api-contract.yaml
 ```
 
 ## 兩條硬性規則
 
 1. **`Scheduler.Domain` 與 `Scheduler.Application` 不得引用 OR-Tools。**
-   求解器相依只存在於 `Scheduler.Solver`，由介面隔離，保留日後替換引擎的可能。
-   違反時編譯仍會成功，由 `tests/Scheduler.ArchitectureTests` 擋下。
+   求解器相依只存在於 `Scheduler.Solver`，由介面隔離。
+2. **`Scheduler.Api` 是唯一一份 HTTP 實作，`Scheduler.Shell` 只是它的 host。**
+   遷移到前後端分離時，刪掉 `Scheduler.Shell` 即可。
 
-2. **`Scheduler.Api` 與 `Scheduler.Shell` 共用同一組 handler，不得各自實作業務邏輯。**
-   兩者都只做 transport ↔ `Scheduler.Application` 的轉換。
-   這是「無痛遷移到前後端分離」的技術基礎——遷移時刪掉 `Scheduler.Shell` 即可。
+違反時編譯仍會成功，由 `tests/Scheduler.ArchitectureTests` 擋下。細節見 [`CLAUDE.md`](CLAUDE.md)。
 
 ## 開發
 
-需求：.NET SDK 8、Node.js ≥ 20.19。
+需求：.NET SDK 8、Node.js 20.19 以上。
 
 ```bash
-# 後端（:5080）
-dotnet run --project src/Scheduler.Api
+dotnet build                              # 建置全部
+dotnet test                               # 全部測試
+dotnet run --project src/Scheduler.Api    # 後端 :5080
 
-# 前端（:5173，/api 自動 proxy 到 :5080）
-cd frontend && npm install && npm run dev
+cd frontend
+npm install
+npm run dev                               # :5173，/api proxy 到 :5080
+npm run dev:mock                          # :5173，/api 由 MSW 攔截，不需要後端
 ```
 
-不想跑後端時，前端可獨立以 MSW mock 開發：`cd frontend && npm run dev:mock`。
-
-```bash
-dotnet build          # 建置全部
-dotnet test           # 跑架構規則驗證
-```
+其餘指令（型別生成、煙霧測試等）見 [`CLAUDE.md`](CLAUDE.md) 的「指令」。
 
 ## 分支模型
 
 採 git-flow。**預設分支是 `develop`**，`main` 只接受 release / hotfix 合併。
-
-```
-main                只接受 release / hotfix，每個 commit 都是一次交付，tag 打在這裡
-└─ develop          整合分支（GitHub 預設分支）
-   ├─ feature/<slug>        從 develop 開，PR 合回 develop
-   └─ release/<version>     從 develop 開，合回 main + develop
-main
-└─ hotfix/<version>         從 main 開，合回 main + develop
-```
-
-不要直接 commit 到 `main` 或 `develop`，一律走 PR。
-`gh pr create` 會自動以 `develop` 為 base。
+不要直接 commit 到 `main` 或 `develop`，一律走 PR；`gh pr create` 會自動以 `develop` 為 base。
+分支種類、來源與合併目標見 [`CLAUDE.md`](CLAUDE.md) 的「分支模型」。
 
 ## 發佈
 
 ```powershell
-pwsh build/fetch-webview2.ps1   # 一次性：準備 WebView2 Fixed Version runtime
-pwsh build/publish.ps1          # 產出 publish/DoctorScheduler-v<版本>/
+pwsh build/fetch-webview2.ps1                          # 一次性：準備 WebView2 Fixed Version runtime
+pwsh build/publish.ps1 -Zip -RosterFile <名冊.csv>     # 產出 publish/DoctorScheduler-v<版本>/ 與 zip
 ```
 
-`fetch-webview2.ps1` 需要手動下載一次 `.cab`（Microsoft 未提供穩定的直接下載網址），
-腳本會告訴你去哪裡抓、要抓哪個版本。版本釘選在 `build/webview2.json`。
-
-**交付前必須跑過 [`docs/ARCHITECTURE.md` §8 的驗收清單](docs/ARCHITECTURE.md#8-架構驗收檢查清單)**，
-其中最優先的是在一台**沒有 .NET、沒有 WebView2、沒有 VC++ Redist 的乾淨 Windows** 上實測。
-OR-Tools 的 native library **確實**依賴 `msvcp140` / `vcruntime140`（見 `docs/ARCHITECTURE.md` §9.2），
-`publish.ps1` 會把它們 app-local 放進發佈包並以 `check-native-deps.ps1` 靜態驗證，
-但載入順序與版本相容仍只有乾淨機器驗得出來。
+發佈包的 `使用者說明/` 資料夾由 `build/publish.ps1` 從 [`docs/user-guide/`](docs/user-guide/) 複製進去。
+完整步驟（版本號、名冊檔、驗收、tag）見 [`docs/release-process.md`](docs/release-process.md)，
+交付前必跑的驗收清單見 [`docs/ARCHITECTURE.md` §10](docs/ARCHITECTURE.md#10-架構驗收檢查清單)。
