@@ -408,6 +408,11 @@ function clearJobTimers(jobId: string) {
   jobTimers.delete(jobId)
 }
 
+/** 耗時四捨五入到小數 1 位，比照 SolverJobService 的 Math.Round(..., 1)。 */
+function elapsedSecOf(nowMs: number, sinceMs: number): number {
+  return Math.round((nowMs - sinceMs) / 100) / 10
+}
+
 function isTerminal(status: SolverJobState['status']): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'cancelled'
 }
@@ -478,18 +483,24 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
       lastBound = bestBound
       job.status = 'running'
       const nowMs = Date.now()
-      job.elapsedSec = (nowMs - (job.runningStartedAtMs ?? nowMs)) / 1000
+      job.elapsedSec = elapsedSecOf(nowMs, job.runningStartedAtMs ?? nowMs)
       job.progress = {
         jobId,
         status: 'running',
         variantIndex: i,
         variantCount,
-        elapsedSec: (nowMs - variantStartMs) / 1000,
+        elapsedSec: elapsedSecOf(nowMs, variantStartMs),
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: i + 1,
         bestObjective,
         bestBound,
         gap: gapOf(bestObjective, bestBound),
+      }
+      job.lastCompleted = {
+        variantIndex: i,
+        solutionCount: i + 1,
+        bestObjective,
+        bestBound,
       }
       if (i < variantCount) variantStartMs = nowMs // 下一份從這刻起算；最後一份留著給終態用
     }, i * 2000)
@@ -504,13 +515,13 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
       store.variants.set(jobId, variants)
       job.status = 'succeeded'
       const nowMs = Date.now()
-      job.elapsedSec = (nowMs - (job.runningStartedAtMs ?? nowMs)) / 1000
+      job.elapsedSec = elapsedSecOf(nowMs, job.runningStartedAtMs ?? nowMs)
       job.progress = {
         jobId,
         status: 'succeeded',
         variantIndex: variantCount,
         variantCount,
-        elapsedSec: (nowMs - variantStartMs) / 1000,
+        elapsedSec: elapsedSecOf(nowMs, variantStartMs),
         timeLimitSec: timeLimitSecPerVariant,
         solutionCount: variantCount,
         bestObjective: lastObjective,
@@ -530,11 +541,29 @@ export function scheduleSolverJob(jobId: string, ym: string, variantCount: numbe
 export function cancelSolverJob(job: SolverJobState) {
   if (job.status !== 'queued' && job.status !== 'running') return
   clearJobTimers(job.jobId)
-  job.elapsedSec = job.runningStartedAtMs === undefined ? 0 : (Date.now() - job.runningStartedAtMs) / 1000
+  job.elapsedSec = job.runningStartedAtMs === undefined ? 0 : elapsedSecOf(Date.now(), job.runningStartedAtMs)
   job.status = 'cancelled'
   // job.progress 是巢狀物件，頂層 status 改了它也要跟著改，否則回應裡外層
   // status: 'cancelled' 但 progress.status 還留著 'running'，前端與 SSE 讀到的不一致。
-  job.progress = { ...job.progress, status: 'cancelled' }
+  // 真後端中止後的終態紀錄是「最後一份完成的那份」（LastVariantIndex 等）；一份都沒完成則是 0／null。
+  const done = job.lastCompleted
+  job.progress = {
+    ...job.progress,
+    status: 'cancelled',
+    variantIndex: done?.variantIndex ?? 0,
+    solutionCount: done?.solutionCount ?? 0,
+    bestObjective: done?.bestObjective ?? null,
+    bestBound: done?.bestBound ?? null,
+    gap: done ? gapOf(done.bestObjective, done.bestBound) : null,
+  }
+}
+
+/**
+ * stream 的一筆事件內容。一開始訂閱時工作就已結束，真後端送 TerminalSnapshot（總耗時）；
+ * 訂閱中途才轉終態，最後一筆是 live.Publish 的快照（本份耗時）。前端依此累加耗時，不能混用。
+ */
+export function streamPayload(job: SolverJobState, firstPush: boolean): SolverProgress {
+  return firstPush && isTerminal(job.status) ? progressOf(job) : job.progress
 }
 
 const solverHandlers = [
@@ -601,6 +630,7 @@ const solverHandlers = [
     const jobId = params.jobId as string
     const encoder = new TextEncoder()
     let stopped = false
+    let firstPush = true
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -612,7 +642,8 @@ const solverHandlers = [
             stopped = true
             return
           }
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(progressOf(job))}\n\n`))
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamPayload(job, firstPush))}\n\n`))
+          firstPush = false
           if (isTerminal(job.status)) {
             controller.close()
             stopped = true

@@ -46,6 +46,8 @@ export interface SolverJobState {
   startedAtMs: number
   /** 轉 running 的那一刻（真後端 StartedAt）；job.elapsedSec 從這裡起算，不含 queued。 */
   runningStartedAtMs?: number
+  /** 最後一份完成的變體快照（中止時的終態紀錄用，對應真後端 LastVariantIndex 等）。 */
+  lastCompleted?: { variantIndex: number; solutionCount: number; bestObjective: number; bestBound: number }
 }
 
 export interface MockStore {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeVariantMetrics, dutyKey } from './domain'
-import { cancelSolverJob, scheduleSolverJob, toSolverJobResponse } from './handlers'
+import { cancelSolverJob, scheduleSolverJob, streamPayload, toSolverJobResponse } from './handlers'
 import { resetStore, store, type SolverJobState } from './store'
 
 beforeEach(() => resetStore())
@@ -201,5 +201,36 @@ describe('scheduleSolverJob progress.elapsedSec', () => {
     expect(res.status).toBe('cancelled')
     expect(res.elapsedSec).toBeCloseTo(4.2, 2)
     expect(res.progress?.elapsedSec).toBeCloseTo(4.2, 2)
+  })
+
+  it('stream：一開始訂閱就已結束送總耗時；中途轉終態最後一筆送本份耗時', () => {
+    const job = startJob()
+    vi.advanceTimersByTime(6500)
+    expect(job.status).toBe('succeeded')
+    // 中途訂閱者看到的最後一筆（非第一筆）是 live 快照：本份耗時
+    expect(streamPayload(job, false).elapsedSec).toBeCloseTo(2.5, 2)
+    // 一開始就已結束：TerminalSnapshot，總耗時
+    expect(streamPayload(job, true).elapsedSec).toBeCloseTo(6.2, 2)
+  })
+
+  it('中止：variantIndex 與搜尋統計是最後一份完成的那份；沒有完成份時是 0／null', () => {
+    const early = startJob()
+    vi.advanceTimersByTime(1000)
+    cancelSolverJob(early)
+    expect(early.progress).toMatchObject({
+      status: 'cancelled',
+      variantIndex: 0,
+      solutionCount: 0,
+      bestObjective: null,
+      bestBound: null,
+      gap: null,
+    })
+
+    store.solverJobs.clear()
+    const late = startJob()
+    vi.advanceTimersByTime(4500) // 第 2 份在 t=4000 完成
+    cancelSolverJob(late)
+    expect(late.progress).toMatchObject({ status: 'cancelled', variantIndex: 2, solutionCount: 3 })
+    expect(late.progress.bestObjective).toBe(90)
   })
 })
