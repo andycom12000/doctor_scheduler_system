@@ -31,18 +31,35 @@ internal static class ShellSafety
         return line.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
     }
 
-    /// <summary>記一筆。絕不丟例外：記錄本身失敗（唯讀、磁碟滿）就只剩 Trace。</summary>
-    public static void Report(string source, Exception ex)
+    /// <summary>紀錄檔上限；超過就輪替成 <c>.1</c>（只留一份舊檔）。測試可調小。</summary>
+    public static long MaxLogBytes { get; set; } = 1024 * 1024;
+
+    /// <summary>視窗關閉中：COM 與已 dispose 的物件丟例外是預期的，不寫紀錄免得關閉時一堆雜訊。</summary>
+    public static volatile bool Closing;
+
+    private static readonly object LogLock = new();
+
+    /// <summary>
+    /// 記一筆。絕不丟例外：記錄本身失敗（唯讀、磁碟滿）就只剩 Trace。
+    /// <paramref name="toFile"/> 為 false 時只寫 Trace（次要的連帶失敗，避免一次中止寫好幾行）。
+    /// </summary>
+    public static void Report(string source, Exception ex, bool toFile = true)
     {
         try
         {
+            if (Closing) return;
             var line = FormatLine(DateTimeOffset.UtcNow, source, ex);
             System.Diagnostics.Trace.TraceWarning(line);
             var path = LogPath;
-            if (path is null) return;
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+            if (path is null || !toFile) return;
+            lock (LogLock)
+            {
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                var info = new FileInfo(path);
+                if (info.Exists && info.Length > MaxLogBytes) File.Move(path, path + ".1", overwrite: true);
+                File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+            }
         }
         catch
         {
@@ -51,7 +68,7 @@ internal static class ShellSafety
     }
 
     /// <summary>執行動作，吞掉例外並記錄；成功回 true。</summary>
-    public static bool Try(Action action, string source)
+    public static bool Try(Action action, string source, bool toFile = true)
     {
         try
         {
@@ -60,7 +77,7 @@ internal static class ShellSafety
         }
         catch (Exception ex)
         {
-            Report(source, ex);
+            Report(source, ex, toFile);
             return false;
         }
     }

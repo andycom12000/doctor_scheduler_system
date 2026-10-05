@@ -18,7 +18,7 @@ namespace Scheduler.Shell;
 public partial class MainWindow : Window
 {
     private static readonly string BaseDirectory = AppContext.BaseDirectory;
-    internal static readonly string DataDirectory = Path.Combine(BaseDirectory, "data");
+    private static readonly string DataDirectory = Path.Combine(BaseDirectory, "data");
     private static readonly string WwwRoot = Path.Combine(BaseDirectory, "wwwroot");
     private static readonly string BundledRuntime = Path.Combine(BaseDirectory, "webview2");
 
@@ -90,6 +90,8 @@ public partial class MainWindow : Window
             core.Settings.AreDevToolsEnabled = false;
 #endif
             WebView.Source = WebViewBridge.IndexUri;
+            // 之後的 Dispatcher 未處理例外才可以「記錄並繼續」；這之前沒有可用的畫面，App 會告知後結束
+            App.StartupCompleted = true;
         }
         catch (Exception ex)
         {
@@ -149,9 +151,11 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            // 請求被前端中止或視窗關閉中時，連設定 500 回應也可能丟；失敗就放棄
-            if (ex is not OperationCanceledException) ShellSafety.Report("WebResourceRequested", ex);
-            ShellSafety.Try(() => e.Response = Text(core, HttpStatusCode.InternalServerError, "Shell Error", ex.Message), "WebResourceRequested.Response");
+            // 視窗關閉中的取消／dispose 不記；其餘（含 HttpClient 逾時、Api 內部丟的 OCE）都要記。
+            // ObjectDisposedException 只會發生在 _shutdown 已 dispose 之後，也就是關閉中。
+            if (!_shutdown.IsCancellationRequested && ex is not ObjectDisposedException) ShellSafety.Report("WebResourceRequested", ex);
+            // 請求被前端中止時，連設定 500 回應也可能丟；失敗就放棄，只留 Trace 不再寫檔
+            ShellSafety.Try(() => e.Response = Text(core, HttpStatusCode.InternalServerError, "Shell Error", ex.Message), "WebResourceRequested.Response", toFile: false);
         }
         finally
         {
@@ -287,6 +291,8 @@ public partial class MainWindow : Window
     /// </summary>
     private async void OnClosed(object? sender, EventArgs e)
     {
+        // 先於 Cancel／Dispose 設定：之後各路徑丟的取消與 ObjectDisposed 都是預期的，不記錄
+        ShellSafety.Closing = true;
         // async void：關閉中每一步都可能丟（Cancel 的回呼、Dispose），不能外洩
         await ShellSafety.TryAsync(async () =>
         {

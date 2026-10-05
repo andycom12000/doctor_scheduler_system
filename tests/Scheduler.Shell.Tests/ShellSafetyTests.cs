@@ -86,6 +86,48 @@ public class ShellSafetyTests : IDisposable
     }
 
     [Fact]
+    public void Report_超過上限輪替成_1且只留一份舊檔()
+    {
+        var path = Path.Combine(_dir, ShellSafety.LogFileName);
+        ShellSafety.LogPath = path;
+        ShellSafety.MaxLogBytes = 200;
+        try
+        {
+            for (var i = 0; i < 20; i++) ShellSafety.Report("Rot", new InvalidOperationException("x" + i));
+        }
+        finally
+        {
+            ShellSafety.MaxLogBytes = 1024 * 1024;
+        }
+
+        Assert.True(File.Exists(path + ".1"));
+        Assert.False(File.Exists(path + ".2"));
+        Assert.True(new FileInfo(path).Length < 200 + 300);
+        Assert.Contains("x19", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void Report_toFile為false或關閉中不寫檔()
+    {
+        ShellSafety.LogPath = Path.Combine(_dir, ShellSafety.LogFileName);
+        ShellSafety.Report("T", new InvalidOperationException("x"), toFile: false);
+        Assert.False(File.Exists(ShellSafety.LogPath));
+
+        ShellSafety.Closing = true;
+        try { ShellSafety.Report("T", new InvalidOperationException("x")); }
+        finally { ShellSafety.Closing = false; }
+        Assert.False(File.Exists(ShellSafety.LogPath));
+    }
+
+    [Fact]
+    public void Report_多執行緒同時寫不遺失行()
+    {
+        ShellSafety.LogPath = Path.Combine(_dir, ShellSafety.LogFileName);
+        Parallel.For(0, 50, i => ShellSafety.Report("P", new InvalidOperationException("n" + i)));
+        Assert.Equal(50, File.ReadAllLines(ShellSafety.LogPath).Length);
+    }
+
+    [Fact]
     public void Report_未設路徑時不丟例外()
     {
         ShellSafety.LogPath = null;
