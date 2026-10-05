@@ -5,7 +5,6 @@
 import { ApiError } from '@/api/client'
 import type {
   AreaType,
-  ErrorCode,
   PointBoardGroup,
   PointBoardRow,
   Rank,
@@ -80,8 +79,46 @@ export function sortByRankGroup(staff: Staff[], ranks: Rank[], groups: RankGroup
     const rankDiff = orderOf(rankOrder, a.rankCode) - orderOf(rankOrder, b.rankCode)
     if (rankDiff !== 0) return rankDiff
 
-    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    return compareName(a.name, b.name)
   })
+}
+
+/** 姓名排序走繁中語系（注音序），不用 UTF-16 碼位——後者對中文是無意義的順序。 */
+export function compareName(a: string, b: string): number {
+  return a.localeCompare(b, 'zh-Hant')
+}
+
+/** 右側表單的可編輯欄位。 */
+export interface StaffDraft {
+  employeeNo: string
+  name: string
+  rankCode: string
+}
+
+/**
+ * 表單與開啟當下的基準值不同就算有未儲存的變更。姓名與員編比對時去掉前後空白
+ * （儲存時本來就會 trim，只差空白不算改過）；`baseline` 為 `null`（沒開表單）一律不算。
+ */
+export function isDraftDirty(draft: StaffDraft, baseline: StaffDraft | null): boolean {
+  if (!baseline) return false
+  return (
+    draft.employeeNo.trim() !== baseline.employeeNo.trim() ||
+    draft.name.trim() !== baseline.name.trim() ||
+    draft.rankCode !== baseline.rankCode
+  )
+}
+
+/**
+ * 身分設定載入失敗（或還是空的）時，新增人員無從選身分、儲存鈕會恆灰；回一句說明給表單顯示，
+ * 讓使用者知道是這個原因而不是自己漏填。載入中、或身分清單有東西時回 `null`。
+ */
+export function ranksUnavailableMessage(
+  state: { loading: boolean; error: unknown; rankCount: number },
+  describe: (err: unknown) => string,
+): string | null {
+  if (state.error) return `身分清單載入失敗，暫時無法儲存：${describe(state.error)}`
+  if (!state.loading && state.rankCount === 0) return '身分清單是空的，暫時無法儲存。'
+  return null
 }
 
 /** 篩選 + 排序一次做完，`index.vue` 的清單只需要呼叫這個。 */
@@ -140,26 +177,4 @@ export interface AreaTypeChip {
  */
 export function areaTypeChips(areaTypes: AreaType[], eligible: string[]): AreaTypeChip[] {
   return areaTypes.map((type) => ({ code: type.code, name: type.name, eligible: eligible.includes(type.code) }))
-}
-
-/**
- * `ApiError` → 契約 `ErrorCode`。`src/api/errors.ts` 有一份一模一樣的邏輯但沒有 export，
- * 這裡自己留一份（不能改 `src/api/`），只給 `EMPLOYEE_NO_TAKEN`／`STAFF_HAS_DUTIES` 兩個
- * 分支判斷用，一般訊息仍交給 `describeError`。
- */
-export function errorCodeOf(err: unknown): ErrorCode | null {
-  if (!(err instanceof ApiError)) return null
-  const body = err.body
-  if (
-    body &&
-    typeof body === 'object' &&
-    'error' in body &&
-    body.error &&
-    typeof body.error === 'object' &&
-    'code' in body.error &&
-    typeof body.error.code === 'string'
-  ) {
-    return body.error.code as ErrorCode
-  }
-  return null
 }

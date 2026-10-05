@@ -34,6 +34,7 @@ import {
   chiefAvailabilityByDate,
   dateCountMap,
   evaluateWardSqueezeHint,
+  requiredPerDayOfType,
   extractBusyJobId,
   overCapEntries,
   totalRegisteredCount,
@@ -95,6 +96,7 @@ const chiefCode = computed(() =>
     areaTypes: areaSettings.value?.areaTypes ?? [],
   }),
 )
+const chiefRequiredPerDay = computed(() => requiredPerDayOfType(areaSettings.value?.areas ?? [], chiefCode.value))
 const monthlyCap = computed(() => registration.value?.monthlyCap ?? 16)
 const staffNameById = computed(() => new Map(staff.value.map((s) => [s.id, s.name])))
 
@@ -287,6 +289,7 @@ async function onSolve(): Promise<void> {
         :days="days"
         :footer-counts="footerCounts"
         :chief-availability="chiefAvailability"
+        :chief-required-per-day="chiefRequiredPerDay"
         :monthly-cap="monthlyCap"
         @paint="paintCell"
         @stroke-end="onStrokeEnd"

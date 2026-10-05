@@ -13,18 +13,20 @@ import { useYearMonth } from '@/composables/useYearMonth'
 import { createStaff, deleteStaff, listStaff, setStaffStatus, updateStaff } from '@/api/staff'
 import { getAreaSettings, getRankSettings } from '@/api/settings'
 import { getPointBoard } from '@/api/views'
-import { describeError } from '@/api/errors'
+import { describeError, errorCodeOf } from '@/api/errors'
 import type { Staff, StaffStatus, StaffWrite } from '@/api/types'
 import {
   areaTypeChips,
   areaTypeNames,
   describeQuotaLoad,
-  errorCodeOf,
   findPointBoardRow,
   groupCodeOfRank,
   groupNameOf,
+  isDraftDirty,
   isNotFoundError,
   rankNameOf,
+  ranksUnavailableMessage,
+  type StaffDraft,
   staffCountsLabel,
   type GroupFilter,
   type StatusFilter,
@@ -42,7 +44,7 @@ const pointBoardKey = computed(() => `schedules/${ym.value}/point-board`)
 const staffResource = useResource(staffKey, () => listStaff())
 const ranksResource = useResource(ranksKey, () => getRankSettings())
 const areasResource = useResource(areasKey, () => getAreaSettings())
-const pointBoardResource = useResource(pointBoardKey, () => getPointBoard(ym.value))
+const pointBoardResource = useResource(pointBoardKey, (signal) => getPointBoard(ym.value, signal))
 
 const ranks = computed(() => ranksResource.data.value?.ranks ?? [])
 const groups = computed(() => ranksResource.data.value?.groups ?? [])
@@ -65,11 +67,7 @@ const filteredStaff = computed(() =>
 
 // --- 右側表單：draft 是獨立於快取的編輯狀態，不直接綁定 Staff。 ---
 
-interface Draft {
-  employeeNo: string
-  name: string
-  rankCode: string
-}
+type Draft = StaffDraft
 
 function blankDraft(): Draft {
   return { employeeNo: '', name: '', rankCode: ranks.value[0]?.code ?? '' }
@@ -113,23 +111,56 @@ const quotaLoadText = computed(() => {
   return describeQuotaLoad(findPointBoardRow(groups, selectedStaff.value.id), ym.value) ?? '—'
 })
 
-function startCreate(): void {
+// 表單開啟（或儲存成功）當下的值，用來判斷有沒有未儲存的變更；表單沒開時為 null。
+const baseline = ref<Draft | null>(null)
+const dirty = computed(() => isDraftDirty(draft, baseline.value))
+
+/** 載入草稿並記下基準值；`mode` 由呼叫端先設好。 */
+function loadDraft(next: Draft): void {
+  Object.assign(draft, next)
+  baseline.value = { ...next }
+}
+
+// 切換選列／按新增會丟掉表單上的修改，有改過才問一次（useConfirm，與刪除同一個對話框）。
+async function confirmDiscardIfDirty(): Promise<boolean> {
+  if (!dirty.value) return true
+  return useConfirm().confirm({
+    title: '放棄未儲存的變更',
+    message: '表單上有尚未儲存的修改，切換後會遺失，確定要放棄嗎？',
+    confirmText: '放棄變更',
+    cancelText: '繼續編輯',
+  })
+}
+
+async function startCreate(): Promise<void> {
+  if (!(await confirmDiscardIfDirty())) return
   selectedId.value = null
   mode.value = 'create'
-  Object.assign(draft, blankDraft())
+  loadDraft(blankDraft())
   clearMessages()
 }
 
-function selectStaff(staff: Staff): void {
+async function selectStaff(staff: Staff): Promise<void> {
+  // 點的是已經開著的那一列：沒有東西會被丟掉，不要吵使用者。
+  if (mode.value === 'edit' && selectedId.value === staff.id) return
+  if (!(await confirmDiscardIfDirty())) return
   selectedId.value = staff.id
   mode.value = 'edit'
-  Object.assign(draft, {
+  loadDraft({
     employeeNo: staff.employeeNo,
     name: staff.name,
     rankCode: staff.rankCode,
   })
   clearMessages()
 }
+
+// 身分設定載入失敗時，新增人員的身分下拉是空的、儲存鈕恆灰——明說原因，不讓使用者猜。
+const ranksProblem = computed(() =>
+  ranksUnavailableMessage(
+    { loading: ranksResource.loading.value, error: ranksResource.error.value, rankCount: ranks.value.length },
+    describeError,
+  ),
+)
 
 function clearMessages(): void {
   employeeNoError.value = null
@@ -164,7 +195,7 @@ async function save(): Promise<void> {
     await invalidate('staff')
     selectedId.value = result.id
     mode.value = 'edit'
-    Object.assign(draft, {
+    loadDraft({
       employeeNo: result.employeeNo,
       name: result.name,
       rankCode: result.rankCode,
@@ -215,6 +246,7 @@ async function remove(): Promise<void> {
     selectedId.value = null
     mode.value = 'idle'
     Object.assign(draft, blankDraft())
+    baseline.value = null
   } catch (err) {
     if (errorCodeOf(err) === 'STAFF_HAS_DUTIES') {
       deleteNote.value = describeError(err)
@@ -246,7 +278,7 @@ async function remove(): Promise<void> {
             <input v-model="search" class="input" type="search" placeholder="搜尋姓名或員編" />
           </label>
 
-          <div class="seg" role="group" aria-label="身分組篩選">
+          <div class="seg" role="radiogroup" aria-label="身分組篩選">
             <label class="seg-opt">
               <input v-model="groupFilter" type="radio" name="group-filter" value="all" />全部
             </label>
@@ -255,7 +287,7 @@ async function remove(): Promise<void> {
             </label>
           </div>
 
-          <div class="seg" role="group" aria-label="狀態篩選">
+          <div class="seg" role="radiogroup" aria-label="狀態篩選">
             <label class="seg-opt">
               <input v-model="statusFilter" type="radio" name="status-filter" value="active" />在職
             </label>
@@ -322,6 +354,10 @@ async function remove(): Promise<void> {
           </div>
 
           <p v-if="formError" class="staff-form__error">{{ formError }}</p>
+          <p v-if="ranksProblem" class="staff-form__error" role="alert">
+            {{ ranksProblem }}
+            <button type="button" class="staff-form__retry" @click="ranksResource.reload()">重新載入</button>
+          </p>
 
           <div class="staff-form__row">
             <label class="field">
@@ -702,6 +738,17 @@ async function remove(): Promise<void> {
   gap: var(--space-2);
 }
 
+.staff-form__retry {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: var(--space-1);
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .btn-block {
   width: 100%;
 }
@@ -753,6 +800,12 @@ async function remove(): Promise<void> {
   position: absolute;
   opacity: 0;
   pointer-events: none;
+}
+
+/* 原生 radio 視覺上藏起來（opacity 0），鍵盤焦點要畫在整顆選項上，否則 Tab 進來看不到在哪。 */
+.seg-opt:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .seg-opt:has(input:checked) {

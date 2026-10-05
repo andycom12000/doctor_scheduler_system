@@ -35,6 +35,11 @@ export function describeError(err: unknown): string {
   return '發生未預期的錯誤，請稍後再試。'
 }
 
+/** `ApiError` → 契約 `ErrorCode`；非 `ApiError` 或 body 形狀不對回 `null`。畫面要依錯誤碼分支時用這個。 */
+export function errorCodeOf(err: unknown): ErrorCode | null {
+  return err instanceof ApiError ? extractErrorCode(err.body) : null
+}
+
 function extractErrorCode(body: unknown): ErrorCode | null {
   if (
     body &&

@@ -28,7 +28,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; assigned: [] }>()
 
 const key = computed(() => `schedules/${props.ym}/candidates/${props.areaId}/${props.date}`)
-const { data, loading, error } = useResource(key, () => listCandidates(props.ym, props.areaId, props.date))
+const { data, loading, error } = useResource(key, (signal) => listCandidates(props.ym, props.areaId, props.date, signal))
 
 const submitting = ref(false)
 const submitError = ref<string | null>(null)

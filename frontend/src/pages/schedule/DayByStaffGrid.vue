@@ -93,6 +93,8 @@ function cellClass(staffId: string, date: string, isHoliday: boolean): Record<st
   const isBlocked = props.blockedSet.has(`${staffId}|${date}`)
   const kind = cellKindOf({ hasDuty: Boolean(areaId), isHoliday, renderKind: render, isBlocked })
   return {
+    // 只有有班的格子點了會開候選人面板（cellClick），才給可點的游標。
+    'dp-grid__cell--clickable': Boolean(areaId),
     'dp-grid__cell--duty': kind === 'duty' || kind === 'duty-holiday',
     'dp-grid__cell--duty-holiday': kind === 'duty-holiday',
     'dp-grid__cell--holiday': kind === 'holiday',
@@ -252,6 +254,9 @@ function cellClick(staffId: string, date: string): void {
 }
 
 .dp-grid {
+  /* 身分組群組列的固定高度：群組列自己、表頭列的 sticky `top`、日期角落格的 `top` 都吃這一個值，
+     改高度時不會讓表頭蓋住或漏出群組列（原本散落三處的 20px 魔術數）。 */
+  --dp-group-row-h: 20px;
   display: grid;
   align-content: start;
   /* 不設 overflow／max-height：整月一次放完，不再內捲（issue #53）。sticky 表頭改吃外層
@@ -281,7 +286,7 @@ function cellClick(staffId: string, date: string): void {
 }
 
 .dp-grid__corner--label {
-  top: 20px;
+  top: var(--dp-group-row-h);
   font: 600 10px var(--font-heading);
   display: flex;
   align-items: center;
@@ -298,7 +303,11 @@ function cellClick(staffId: string, date: string): void {
   font: 600 10px var(--font-heading);
   letter-spacing: 0.06em;
   text-align: center;
-  padding: 4px 0;
+  box-sizing: border-box;
+  height: var(--dp-group-row-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dp-grid__group--extra {
@@ -308,7 +317,7 @@ function cellClick(staffId: string, date: string): void {
 
 .dp-grid__head {
   position: sticky;
-  top: 20px;
+  top: var(--dp-group-row-h);
   z-index: 1;
   background: var(--color-bg);
   height: 86px;
@@ -364,13 +373,18 @@ function cellClick(staffId: string, date: string): void {
   border-top: none;
   border-left: none;
   background: transparent;
-  cursor: pointer;
+  /* 空格點了沒有反應（日 × 人只有有班的格子能開候選人面板），不給可點的游標。 */
+  cursor: default;
   font: 600 9px ui-monospace, Menlo, monospace;
   color: var(--color-accent-900);
   /* 同日兩區（X1）顯示「A、B」可能比格子寬，截斷不撐破（完整內容在 title） */
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.dp-grid__cell--clickable {
+  cursor: pointer;
 }
 
 .dp-grid__cell:hover {
@@ -544,6 +558,7 @@ function cellClick(staffId: string, date: string): void {
   }
 
   .dp-grid__group {
+    height: auto;
     padding: 1px 0;
     background: #fff;
     font-size: 9px;

@@ -10,7 +10,7 @@
  */
 import { computed } from 'vue'
 import type { CalendarDay } from '@/api/types'
-import type { BlockedDayGroupView } from './logic'
+import { isChiefAvailabilityTight, type BlockedDayGroupView } from './logic'
 import { usePointerPaint } from '@/composables/usePointerPaint'
 
 const props = defineProps<{
@@ -18,6 +18,8 @@ const props = defineProps<{
   days: CalendarDay[]
   footerCounts: Map<string, number>
   chiefAvailability: Map<string, number>
+  /** 總值每日需求人數；底部標紅門檻 = 需求 + 1。 */
+  chiefRequiredPerDay: number
   monthlyCap: number
 }>()
 
@@ -139,7 +141,7 @@ function onContainerPointerCancel(event: PointerEvent): void {
         v-for="day in days"
         :key="`chief-${day.date}`"
         class="cell cell--foot"
-        :class="{ 'cell--foot-tight': (chiefAvailability.get(day.date) ?? 0) <= 2 }"
+        :class="{ 'cell--foot-tight': isChiefAvailabilityTight(chiefAvailability.get(day.date) ?? 0, chiefRequiredPerDay) }"
       >
         {{ chiefAvailability.get(day.date) ?? 0 }}
       </div>

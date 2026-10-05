@@ -29,6 +29,7 @@ import { staffGroupIndex } from './heatmap'
 import { readLastJobId, rememberJobId, resolveJobId } from './jobStorage'
 import ProgressOverlay from './ProgressOverlay.vue'
 import VariantCard from './VariantCard.vue'
+import { createWatchdog, type Watchdog } from './watchdog'
 import {
   acceptPolledSnapshot,
   accumulateElapsed,
@@ -131,7 +132,7 @@ const applyError = ref<string | null>(null)
 const diffSelection = ref<string[]>([])
 
 let unsubscribe: Unsubscribe | null = null
-let watchdogTimer: ReturnType<typeof setInterval> | null = null
+let watchdog: Watchdog | null = null
 
 function teardownSubscription(): void {
   unsubscribe?.()
@@ -140,39 +141,30 @@ function teardownSubscription(): void {
 }
 
 function stopWatchdog(): void {
-  if (watchdogTimer === null) return
-  clearInterval(watchdogTimer)
-  watchdogTimer = null
+  watchdog?.stop()
+  watchdog = null
 }
 
 /**
  * 覆蓋層可見時的補班：正式版 WebView2 host message 沒有「補送」機制，
  * `GET /solver-jobs/{id}` 回 running 與 `subscribe` 之間工作剛好結束的話，
  * 覆蓋層會停在最後一筆進度，靠 5 秒一次的輪詢把它撈回終態（issue #46）。
- *
- * **看門狗只補終態**，非終態的數字（`variantIndex`／`solutionCount`／`gap` 這些會跳動的
- * 進度）一律交給 SSE——輪詢是每 5 秒一支獨立的請求，跟 SSE 事件流沒有先後保證，
- * 拿較舊的輪詢回應覆蓋較新的 SSE 進度會讓畫面數字往回跳。
+ * 啟停與「只補終態、終態是單向門」的守衛都在 `watchdog.ts`（可測的小工廠）。
  */
-async function pollJobOnce(id: string, targetYm: string): Promise<void> {
-  try {
-    const result = await getSolverJob(id)
-    if (ym.value !== targetYm || jobId.value !== id || !job.value) return
-    if (!isTerminalStatus(result.status)) return // 非終態不採用，交給 SSE
-    // 終態是單向門：目前已經是終態就不重複刷新——可能是 SSE 或 cancelJob 已經先處理過。
-    if (!acceptPolledSnapshot(job.value.status)) return
-    job.value = result
-    elapsedAcc.value = null // result.elapsedSec 已是權威終值，往後改看它，不再看累加器
-    teardownSubscription()
-    await loadVariants(id, targetYm)
-  } catch {
-    // 看門狗容忍暫時性錯誤，等下一次 tick 再試，不覆蓋目前顯示的畫面。
-  }
-}
-
 function startWatchdog(id: string, targetYm: string): void {
   stopWatchdog()
-  watchdogTimer = setInterval(() => void pollJobOnce(id, targetYm), 5000)
+  watchdog = createWatchdog({
+    fetchSnapshot: () => getSolverJob(id),
+    isCurrent: () => ym.value === targetYm && jobId.value === id && job.value !== null,
+    currentStatus: () => job.value?.status ?? null,
+    onTerminal: async (result) => {
+      job.value = result
+      elapsedAcc.value = null // result.elapsedSec 已是權威終值，往後改看它，不再看累加器
+      teardownSubscription()
+      await loadVariants(id, targetYm)
+    },
+  })
+  watchdog.start()
 }
 
 function clearQueryJob(): void {
