@@ -101,6 +101,21 @@ public class SeedTests
     }
 
     [Fact]
+    public async Task 載入2026年12月的context_跨到次月的2027元旦是國定假日()
+    {
+        await using var db = await SqliteDatabase.CreateAsync();
+        using var scope = db.Scope();
+        var loader = ActivatorUtilities.CreateInstance<Application.Scheduling.SchedulingContextLoader>(scope.ServiceProvider);
+
+        var loaded = await loader.LoadAsync(new Domain.Model.YearMonth(2026, 12));
+
+        var newYear = loaded.Context.Calendar[new DateOnly(2027, 1, 1)];
+        Assert.True(newYear.IsPublicHoliday);
+        Assert.True(newYear.IsHoliday);
+        Assert.Equal("元旦", newYear.HolidayName);
+    }
+
+    [Fact]
     public async Task 清空區域後重啟_不會把其他設定蓋回出廠值()
     {
         await using var db = await SqliteDatabase.CreateAsync();
