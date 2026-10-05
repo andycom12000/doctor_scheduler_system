@@ -357,6 +357,10 @@ public class ScheduleCommandsTests
 
         Assert.Equal(ErrorCode.ScheduleAlreadyPublished, ex.Code);
         Assert.Empty(store.Duties);
+
+        // 已發布的 409 不依賴變體存不存在（求解還沒出解時，job 在、變體還沒有）
+        var noVariant = await Assert.ThrowsAsync<SchedulerException>(() => CommandsOf(store).ApplyVariantAsync(Oct, "job-1", "v-z"));
+        Assert.Equal(ErrorCode.ScheduleAlreadyPublished, noVariant.Code);
     }
 
     [Fact]

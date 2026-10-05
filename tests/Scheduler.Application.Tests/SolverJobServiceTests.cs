@@ -187,6 +187,72 @@ public class SolverJobServiceTests
     }
 
     [Fact]
+    public async Task 看得到終態就能立刻建下一個工作_不需重試()
+    {
+        // 競態守門：終態對外可見（GetAsync）的那一刻 slot 必須已經空出來。
+        // 把終態落盤卡住，製造「終態已算出、落盤未完」的窗口：此時若 GetAsync 已回終態，就必須能建下一個工作
+        var (service, store, _) = Setup();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        // scope 呼叫順序：撈 context(1)、新增紀錄(2)、轉 running(3)、存變體(4)、終態落盤(5)
+        var gated = new GatedScopeFactory(store, entered, release, gateAtCall: 5);
+        service = new SolverJobService(gated, new FakeSolver((r, _) => Task.FromResult(OneDuty(r))), TimeProvider.System);
+
+        var created = await service.CreateAsync(Oct, 1, 1);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        var view = await service.GetAsync(created.Record.JobId);
+        // 新順序下此時一定還沒到終態（終態要等落盤後才與放 slot 一起對外可見）；
+        // 舊順序在這裡已是 succeeded 但 slot 仍佔著，此斷言會失敗
+        Assert.Equal(SolverJobStatus.Running, view.Record.Status);
+        release.Set();
+
+        await WaitForTerminalAsync(service, created.Record.JobId);
+        var next = await service.CreateAsync(Oct, 1, 1);
+        await WaitForTerminalAsync(service, next.Record.JobId);
+    }
+
+    [Fact]
+    public async Task SOLVER_BUSY_在佔到_slot_但還沒登記的空窗也帶_jobId()
+    {
+        var (service, store, _) = Setup();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var gated = new GatedScopeFactory(store, entered, release);
+        service = new SolverJobService(gated, new FakeSolver((r, _) => Task.FromResult(OneDuty(r))), TimeProvider.System);
+
+        // 第一個工作卡在撈資料（slot 已佔、尚未進 _live）
+        var firstTask = Task.Run(() => service.CreateAsync(Oct, 1, 1));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        var ex = await Assert.ThrowsAsync<SchedulerException>(() => service.CreateAsync(Oct, 1, 1));
+        Assert.Equal(ErrorCode.SolverBusy, ex.Code);
+        var busyJobId = Assert.IsType<string>(ex.Details!["jobId"]);
+
+        release.Set();
+        var first = await firstTask;
+        Assert.Equal(first.Record.JobId, busyJobId);
+        await WaitForTerminalAsync(service, first.Record.JobId);
+    }
+
+    /// <summary>第 <paramref name="gateAtCall"/> 次 <see cref="Create"/> 卡住直到放行，其餘直接轉給記憶體 store。</summary>
+    private sealed class GatedScopeFactory(ISolverScopeFactory inner, ManualResetEventSlim entered, ManualResetEventSlim release, int gateAtCall = 1) : ISolverScopeFactory
+    {
+        private int _calls;
+
+        public ISolverScope Create()
+        {
+            if (Interlocked.Increment(ref _calls) == gateAtCall)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+
+            return inner.Create();
+        }
+    }
+
+    [Fact]
     public async Task 中止_已完成的變體留著_之後再中止是冪等的()
     {
         var calls = 0;
