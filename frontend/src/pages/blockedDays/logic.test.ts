@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { computeFeasibility } from '@/mocks/domain'
+import { resetStore, store } from '@/mocks/store'
 import type {
+  Area,
   AreaType,
   BlockedDayMutationResult,
   BlockedDayRegistration,
@@ -21,7 +24,9 @@ import {
   evaluateWardSqueezeHint,
   extractBusyJobId,
   groupCapNote,
+  isChiefAvailabilityTight,
   overCapEntries,
+  requiredPerDayOfType,
   totalRegisteredCount,
   unregisteredEntries,
 } from './logic'
@@ -348,6 +353,68 @@ describe('evaluateWardSqueezeHint', () => {
     const hint = evaluateWardSqueezeHint(bySupply)
     expect(hint?.show).toBe(false)
     expect(hint?.ratio).toBeNull()
+  })
+})
+
+describe('evaluateWardSqueezeHint · 參考名單真實情境（零登記）', () => {
+  // 用 mock 的可行性演算（與真後端同一套巢狀累計），名冊是 34 人參考名單。
+  // 2026-10 沒有任何種子登記，就是 ARCHITECTURE §9.1 的「零登記基準」。
+  it('零登記時邊際供給／需求比不到 1.5，提示會常駐顯示（現行門檻的已知特性）', () => {
+    resetStore()
+    expect(store.blockedDays.get('2026-10') ?? []).toHaveLength(0)
+    const report = computeFeasibility(store, '2026-10')
+    const hint = evaluateWardSqueezeHint(report.bySupply)
+
+    expect(hint).not.toBeNull()
+    // §9.1：低年級供給遠緊於一般病房專屬需求，連零登記都打不平（比值 < 1）。
+    expect(hint?.ratio).toBeLessThan(1.5)
+    expect(hint?.show).toBe(true)
+  })
+
+  it('登記越多比值越低、提示不會因為登記而消失（單調）', () => {
+    resetStore()
+    const baseline = evaluateWardSqueezeHint(computeFeasibility(store, '2026-10').bySupply)
+    const juniors = store.staff.filter((s) => s.status === 'active' && s.eligibleAreaTypes.length === 1)
+    store.blockedDays.set(
+      '2026-10',
+      juniors.flatMap((s) =>
+        ['2026-10-05', '2026-10-06', '2026-10-07'].map((date) => ({ staffId: s.id, date })),
+      ),
+    )
+    const loaded = evaluateWardSqueezeHint(computeFeasibility(store, '2026-10').bySupply)
+    expect(loaded?.ratio).not.toBeNull()
+    expect(loaded!.ratio!).toBeLessThanOrEqual(baseline!.ratio!)
+    expect(loaded?.show).toBe(true)
+    resetStore()
+  })
+})
+
+describe('requiredPerDayOfType / isChiefAvailabilityTight', () => {
+  const areas: Area[] = [
+    { id: 'a', code: 'A', name: 'A', areaTypeCode: 'WARD', requiredPerDay: 1 },
+    { id: 'c', code: 'CHIEF', name: '總值', areaTypeCode: 'CHIEF', requiredPerDay: 1 },
+    { id: 'c2', code: 'CHIEF2', name: '總值二', areaTypeCode: 'CHIEF', requiredPerDay: 1 },
+  ]
+
+  it('同類型底下各區域的需求加總', () => {
+    expect(requiredPerDayOfType(areas, 'CHIEF')).toBe(2)
+    expect(requiredPerDayOfType(areas, 'WARD')).toBe(1)
+  })
+
+  it('設定還沒載入或找不到類型時回 1（出廠值），門檻不會變成 0', () => {
+    expect(requiredPerDayOfType([], 'CHIEF')).toBe(1)
+    expect(requiredPerDayOfType(areas, 'NOPE')).toBe(1)
+    expect(requiredPerDayOfType(areas, null)).toBe(1)
+  })
+
+  it('標紅門檻 = 需求 + 1；需求 1 時等同舊的 ≤ 2', () => {
+    expect(isChiefAvailabilityTight(2, 1)).toBe(true)
+    expect(isChiefAvailabilityTight(3, 1)).toBe(false)
+  })
+
+  it('需求變 2 人時，剩 3 人就標紅（寫死的 2 會漏掉）', () => {
+    expect(isChiefAvailabilityTight(3, 2)).toBe(true)
+    expect(isChiefAvailabilityTight(4, 2)).toBe(false)
   })
 })
 

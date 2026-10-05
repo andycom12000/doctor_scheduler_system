@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './client'
-import { describeError } from './errors'
+import { describeError, errorCodeOf } from './errors'
 import type { ErrorCode } from './types'
 
 /** 契約 `ErrorCode` 列舉的 13 個值（api-contract.yaml components.schemas.ErrorCode）。 */
@@ -23,6 +23,22 @@ const ALL_ERROR_CODES: ErrorCode[] = [
 function apiErrorOf(code: ErrorCode): ApiError {
   return new ApiError(422, { error: { code, message: 'mock', details: null } }, 'mock')
 }
+
+describe('errorCodeOf', () => {
+  it('讀出 ApiError body 裡的 error.code', () => {
+    const err = new ApiError(409, { error: { code: 'EMPLOYEE_NO_TAKEN', message: '重複' } }, 'boom')
+    expect(errorCodeOf(err)).toBe('EMPLOYEE_NO_TAKEN')
+  })
+
+  it('非 ApiError 回 null', () => {
+    expect(errorCodeOf(new Error('boom'))).toBeNull()
+  })
+
+  it('body 形狀不對回 null', () => {
+    const err = new ApiError(500, { message: 'oops' }, 'boom')
+    expect(errorCodeOf(err)).toBeNull()
+  })
+})
 
 describe('describeError', () => {
   it.each(ALL_ERROR_CODES)('%s 有非空的中文訊息', (code) => {

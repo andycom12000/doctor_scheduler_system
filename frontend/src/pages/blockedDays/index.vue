@@ -34,6 +34,7 @@ import {
   chiefAvailabilityByDate,
   dateCountMap,
   evaluateWardSqueezeHint,
+  requiredPerDayOfType,
   extractBusyJobId,
   overCapEntries,
   totalRegisteredCount,
@@ -55,10 +56,10 @@ const {
   data: registration,
   loading: registrationLoading,
   error: registrationError,
-} = useResource(registrationKey, () => getBlockedDays(ym.value))
+} = useResource(registrationKey, (signal) => getBlockedDays(ym.value, signal))
 
 const feasibilityKey = computed(() => `blocked-days/${ym.value}/feasibility`)
-const { data: feasibility } = useResource(feasibilityKey, () => getFeasibility(ym.value))
+const { data: feasibility } = useResource(feasibilityKey, (signal) => getFeasibility(ym.value, signal))
 
 const staffKey = ref('staff')
 const { data: staffResponse } = useResource(staffKey, () => listStaff())
@@ -80,7 +81,7 @@ const eligibilityKey = ref('settings/eligibility-matrix')
 const { data: eligibilityMatrix } = useResource(eligibilityKey, () => getEligibilityMatrix())
 
 const scheduleKey = computed(() => `schedules/${ym.value}`)
-const { data: schedule, error: scheduleError } = useResource(scheduleKey, () => getSchedule(ym.value))
+const { data: schedule, error: scheduleError } = useResource(scheduleKey, (signal) => getSchedule(ym.value, signal))
 
 const areaTypeNameByCode = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {}
@@ -95,6 +96,7 @@ const chiefCode = computed(() =>
     areaTypes: areaSettings.value?.areaTypes ?? [],
   }),
 )
+const chiefRequiredPerDay = computed(() => requiredPerDayOfType(areaSettings.value?.areas ?? [], chiefCode.value))
 const monthlyCap = computed(() => registration.value?.monthlyCap ?? 16)
 const staffNameById = computed(() => new Map(staff.value.map((s) => [s.id, s.name])))
 
@@ -287,6 +289,7 @@ async function onSolve(): Promise<void> {
         :days="days"
         :footer-counts="footerCounts"
         :chief-availability="chiefAvailability"
+        :chief-required-per-day="chiefRequiredPerDay"
         :monthly-cap="monthlyCap"
         @paint="paintCell"
         @stroke-end="onStrokeEnd"

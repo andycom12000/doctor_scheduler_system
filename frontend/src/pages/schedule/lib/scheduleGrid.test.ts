@@ -6,6 +6,7 @@ import {
   dutiesByArea,
   dutiesByStaff,
   filledCountByDate,
+  groupAreasByType,
   shortStaffCode,
   staffCellKey,
   staffFooterColumns,
@@ -14,7 +15,47 @@ import {
   vacancyCountMap,
   weekdayLabel,
 } from './scheduleGrid'
-import type { CalendarDay, Duty, PointBoardGroup, Staff } from '@/api/types'
+import type { Area, AreaType, CalendarDay, Duty, PointBoardGroup, Staff } from '@/api/types'
+
+describe('groupAreasByType', () => {
+  const types: AreaType[] = [
+    { code: 'WARD', name: '一般病房' },
+    { code: 'ICU', name: '加護病房' },
+    { code: 'CHIEF', name: '總值' },
+  ]
+  const area = (id: string, areaTypeCode: string): Area => ({
+    id,
+    code: id,
+    name: id,
+    areaTypeCode,
+    requiredPerDay: 1,
+  })
+  const areas = [area('A', 'WARD'), area('B', 'WARD'), area('ICU', 'ICU'), area('CHIEF', 'CHIEF')]
+
+  it('依區域類型順序分段，段內保留區域原順序', () => {
+    const groups = groupAreasByType(types, areas)
+    expect(groups.map((g) => g.areaType?.code)).toEqual(['WARD', 'ICU', 'CHIEF'])
+    expect(groups[0]!.areas.map((a) => a.id)).toEqual(['A', 'B'])
+  })
+
+  it('沒有任何區域的類型不產生空段', () => {
+    expect(groupAreasByType(types, [area('A', 'WARD')]).map((g) => g.areaType?.code)).toEqual(['WARD'])
+  })
+
+  it('/settings/areas 載入失敗（類型清單是空的）時退回單一不分組列，區域一個都不少', () => {
+    const groups = groupAreasByType([], areas)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]!.areaType).toBeNull()
+    expect(groups[0]!.areas.map((a) => a.id)).toEqual(['A', 'B', 'ICU', 'CHIEF'])
+  })
+
+  it('指到不存在類型的區域併入結尾的不分組群組', () => {
+    const groups = groupAreasByType(types, [...areas, area('X', 'GHOST')])
+    expect(groups.at(-1)!.areaType).toBeNull()
+    expect(groups.at(-1)!.areas.map((a) => a.id)).toEqual(['X'])
+    expect(groups.flatMap((g) => g.areas)).toHaveLength(5)
+  })
+})
 
 describe('cellKey helpers', () => {
   it('area cellKey 是 area:{areaId}:{date}', () => {

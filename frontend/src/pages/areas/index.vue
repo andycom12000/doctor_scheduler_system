@@ -30,6 +30,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { invalidate, useResource } from '@/composables/useResource'
 import { shiftYearMonth, useYearMonth, yearMonthOptions } from '@/composables/useYearMonth'
 import { describeError } from '@/api/errors'
+import { describeSaveFailures } from '@/pages/saveReport'
 import {
   getAreaSettings,
   getConstraints,
@@ -164,6 +165,7 @@ const saving = ref(false)
 const saveError = ref<string | null>(null)
 
 interface SaveJob {
+  label: string
   invalidateKey: string
   run: () => Promise<unknown>
 }
@@ -176,24 +178,28 @@ async function save(): Promise<void> {
     const jobs: SaveJob[] = []
     if (ranksDirty.value && ranksDraft.value) {
       const draft = ranksDraft.value
-      jobs.push({ invalidateKey: 'settings/ranks', run: () => putRankSettings(draft) })
+      jobs.push({ label: '身分設定', invalidateKey: 'settings/ranks', run: () => putRankSettings(draft) })
     }
     if (pointRulesDirty.value && pointRulesDraft.value) {
       const draft = pointRulesDraft.value
-      jobs.push({ invalidateKey: 'settings/point-rules', run: () => putPointRules(draft) })
+      jobs.push({ label: '點數規則', invalidateKey: 'settings/point-rules', run: () => putPointRules(draft) })
     }
     if (overrideDirty.value && overrideDraft.value) {
       const draft = overrideDraft.value
       const targetYm = overrideYm.value
       jobs.push({
+        label: `逐月覆寫 ${targetYm}`,
         invalidateKey: monthlyOverrideKey(targetYm),
         run: () => putMonthlyOverride(targetYm, { ...draft, yearMonth: targetYm }),
       })
     }
 
     const results = await Promise.allSettled(jobs.map((job) => job.run()))
-    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-    if (firstFailure) saveError.value = describeError(firstFailure.reason)
+
+    saveError.value = describeSaveFailures(
+      results.map((result, index) => ({ label: jobs[index].label, result })),
+      describeError,
+    )
 
     // 只讓真的存成功的那幾份文件失效重抓；失敗的那份留著本地草稿，
     // 使用者剛填的值不會被 finally 重抓回來的舊資料蓋掉。
@@ -804,5 +810,6 @@ function onOverrideMonthSelect(event: Event): void {
   gap: 6px;
   font-size: 12px;
   color: var(--color-accent-900);
+  white-space: pre-line; /* 多份文件各自的失敗原因分行顯示 */
 }
 </style>

@@ -8,7 +8,7 @@
  * （契約上那個欄位非必要，且 cellKey 定義上是「渲染層的索引鍵」，前端自己算才不會
  * 因為某個端點忘了帶而漏掉）。
  */
-import type { CalendarDay, Duty, PointBoardGroup, Staff } from '@/api/types'
+import type { Area, AreaType, CalendarDay, Duty, PointBoardGroup, Staff } from '@/api/types'
 
 export function areaCellKey(areaId: string, date: string): string {
   return `area:${areaId}:${date}`
@@ -195,4 +195,26 @@ export function staffFooterColumns(
     columns.push({ staffId: extra.staffId, duties, quotaLabel: '—', quotaTitle: '不在點數看板', quotaAtCap: false })
   }
   return columns
+}
+
+export interface AreaGroup {
+  /** `null` = 沒有分組資訊的區域（區域類型設定載入失敗，或區域指到不存在的類型），畫面不印群組標題列。 */
+  areaType: AreaType | null
+  areas: Area[]
+}
+
+/**
+ * 區域 × 日的列分組：依 `areaTypes` 的順序分段，段內保留 `areas` 原順序。
+ * `/settings/areas` 載入失敗時 `areaTypes` 是空的——這時不能讓區域整片消失（原本的做法會留下空白格線），
+ * 退回成一個不帶標題的群組，直接列出 `Schedule.areas`。屬於任何已知類型以外的區域一律併入
+ * 結尾的不分組群組，確保每個區域都畫得出來。
+ */
+export function groupAreasByType(areaTypes: AreaType[], areas: Area[]): AreaGroup[] {
+  const known = new Set(areaTypes.map((t) => t.code))
+  const groups: AreaGroup[] = areaTypes
+    .map((areaType) => ({ areaType, areas: areas.filter((a) => a.areaTypeCode === areaType.code) }))
+    .filter((g) => g.areas.length > 0)
+  const rest = areas.filter((a) => !known.has(a.areaTypeCode))
+  if (rest.length > 0) groups.push({ areaType: null, areas: rest })
+  return groups
 }

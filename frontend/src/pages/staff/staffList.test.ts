@@ -4,14 +4,16 @@ import type { AreaType, PointBoardGroup, Rank, RankGroup, Staff } from '@/api/ty
 import {
   areaTypeChips,
   areaTypeNames,
+  compareName,
   describeQuotaLoad,
-  errorCodeOf,
   filterStaff,
   findPointBoardRow,
   groupCodeOfRank,
   groupNameOf,
+  isDraftDirty,
   isNotFoundError,
   rankNameOf,
+  ranksUnavailableMessage,
   sortByRankGroup,
   staffCountsLabel,
   visibleStaff,
@@ -250,6 +252,61 @@ describe('isNotFoundError', () => {
   })
 })
 
+describe('姓名排序', () => {
+  it('中文姓名走語系排序，不是碼位順序（碼位 張 < 李，語系序 李 在 張 前；筆畫 7 < 11）', () => {
+    expect('張' < '李').toBe(true) // 碼位順序，這正是舊寫法的結果
+    expect(compareName('張', '李')).toBeGreaterThan(0)
+    const people = [
+      staff({ id: 'a', name: '張小明' }),
+      staff({ id: 'b', name: '李大華' }),
+    ]
+    expect(sortByRankGroup(people, ranks, groups).map((s) => s.name)).toEqual(['李大華', '張小明'])
+  })
+})
+
+describe('isDraftDirty', () => {
+  const baseline = { employeeNo: 'E001', name: '王小明', rankCode: 'R2' }
+
+  it('沒有基準值（表單沒開）不算 dirty', () => {
+    expect(isDraftDirty(baseline, null)).toBe(false)
+  })
+
+  it('三個欄位都沒動不算 dirty', () => {
+    expect(isDraftDirty({ ...baseline }, baseline)).toBe(false)
+  })
+
+  it('只差前後空白不算 dirty（儲存時本來就會 trim）', () => {
+    expect(isDraftDirty({ ...baseline, name: ' 王小明 ', employeeNo: 'E001 ' }, baseline)).toBe(false)
+  })
+
+  it.each([
+    ['姓名', { name: '王大明' }],
+    ['員編', { employeeNo: 'E002' }],
+    ['身分', { rankCode: 'R4' }],
+  ])('改了%s算 dirty', (_label, patch) => {
+    expect(isDraftDirty({ ...baseline, ...patch }, baseline)).toBe(true)
+  })
+})
+
+describe('ranksUnavailableMessage', () => {
+  const describe_ = (err: unknown) => (err as Error).message
+
+  it('載入失敗時帶出原因', () => {
+    const msg = ranksUnavailableMessage({ loading: false, error: new Error('GET 500'), rankCount: 0 }, describe_)
+    expect(msg).toContain('身分清單載入失敗')
+    expect(msg).toContain('GET 500')
+  })
+
+  it('載入完卻是空清單也要說明', () => {
+    expect(ranksUnavailableMessage({ loading: false, error: null, rankCount: 0 }, describe_)).toContain('空的')
+  })
+
+  it('載入中或清單有東西不顯示', () => {
+    expect(ranksUnavailableMessage({ loading: true, error: null, rankCount: 0 }, describe_)).toBeNull()
+    expect(ranksUnavailableMessage({ loading: false, error: null, rankCount: 5 }, describe_)).toBeNull()
+  })
+})
+
 describe('areaTypeChips', () => {
   it('三個區域類型全部列出，依 eligible 標記亮暗', () => {
     expect(areaTypeChips(areaTypes, ['ICU', 'CHIEF'])).toEqual([
@@ -261,21 +318,5 @@ describe('areaTypeChips', () => {
 
   it('空的可值清單全部標暗，不是空陣列', () => {
     expect(areaTypeChips(areaTypes, []).every((chip) => !chip.eligible)).toBe(true)
-  })
-})
-
-describe('errorCodeOf', () => {
-  it('讀出 ApiError body 裡的 error.code', () => {
-    const err = new ApiError(409, { error: { code: 'EMPLOYEE_NO_TAKEN', message: '重複' } }, 'boom')
-    expect(errorCodeOf(err)).toBe('EMPLOYEE_NO_TAKEN')
-  })
-
-  it('非 ApiError 回 null', () => {
-    expect(errorCodeOf(new Error('boom'))).toBeNull()
-  })
-
-  it('body 形狀不對回 null', () => {
-    const err = new ApiError(500, { message: 'oops' }, 'boom')
-    expect(errorCodeOf(err)).toBeNull()
   })
 })

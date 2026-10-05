@@ -5,6 +5,7 @@
  * （issue #29 驗收：可行性提示的判斷是純函式）。
  */
 import type {
+  Area,
   AreaType,
   BlockedDayEntry,
   BlockedDayMutationResult,
@@ -218,6 +219,25 @@ export function chiefAvailabilityByDate(params: {
     result.set(date, eligibleIds.size - (blockedCountByDate.get(date) ?? 0))
   }
   return result
+}
+
+/**
+ * 某區域類型每日需求人數：該類型底下所有區域的 `requiredPerDay` 加總。
+ * 設定還沒載入（沒有任何區域）或找不到該類型時回 `1`，與出廠值（總值一區、每日 1 人）一致，
+ * 不讓門檻在載入空檔變成 0。
+ */
+export function requiredPerDayOfType(areas: Area[], areaTypeCode: string | null): number {
+  if (!areaTypeCode) return 1
+  const total = areas.filter((a) => a.areaTypeCode === areaTypeCode).reduce((sum, a) => sum + a.requiredPerDay, 0)
+  return total > 0 ? total : 1
+}
+
+/**
+ * 底部「總值可用人數」標紅：可用人數 ≤ 每日需求 + 1，也就是只剩一個人的緩衝（含）以下。
+ * 取代原本寫死的 `<= 2`——需求改成 2 人時，剩 3 人就已經吃緊，寫死的 2 會晚一格才警告。
+ */
+export function isChiefAvailabilityTight(available: number, requiredPerDay: number): boolean {
+  return available <= requiredPerDay + 1
 }
 
 // ---------------------------------------------------------------------------

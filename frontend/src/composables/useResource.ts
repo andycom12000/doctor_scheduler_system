@@ -31,13 +31,34 @@ interface CacheEntry<T> {
    * （沒人掛著）只標記 `loaded = false`，不會被憑空重抓。
    */
   watchers: Set<() => Promise<void>>
+  /** 進行中那一次請求的 controller；沒有請求在飛時為 null。 */
+  controller: AbortController | null
 }
+
+/**
+ * 快取項目數上限。key 以「月」為單位長出來（schedules/2026-09/violations …），
+ * 使用者來回翻月不會停，不設上限就一路累積到關程式。超過時淘汰最久沒用的、
+ * 而且沒有 consumer 掛著也沒在載入的項目；有人在看的永遠不會被淘汰。
+ */
+export const MAX_CACHE_ENTRIES = 120
 
 const cache = new Map<string, CacheEntry<unknown>>()
 
+function evictIdle(): void {
+  if (cache.size <= MAX_CACHE_ENTRIES) return
+  // Map 依插入順序走訪，getEntry 每次命中都會把項目搬到最後，所以前面的就是最久沒用的。
+  for (const [key, entry] of cache) {
+    if (cache.size <= MAX_CACHE_ENTRIES) return
+    if (entry.watchers.size === 0 && !entry.loading.value) cache.delete(key)
+  }
+}
+
 function getEntry<T>(key: string): CacheEntry<T> {
   let entry = cache.get(key) as CacheEntry<T> | undefined
-  if (!entry) {
+  if (entry) {
+    cache.delete(key)
+    cache.set(key, entry as CacheEntry<unknown>)
+  } else {
     entry = {
       data: ref(null) as Ref<T | null>,
       error: ref(null),
@@ -45,33 +66,55 @@ function getEntry<T>(key: string): CacheEntry<T> {
       loaded: false,
       requestId: 0,
       watchers: new Set(),
+      controller: null,
     }
     cache.set(key, entry as CacheEntry<unknown>)
+    evictIdle()
   }
   return entry
 }
 
-async function fetchInto<T>(key: string, fetcher: () => Promise<T>): Promise<void> {
+function isAbort(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError'
+}
+
+async function fetchInto<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>): Promise<void> {
   const entry = getEntry<T>(key)
+  // 同一個 key 又發新請求：舊的已經過期，直接中止，不讓它佔著連線。
+  entry.controller?.abort()
+  const controller = new AbortController()
+  entry.controller = controller
   const requestId = ++entry.requestId
   entry.loading.value = true
   entry.error.value = null
   try {
-    const result = await fetcher()
+    const result = await fetcher(controller.signal)
     if (entry.requestId === requestId) {
       entry.data.value = result
       entry.loaded = true
     }
   } catch (err) {
-    if (entry.requestId === requestId) {
+    // 被中止不是錯誤（沒人在看了或已被新請求取代），不要把它顯示成載入失敗。
+    if (entry.requestId === requestId && !isAbort(err)) {
       entry.error.value = err
       entry.loaded = false
     }
   } finally {
     if (entry.requestId === requestId) {
       entry.loading.value = false
+      entry.controller = null
     }
   }
+}
+
+/** 最後一個 consumer 離開時，把還在飛的請求中止並讓項目回到「未載入」。 */
+function abortIfOrphaned(entry: CacheEntry<unknown>): void {
+  if (entry.watchers.size > 0 || !entry.controller) return
+  entry.controller.abort()
+  entry.controller = null
+  entry.requestId++
+  entry.loading.value = false
+  entry.loaded = false
 }
 
 export interface UseResourceResult<T> {
@@ -88,7 +131,7 @@ export interface UseResourceResult<T> {
  */
 export function useResource<T>(
   keyRef: Ref<string | null | undefined>,
-  fetcher: () => Promise<T>,
+  fetcher: (signal: AbortSignal) => Promise<T>,
 ): UseResourceResult<T> {
   watch(
     keyRef,
@@ -97,7 +140,10 @@ export function useResource<T>(
       const entry = getEntry<T>(key)
       const refetch = () => fetchInto(key, fetcher)
       entry.watchers.add(refetch)
-      onCleanup(() => entry.watchers.delete(refetch))
+      onCleanup(() => {
+        entry.watchers.delete(refetch)
+        abortIfOrphaned(entry as CacheEntry<unknown>)
+      })
       if (!entry.loaded && !entry.loading.value) {
         void refetch()
       }

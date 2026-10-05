@@ -50,7 +50,7 @@ const days = computed(() => toDayColumns(calendar.daysOf(ym.value)))
 
 // -- 值班表本體：404 是「值班表尚未產生」，不是錯誤（frontend-plan.md §3.1） -----------
 const scheduleKey = computed(() => `schedules/${ym.value}`)
-const schedule = useResource(scheduleKey, () => getSchedule(ym.value))
+const schedule = useResource(scheduleKey, (signal) => getSchedule(ym.value, signal))
 
 const isEmptyMonth = computed(() => schedule.error.value instanceof ApiError && schedule.error.value.status === 404)
 const scheduleErrorMessage = computed(() =>
@@ -99,20 +99,20 @@ const rankSettingsRes = useResource(rankSettingsKey, () => getRankSettings())
 
 // -- 不可排班日登記：獨立於值班表存在（ADR-0001），日 × 人檢視要疊這個狀態 --
 const blockedDaysKey = computed(() => (schedule.data.value ? `blocked-days/${ym.value}` : null))
-const blockedDaysRes = useResource(blockedDaysKey, () => getBlockedDays(ym.value))
+const blockedDaysRes = useResource(blockedDaysKey, (signal) => getBlockedDays(ym.value, signal))
 const blockedSet = computed(
   () => new Set((blockedDaysRes.data.value?.entries ?? []).map((e) => `${e.staffId}|${e.date}`)),
 )
 
 // -- 由值班表推導的檢視：空月份一律不打（violationsKey 等在 schedule 不存在時是 null） --
 const violationsKey = computed(() => (schedule.data.value ? `schedules/${ym.value}/violations` : null))
-const violationsRes = useResource(violationsKey, () => listViolations(ym.value))
+const violationsRes = useResource(violationsKey, (signal) => listViolations(ym.value, {}, signal))
 
 const pointBoardKey = computed(() => (schedule.data.value ? `schedules/${ym.value}/point-board` : null))
-const pointBoardRes = useResource(pointBoardKey, () => getPointBoard(ym.value))
+const pointBoardRes = useResource(pointBoardKey, (signal) => getPointBoard(ym.value, signal))
 
 const vacanciesKey = computed(() => (schedule.data.value ? `schedules/${ym.value}/vacancies` : null))
-const vacanciesRes = useResource(vacanciesKey, () => listVacancies(ym.value))
+const vacanciesRes = useResource(vacanciesKey, (signal) => listVacancies(ym.value, signal))
 
 const pointBoardGroups = computed(() => pointBoardRes.data.value?.groups ?? [])
 const staffDirectory = computed(() => buildStaffDirectory(pointBoardGroups.value, staffListRes.data.value?.items ?? []))
@@ -178,7 +178,7 @@ function stepDay(delta: number): void {
 const dayDetailKey = computed(() =>
   schedule.data.value && effectiveDate.value ? `schedules/${ym.value}/days/${effectiveDate.value}` : null,
 )
-const dayDetailRes = useResource(dayDetailKey, () => getDayDetail(ym.value, effectiveDate.value as string))
+const dayDetailRes = useResource(dayDetailKey, (signal) => getDayDetail(ym.value, effectiveDate.value as string, signal))
 const dayDetailErrorMessage = computed(() => (dayDetailRes.error.value ? describeError(dayDetailRes.error.value) : null))
 
 // -- 寫入共用：快取失效、已發布確認、錯誤／結果訊息 --------------------------------------

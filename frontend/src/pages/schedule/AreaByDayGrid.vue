@@ -18,6 +18,7 @@ import {
   abbreviate,
   areaCellKey,
   filledCountByDate,
+  groupAreasByType,
   shortStaffCode,
   type DayColumn,
   type StaffDirectoryEntry,
@@ -63,16 +64,8 @@ function onCellClick(areaId: string, date: string): void {
   emit('cellClick', areaId, date)
 }
 
-interface GroupedAreas {
-  areaType: AreaType
-  areas: Area[]
-}
-
-const groups = computed<GroupedAreas[]>(() =>
-  props.areaTypes
-    .map((areaType) => ({ areaType, areas: props.areas.filter((area) => area.areaTypeCode === areaType.code) }))
-    .filter((group) => group.areas.length > 0),
-)
+// `/settings/areas` 失敗時 areaTypes 是空的：退回不分組列出 `schedule.areas`，不讓格線整片空白。
+const groups = computed(() => groupAreasByType(props.areaTypes, props.areas))
 
 /** 身分組圖例：色階依組在點數看板出現的順序分配，標籤用真實 `groupName`，不寫死。 */
 const groupLegend = computed(() =>
@@ -157,8 +150,8 @@ function filled(areaId: string): number {
       </div>
       <div class="ad-grid__corner">填補</div>
 
-      <template v-for="group in groups" :key="group.areaType.code">
-        <div class="ad-grid__group" :style="{ gridColumn: `1 / span ${days.length + 2}` }">
+      <template v-for="group in groups" :key="group.areaType?.code ?? '__ungrouped'">
+        <div v-if="group.areaType" class="ad-grid__group" :style="{ gridColumn: `1 / span ${days.length + 2}` }">
           <span class="tag tag-accent">{{ group.areaType.code }}</span>
           <span class="ad-grid__group-name">{{ group.areaType.name }}</span>
         </div>

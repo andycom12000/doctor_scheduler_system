@@ -3,15 +3,12 @@
  * 流程本身（呼叫 API、跳確認）在 index.vue，這裡只放能脫離 DOM 與網路單獨測的判斷。
  */
 import { ApiError } from '@/api/client'
+import { errorCodeOf } from '@/api/errors'
 import type { ExportLayout, ScheduleStatus } from '@/api/types'
 
 /** `ApiError` 且本體是契約的 `ErrorResponse`、`error.code` 吻合時為 true。 */
 function hasErrorCode(err: unknown, status: number, code: string): boolean {
-  if (!(err instanceof ApiError) || err.status !== status) return false
-  const body = err.body
-  if (!body || typeof body !== 'object' || !('error' in body)) return false
-  const error = (body as { error?: unknown }).error
-  return !!error && typeof error === 'object' && (error as { code?: unknown }).code === code
+  return err instanceof ApiError && err.status === status && errorCodeOf(err) === code
 }
 
 /** 發布被擋：還有硬約束違規，需使用者明確確認才能帶 `acknowledgeViolations: true` 重發。 */

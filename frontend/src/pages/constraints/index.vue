@@ -19,6 +19,7 @@ import PageLayout from '@/components/PageLayout.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { invalidate, useResource } from '@/composables/useResource'
 import { describeError } from '@/api/errors'
+import { describeSaveFailures } from '@/pages/saveReport'
 import {
   getAreaSettings,
   getConstraints,
@@ -87,6 +88,7 @@ const saving = ref(false)
 const saveError = ref<string | null>(null)
 
 interface SaveJob {
+  label: string
   /** 成功時要 invalidate 的 key；矩陣多一個 'staff'（可值區域類型由矩陣重推）。 */
   invalidateKeys: string[]
   run: () => Promise<unknown>
@@ -100,16 +102,19 @@ async function save(): Promise<void> {
     const jobs: SaveJob[] = []
     if (matrixDirty.value && matrixDraft.value) {
       const draft = matrixDraft.value
-      jobs.push({ invalidateKeys: ['settings/eligibility-matrix', 'staff'], run: () => putEligibilityMatrix(draft) })
+      jobs.push({ label: '資格矩陣', invalidateKeys: ['settings/eligibility-matrix', 'staff'], run: () => putEligibilityMatrix(draft) })
     }
     if (constraintsDirty.value && constraintsDraft.value) {
       const draft = constraintsDraft.value
-      jobs.push({ invalidateKeys: ['settings/constraints'], run: () => putConstraints(draft) })
+      jobs.push({ label: '約束設定', invalidateKeys: ['settings/constraints'], run: () => putConstraints(draft) })
     }
 
     const results = await Promise.allSettled(jobs.map((job) => job.run()))
-    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-    if (firstFailure) saveError.value = describeError(firstFailure.reason)
+
+    saveError.value = describeSaveFailures(
+      results.map((result, index) => ({ label: jobs[index].label, result })),
+      describeError,
+    )
 
     // 只讓真的存成功的那幾份文件（與矩陣連帶的 staff）失效重抓；失敗的那份留著本地草稿，
     // 使用者剛改的內容不會被 finally 重抓回來的舊資料蓋掉。
@@ -438,6 +443,7 @@ onBeforeRouteLeave(async () => {
   gap: 6px;
   font-size: 12px;
   color: var(--color-accent-900);
+  white-space: pre-line; /* 多份文件各自的失敗原因分行顯示 */
 }
 
 /*
