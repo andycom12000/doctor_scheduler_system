@@ -159,24 +159,26 @@ public sealed class ScheduleCommands
 
     /// <summary>
     /// 套用變體為草稿：整月的格子全部換成變體的值班清單；該月尚無值班表時建一份。
-    /// 已發布的不可整份套用（幾乎一定是誤操作）409；job 或變體不存在 404；變體不是這個月的 422。
+    /// 檢查順序：job 不存在 404 → 月份不符 422 → 已發布 409（幾乎一定是誤操作）→ 變體不存在 404。
     /// </summary>
     public async Task<ScheduleView> ApplyVariantAsync(YearMonth month, string jobId, string variantId, CancellationToken cancellationToken = default)
     {
         var job = await _jobs.FindAsync(jobId, cancellationToken)
             ?? throw SchedulerException.NotFound($"找不到求解工作 {jobId}");
-        var variant = await _jobs.FindVariantAsync(jobId, variantId, cancellationToken)
-            ?? throw SchedulerException.NotFound($"求解工作 {jobId} 沒有變體 {variantId}");
         if (job.YearMonth != month)
         {
             throw new SchedulerException(ErrorCode.InvalidRequest, $"變體 {variantId} 是 {job.YearMonth} 的，不能套用到 {month}");
         }
 
+        // 已發布的檢查放在找變體之前：發布狀態與變體內容無關，不該因為變體找不到（例如求解還沒出解）而蓋掉 409
         var loaded = await _loader.LoadAsync(month, cancellationToken);
         if (loaded.Header?.Status == ScheduleStatus.Published)
         {
             throw new SchedulerException(ErrorCode.ScheduleAlreadyPublished, $"{month} 的值班表已發布，不可整份套用變體；要改請逐格改");
         }
+
+        var variant = await _jobs.FindVariantAsync(jobId, variantId, cancellationToken)
+            ?? throw SchedulerException.NotFound($"求解工作 {jobId} 沒有變體 {variantId}");
 
         // 變體是求解當下的快照，人員或區域之後可能被刪（變體裡的值班不算「有值班紀錄」，刪得掉）。
         // 帶著找不到的 id 落盤會讓該月之後每個讀取都 500、連清空格子都做不到，所以套用時重新驗一次

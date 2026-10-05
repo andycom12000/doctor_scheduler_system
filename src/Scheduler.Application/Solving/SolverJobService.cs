@@ -50,6 +50,12 @@ public sealed class SolverJobService
     private readonly List<Channel<SolverProgressSnapshot>> _broadcast = new();
     private bool _slotTaken;
 
+    /// <summary>
+    /// 佔著 slot 的工作編號，佔 slot 的當下就決定、與 <see cref="_slotTaken"/> 在同一個鎖裡設定。
+    /// 工作登記進 <see cref="_live"/> 之前（撈資料、寫第一筆紀錄的那段）撞到 slot 的人也拿得到 <c>details.jobId</c>。
+    /// </summary>
+    private string? _slotJobId;
+
     public SolverJobService(ISolverScopeFactory scopes, ISolver solver, TimeProvider clock)
     {
         _scopes = scopes;
@@ -72,15 +78,18 @@ public sealed class SolverJobService
             throw new SchedulerException(ErrorCode.InvalidRequest, $"timeLimitSecPerVariant 必須在 1–{MaxTimeLimitSec}");
         }
 
+        var jobId = NewJobId();
+
         // 先佔 slot 再撈資料：撈資料是 async，不能抱著鎖等；佔到之後出任何錯都要放掉
         lock (_gate)
         {
             if (_slotTaken)
             {
-                throw Busy(_live.Values.FirstOrDefault()?.Record.JobId);
+                throw Busy(_slotJobId);
             }
 
             _slotTaken = true;
+            _slotJobId = jobId;
         }
 
         LiveJob live;
@@ -104,7 +113,7 @@ public sealed class SolverJobService
                 loaded.Constraints.Soft.Count(c => c.IsActive));
 
             var record = new SolverJobRecord(
-                NewJobId(), month, SolverJobStatus.Queued, count, timeLimit, _clock.GetUtcNow(),
+                jobId, month, SolverJobStatus.Queued, count, timeLimit, _clock.GetUtcNow(),
                 StartedAt: null, FinishedAt: null, ElapsedSec: null, FailureReason: null,
                 loaded.Warnings, scale, constraintCount);
 
@@ -125,6 +134,7 @@ public sealed class SolverJobService
             lock (_gate)
             {
                 _slotTaken = false;
+                _slotJobId = null;
             }
 
             throw;
@@ -267,6 +277,7 @@ public sealed class SolverJobService
     private async Task RunAsync(LiveJob live)
     {
         await live.Started.Task;
+        SolverJobRecord terminal;
         var token = live.Cancellation.Token;
         var ticker = TickAsync(live);
         try
@@ -305,24 +316,27 @@ public sealed class SolverJobService
                 avoid.Add(result.Duties);
             }
 
-            Finish(live, SolverJobStatus.Succeeded, null);
+            terminal = Finish(live, SolverJobStatus.Succeeded, null);
         }
         catch (OperationCanceledException)
         {
-            Finish(live, SolverJobStatus.Cancelled, null);
+            terminal = Finish(live, SolverJobStatus.Cancelled, null);
         }
         catch (Exception ex)
         {
-            Finish(live, SolverJobStatus.Failed, ex.Message);
+            terminal = Finish(live, SolverJobStatus.Failed, ex.Message);
         }
 
-        await PersistTerminalAsync(live);
-
-        // 釋放 slot 放最前面：後面任何一步出錯都不能讓 POST /solver-jobs 從此永遠 409
+        // 順序是不變式：終態先寫進資料庫，之後「記憶體裡的終態、移出 _live、放 slot」在同一個鎖裡一次完成。
+        // 任何人看得到終態（GetAsync 讀記憶體或資料庫、訂閱）時 slot 都已經空出來，不會「看到結束卻 SOLVER_BUSY」；
+        // 反過來，_live 移除之後讀資料庫一定已是終態。PersistTerminalAsync 吞掉所有例外，所以放 slot 不會被跳過
+        await PersistTerminalAsync(terminal);
         lock (_gate)
         {
+            live.Update(_ => terminal);
             _live.Remove(live.Record.JobId);
             _slotTaken = false;
+            _slotJobId = null;
         }
 
         try
@@ -346,13 +360,13 @@ public sealed class SolverJobService
     }
 
     /// <summary>終態一定要落盤，否則 _live 移除後資料庫裡停在 running，前端會無限輪詢到程式重啟。失敗就再試兩次。</summary>
-    private async Task PersistTerminalAsync(LiveJob live)
+    private async Task PersistTerminalAsync(SolverJobRecord terminal)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                await PersistAsync(live);
+                await PersistAsync(terminal);
                 return;
             }
             catch when (attempt < 3)
@@ -408,16 +422,18 @@ public sealed class SolverJobService
         }
     }
 
-    private void Finish(LiveJob live, SolverJobStatus status, string? failureReason)
+    /// <summary>算出終態紀錄但不套用到活著的工作：套用要等落盤之後、和放 slot 同一刻（見 <see cref="RunAsync"/>）。</summary>
+    private SolverJobRecord Finish(LiveJob live, SolverJobStatus status, string? failureReason)
     {
         var now = _clock.GetUtcNow();
-        live.Update(r => r with
+        var r = live.Record;
+        return r with
         {
             Status = status,
             FinishedAt = now,
             ElapsedSec = Math.Round((now - (r.StartedAt ?? r.CreatedAt)).TotalSeconds, 1),
             FailureReason = failureReason,
-        });
+        };
     }
 
     /// <summary>變體的指標全部由 Domain 重算，與驗證頁面用同一份定義，建模漂移時會直接看出來（§4.8）。</summary>
@@ -465,8 +481,10 @@ public sealed class SolverJobService
 
     // ---- 落盤 ----
 
-    private Task PersistAsync(LiveJob live) =>
-        WithRepositoryAsync(repo => repo.UpdateAsync(live.Record, CancellationToken.None), CancellationToken.None);
+    private Task PersistAsync(LiveJob live) => PersistAsync(live.Record);
+
+    private Task PersistAsync(SolverJobRecord record) =>
+        WithRepositoryAsync(repo => repo.UpdateAsync(record, CancellationToken.None), CancellationToken.None);
 
     private async Task WithRepositoryAsync(Func<ISolverJobRepository, Task> action, CancellationToken cancellationToken)
     {

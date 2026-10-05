@@ -92,17 +92,30 @@ public sealed class SolverEndpointTests : IClassFixture<ApiFixture>
     [Fact]
     public async Task 已發布的月_不可套用_409()
     {
-        var created = await PostAsync("/api/solver-jobs", """{"yearMonth":"2026-08","variantCount":1,"timeLimitSecPerVariant":1}""", "createSolverJob", HttpStatusCode.Accepted);
-        var jobId = created["jobId"]!.GetValue<string>();
-        await WaitForTerminalAsync(jobId);
+        // 不依賴求解是否在時限內解出變體：檢查順序是 job 404 → 月份 422 → 已發布 409 → 變體 404，
+        // 所以只要 job 存在就行。建完立刻中止（DELETE 回來時已結束、slot 已放），不必等解
+        var jobId = await CreateAndCancelJobAsync("2026-08");
 
         var error = await PostAsync("/api/schedules/2026-08/apply-variant", $$"""{"jobId":"{{jobId}}","variantId":"v-a"}""", "applyVariant", HttpStatusCode.Conflict);
         Assert.Equal("SCHEDULE_ALREADY_PUBLISHED", error["error"]!["code"]!.GetValue<string>());
+        // 已發布的 409 與變體存不存在無關
+        await PostAsync("/api/schedules/2026-08/apply-variant", $$"""{"jobId":"{{jobId}}","variantId":"v-z"}""", "applyVariant", HttpStatusCode.Conflict);
 
         // 變體是 8 月的，套到 9 月是 422
         var wrongMonth = await PostAsync("/api/schedules/2026-09/apply-variant", $$"""{"jobId":"{{jobId}}","variantId":"v-a"}""", "applyVariant", HttpStatusCode.UnprocessableEntity);
         Assert.Equal("INVALID_REQUEST", wrongMonth["error"]!["code"]!.GetValue<string>());
-        await PostAsync("/api/schedules/2026-08/apply-variant", $$"""{"jobId":"{{jobId}}","variantId":"v-z"}""", "applyVariant", HttpStatusCode.NotFound);
+
+        // 未發布的月份、job 存在但沒有這個變體 → 404
+        var septJobId = await CreateAndCancelJobAsync("2026-09");
+        await PostAsync("/api/schedules/2026-09/apply-variant", $$"""{"jobId":"{{septJobId}}","variantId":"v-z"}""", "applyVariant", HttpStatusCode.NotFound);
+    }
+
+    private async Task<string> CreateAndCancelJobAsync(string yearMonth)
+    {
+        var created = await PostAsync("/api/solver-jobs", $$"""{"yearMonth":"{{yearMonth}}","variantCount":1,"timeLimitSecPerVariant":60}""", "createSolverJob", HttpStatusCode.Accepted);
+        var jobId = created["jobId"]!.GetValue<string>();
+        await _api.CallAsync(HttpMethod.Delete, $"/api/solver-jobs/{jobId}", "cancelSolverJob", HttpStatusCode.OK);
+        return jobId;
     }
 
     [Fact]

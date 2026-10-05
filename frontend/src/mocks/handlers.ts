@@ -624,9 +624,7 @@ const solverHandlers = [
     const job = store.solverJobs.get(body.jobId)
     if (!job) return errorResponse(404, 'NOT_FOUND', '找不到求解工作')
 
-    const variant = (store.variants.get(body.jobId) ?? []).find((v) => v.id === body.variantId)
-    if (!variant) return errorResponse(404, 'NOT_FOUND', '找不到指定的變體')
-
+    // 檢查順序與真後端一致：job 404 → 月份 422 → 已發布 409 → 變體 404
     // 變體屬於建立求解工作時的那個月，跟路徑上的 ym 不同就是誤套用
     if (job.yearMonth !== ym) {
       return errorResponse(422, 'INVALID_REQUEST', `變體 ${body.variantId} 是 ${job.yearMonth} 的，不能套用到 ${ym}`)
@@ -636,6 +634,9 @@ const solverHandlers = [
     if (existing?.status === 'published') {
       return errorResponse(409, 'SCHEDULE_ALREADY_PUBLISHED', '該月值班表已發布，不可整份套用變體')
     }
+
+    const variant = (store.variants.get(body.jobId) ?? []).find((v) => v.id === body.variantId)
+    if (!variant) return errorResponse(404, 'NOT_FOUND', '找不到指定的變體')
 
     const schedule = ensureSchedule(store, ym)
     schedule.duties = new Map(variant.duties.map((d) => [dutyKey(d.areaId, d.date), d.staffId]))

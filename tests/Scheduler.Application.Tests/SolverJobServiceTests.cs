@@ -187,6 +187,59 @@ public class SolverJobServiceTests
     }
 
     [Fact]
+    public async Task 看得到終態就能立刻建下一個工作_不需重試()
+    {
+        // 競態守門：終態對外可見（GetAsync）的那一刻 slot 必須已經空出來。連跑多輪，每輪都不容許 SOLVER_BUSY
+        var (service, _, _) = Setup();
+
+        for (var i = 0; i < 25; i++)
+        {
+            var created = await service.CreateAsync(Oct, 1, 1);
+            await WaitForTerminalAsync(service, created.Record.JobId);
+        }
+    }
+
+    [Fact]
+    public async Task SOLVER_BUSY_在佔到_slot_但還沒登記的空窗也帶_jobId()
+    {
+        var (service, store, _) = Setup();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var gated = new GatedScopeFactory(store, entered, release);
+        service = new SolverJobService(gated, new FakeSolver((r, _) => Task.FromResult(OneDuty(r))), TimeProvider.System);
+
+        // 第一個工作卡在撈資料（slot 已佔、尚未進 _live）
+        var firstTask = Task.Run(() => service.CreateAsync(Oct, 1, 1));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        var ex = await Assert.ThrowsAsync<SchedulerException>(() => service.CreateAsync(Oct, 1, 1));
+        Assert.Equal(ErrorCode.SolverBusy, ex.Code);
+        var busyJobId = Assert.IsType<string>(ex.Details!["jobId"]);
+
+        release.Set();
+        var first = await firstTask;
+        Assert.Equal(first.Record.JobId, busyJobId);
+        await WaitForTerminalAsync(service, first.Record.JobId);
+    }
+
+    /// <summary>第一次 <see cref="Create"/> 卡住直到放行，其餘直接轉給記憶體 store。</summary>
+    private sealed class GatedScopeFactory(ISolverScopeFactory inner, ManualResetEventSlim entered, ManualResetEventSlim release) : ISolverScopeFactory
+    {
+        private int _calls;
+
+        public ISolverScope Create()
+        {
+            if (Interlocked.Increment(ref _calls) == 1)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+
+            return inner.Create();
+        }
+    }
+
+    [Fact]
     public async Task 中止_已完成的變體留著_之後再中止是冪等的()
     {
         var calls = 0;
