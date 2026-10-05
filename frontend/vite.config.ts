@@ -44,7 +44,8 @@ function readAppVersion(): string {
     fileURLToPath(new URL('../Directory.Build.props', import.meta.url)),
     'utf8',
   )
-  const m = props.match(/<Version>\s*([^<\s]+)\s*<\/Version>/)
+  // 先去掉 XML 註解（props 的說明文字裡就有「<Version>」字樣），publish.ps1 同樣處理
+  const m = props.replace(/<!--[\s\S]*?-->/g, '').match(/<Version>\s*([^<\s]+)\s*<\/Version>/)
   if (!m) throw new Error('Directory.Build.props 找不到 <Version>')
   return m[1]
 }

@@ -2,8 +2,9 @@
 
   <!-- 全 solution 共用設定。個別專案僅覆寫確有必要者。 -->
   <!--
-    版本號的唯一來源（SemVer）。.NET 組件與 Scheduler.Shell.exe 的檔案／產品版本、
+    版本號的唯一來源（SemVer）。.NET 組件與 HospitalScheduler.exe 的檔案／產品版本、
     build/publish.ps1 的輸出資料夾名、前端畫面（frontend/vite.config.ts 建置時讀這裡）都從這個值來。
+    不要在任何 csproj 覆寫 Version（publish.ps1 會比對 exe 的 ProductVersion，不符就失敗）。
     發佈流程見 docs/release-process.md。
   -->
   <PropertyGroup>
