@@ -543,7 +543,7 @@ DoctorScheduler-v<版本>/
 第一次啟動（`ApiHostOptions.RosterFilePath` 有值，Release Shell 傳入）時，`SchedulerDatabase.InitializeAsync`
 在出廠 seed 之後呼叫 `RosterImporter`：檔案存在、`app_meta` 沒有 `roster_imported_at`、`staff` 表空的，
 三者同時成立才匯入，並在同一次 `SaveChanges` 寫下標記。之後人員被刪光、檔案還在不在都不再匯入；
-舊資料庫（有人員、沒標記）升級後因為人員表非空也不會被塞進名冊。檔案驗證不過只記一筆警告
+舊資料庫（有人員、沒標記）升級後因為人員表非空不會被塞進名冊，且同樣寫下標記（名冊來源視為已決定，日後刪光人員也不會被匯入）。檔案驗證不過只記一筆警告
 （`data/roster-import.log`，只含列號與原因，不含姓名員編）、不匯入、不寫標記、正常啟動。
 開發期（`Program.cs`、DEBUG Shell）仍用 `SeedReferenceRoster` 種假名參考名單；兩者不可同時指定。
 

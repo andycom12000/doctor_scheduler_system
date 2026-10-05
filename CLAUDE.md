@@ -150,7 +150,7 @@ npm run api:smoke    # 同一份煙霧斷言打 :5080 真後端（先 dotnet run
 **名冊檔不進版控、用參數帶入**：發佈要內建真實名冊時，`pwsh build/publish.ps1 -RosterFile <repo 外的 CSV>`
 （UTF-8，表頭 `員編,姓名,身分`，身分用代碼）。腳本先驗證、不通過就失敗並指出列號，通過才複製成發佈包的
 `roster/roster.csv`；沒給參數會印警告、名冊是空的。真實姓名與員編不得出現在程式碼、測試、commit、PR、issue；
-測試只用假名與 `T001…` 員編。`.gitignore` 已擋 `roster.csv`、`*roster*.csv`、`*名冊*.csv`。
+測試只用假名與 `T001…` 員編。`.gitignore` 已擋 `roster.csv`、`*roster*.csv`、`*名冊*.csv`、`/roster/`。CSV 必須是 UTF-8（Excel 請另存「CSV UTF-8（逗號分隔）」，Big5 會被拒），欄位前後的引號會去掉、不支援欄位內含逗號；錯誤訊息只含列號與原因、不印欄位原文。
 
 ## 分支模型（git-flow）
 

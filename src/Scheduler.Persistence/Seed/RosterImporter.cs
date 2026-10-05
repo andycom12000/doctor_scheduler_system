@@ -31,9 +31,17 @@ public static class RosterImporter
             return;
         }
 
-        if (await db.AppMeta.AnyAsync(m => m.Key == ImportedMetaKey, cancellationToken)
-            || await db.Staff.AnyAsync(cancellationToken))
+        if (await db.AppMeta.AnyAsync(m => m.Key == ImportedMetaKey, cancellationToken))
         {
+            return;
+        }
+
+        if (await db.Staff.AnyAsync(cancellationToken))
+        {
+            // 舊資料庫升級：人員表已有人、從沒匯入過。名冊來源已經由使用者決定（#37 情境），
+            // 記下標記，免得他日後刪光人員重啟時被名冊檔匯入。
+            db.AppMeta.Add(new AppMetaEntity { Key = ImportedMetaKey, Value = now.UtcDateTime.ToString("O") });
+            await db.SaveChangesAsync(cancellationToken);
             return;
         }
 
@@ -41,7 +49,14 @@ public static class RosterImporter
         RosterParseResult result;
         try
         {
-            result = Parse(await File.ReadAllTextAsync(rosterFilePath, new UTF8Encoding(false), cancellationToken), rankCodes);
+            // throwOnInvalidBytes：Big5 等非 UTF-8 檔案要明確失敗，不能默默讀成亂碼
+            var text = await File.ReadAllTextAsync(rosterFilePath, new UTF8Encoding(false, true), cancellationToken);
+            result = Parse(text, rankCodes);
+        }
+        catch (DecoderFallbackException)
+        {
+            warn("名冊檔不是 UTF-8，略過匯入（請用 Excel 另存為「CSV UTF-8（逗號分隔）」）");
+            return;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -71,6 +86,7 @@ public static class RosterImporter
     /// <summary>
     /// 解析並驗證名冊檔內容：UTF-8（可帶 BOM）、第一列是表頭 <see cref="Header"/>、員編不重複且非空、姓名非空、
     /// 身分代碼必須在 <paramref name="knownRankCodes"/> 內。全空白的列略過；錯誤訊息用實際檔案的列號（表頭是第 1 列）。
+    /// 欄位前後的引號會去掉；不處理欄位內含逗號。錯誤訊息只含列號與原因，不含任何欄位原文（紀錄檔不該洩漏姓名與員編）。
     /// </summary>
     public static RosterParseResult Parse(string content, IEnumerable<string> knownRankCodes)
     {
@@ -79,8 +95,8 @@ public static class RosterImporter
         var members = new List<RosterEntry>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        var lines = content.TrimStart('﻿').Split('\n');
-        var header = lines[0].Trim().Replace(" ", "");
+        var lines = content.TrimStart((char)0xFEFF).Split('\n');
+        var header = lines[0].Replace("\"", "").Replace(" ", "").Trim();
         if (header != Header)
         {
             errors.Add($"第 1 列：表頭必須是「{Header}」");
@@ -90,7 +106,7 @@ public static class RosterImporter
         for (var i = 1; i < lines.Length; i++)
         {
             var lineNo = i + 1;
-            var fields = lines[i].TrimEnd('\r').Split(',').Select(f => f.Trim()).ToArray();
+            var fields = lines[i].TrimEnd('\r').Split(',').Select(f => f.Trim().Trim('"').Trim()).ToArray();
             if (fields.All(f => f.Length == 0))
             {
                 continue;
@@ -119,7 +135,8 @@ public static class RosterImporter
 
             if (!ranks.Contains(rank))
             {
-                errors.Add($"第 {lineNo} 列：不認得的身分代碼「{rank}」");
+                // 不印原值：欄位對調時那裡會是姓名，錯誤訊息只含列號與原因
+                errors.Add($"第 {lineNo} 列：身分代碼不在已知清單內");
             }
 
             members.Add(new RosterEntry(no, name, rank));

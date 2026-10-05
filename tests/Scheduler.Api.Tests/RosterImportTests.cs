@@ -132,11 +132,51 @@ public sealed class RosterImportTests : IDisposable
             var items = await ListStaffAsync(upgraded);
             Assert.Equal(34, items.Count);
             Assert.DoesNotContain(items, i => i!["employeeNo"]!.GetValue<string>() == "T001");
+
+            // 升級那次啟動已寫下標記（名冊來源視為已決定）：使用者日後刪光人員重啟也不會被匯入
+            using var client = upgraded.GetTestClient();
+            foreach (var item in items)
+            {
+                var response = await client.DeleteAsync("/api/staff/" + item!["id"]!.GetValue<string>());
+                Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            }
         }
         finally
         {
             await StopAsync(upgraded);
         }
+
+        SqliteConnection.ClearAllPools();
+        var restarted = await StartAsync(RosterPath);
+        try { Assert.Empty(await ListStaffAsync(restarted)); }
+        finally { await StopAsync(restarted); }
+    }
+
+    [Fact]
+    public async Task 非UTF8的名冊檔_不匯入_紀錄說明編碼問題()
+    {
+        // Big5（zh-TW Excel 預設的 CSV）：「測試」的 Big5 位元組不是合法 UTF-8
+        File.WriteAllBytes(RosterPath, new byte[] { 0xAA, 0xBA, 0xB5, 0xB4, 0x2C, 0xB9, 0xEF, 0x2C, 0x52, 0x31, 0x0A });
+        var app = await StartAsync(RosterPath);
+        try { Assert.Empty(await ListStaffAsync(app)); }
+        finally { await StopAsync(app); }
+
+        var log = await File.ReadAllTextAsync(Path.Combine(_dir, "data", "roster-import.log"));
+        Assert.Contains("不是 UTF-8", log);
+    }
+
+    [Fact]
+    public async Task 欄位對調的名冊檔_紀錄只有列號與原因_不含姓名()
+    {
+        WriteRoster("員編,姓名,身分\nT001,PGY1,測試甲\n");
+        var app = await StartAsync(RosterPath);
+        try { Assert.Empty(await ListStaffAsync(app)); }
+        finally { await StopAsync(app); }
+
+        var log = await File.ReadAllTextAsync(Path.Combine(_dir, "data", "roster-import.log"));
+        Assert.Contains("第 2 列", log);
+        Assert.DoesNotContain("測試甲", log);
+        Assert.DoesNotContain("T001", log);
     }
 
     [Fact]

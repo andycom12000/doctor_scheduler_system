@@ -32,7 +32,7 @@ public static class SchedulerDatabase
     /// 與 <paramref name="seedReferenceRoster"/> 不可同時使用。
     /// </param>
     public static async Task InitializeAsync(
-        IServiceProvider services, bool seedReferenceRoster = true, CancellationToken cancellationToken = default,
+        IServiceProvider services, bool seedReferenceRoster = false, CancellationToken cancellationToken = default,
         string? rosterFilePath = null)
     {
         if (seedReferenceRoster && rosterFilePath is not null)

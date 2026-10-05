@@ -46,4 +46,3 @@ roster.csv
 *roster*.csv
 *名冊*.csv
 /roster/
-!tests/**/*roster*.csv

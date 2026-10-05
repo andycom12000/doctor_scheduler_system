@@ -80,25 +80,37 @@ Write-Host "版本 $version → $packageName" -ForegroundColor Cyan
 $knownRankCodes = @('PGY1', 'PGY2', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'PTR', 'NP')
 if ($RosterFile) {
     if (-not (Test-Path -LiteralPath $RosterFile -PathType Leaf)) { throw "找不到名冊檔：$RosterFile" }
-    $rosterText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $RosterFile).Path, (New-Object System.Text.UTF8Encoding($false, $true)))
+    # throwOnInvalidBytes：Big5（zh-TW Excel 預設的 CSV）等非 UTF-8 要明確失敗，不能默默讀成亂碼
+    try {
+        $rosterText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $RosterFile).Path, (New-Object System.Text.UTF8Encoding($false, $true)))
+    } catch {
+        $inner = $_.Exception
+        while ($inner.InnerException) { $inner = $inner.InnerException }
+        if ($inner -is [System.Text.DecoderFallbackException]) {
+            throw "名冊檔不是 UTF-8，請用 Excel 另存為「CSV UTF-8（逗號分隔）」後再發佈"
+        }
+        throw
+    }
     $rosterLines = $rosterText.TrimStart([char]0xFEFF) -split "`n"
     $rosterErrors = New-Object System.Collections.Generic.List[string]
-    if (($rosterLines[0].Trim() -replace ' ', '') -ne '員編,姓名,身分') {
+    # 錯誤訊息只含列號與原因，不印任何欄位原文（欄位對調時那裡會是姓名，終端輸出可能被截圖或貼出）
+    if (($rosterLines[0].Replace('"', '').Replace(' ', '').Trim()) -ne '員編,姓名,身分') {
         $rosterErrors.Add('第 1 列：表頭必須是「員編,姓名,身分」')
     } else {
-        $seenNos = @{}
+        # 區分大小寫，與 RosterImporter 的 StringComparer.Ordinal 一致（@{} 預設不分大小寫，不能用）
+        $seenNos = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
         $rosterRows = 0
         for ($i = 1; $i -lt $rosterLines.Count; $i++) {
             $n = $i + 1
-            $f = @(($rosterLines[$i].TrimEnd("`r") -split ',') | ForEach-Object { $_.Trim() })
+            # 欄位前後的引號會去掉；不處理欄位內含逗號
+            $f = @(($rosterLines[$i].TrimEnd("`r") -split ',') | ForEach-Object { $_.Trim().Trim('"').Trim() })
             if (-not ($f | Where-Object { $_ -ne '' })) { continue }
             if ($f.Count -ne 3) { $rosterErrors.Add("第 $n 列：欄位數必須是 3（員編,姓名,身分），實際是 $($f.Count)"); continue }
             $rosterRows++
             if ($f[0] -eq '') { $rosterErrors.Add("第 $n 列：員編是空的") }
-            elseif ($seenNos.ContainsKey($f[0])) { $rosterErrors.Add("第 $n 列：員編與前面的列重複") }
-            else { $seenNos[$f[0]] = $true }
+            elseif (-not $seenNos.Add($f[0])) { $rosterErrors.Add("第 $n 列：員編與前面的列重複") }
             if ($f[1] -eq '') { $rosterErrors.Add("第 $n 列：姓名是空的") }
-            if ($knownRankCodes -cnotcontains $f[2]) { $rosterErrors.Add("第 $n 列：不認得的身分代碼「$($f[2])」（可用：$($knownRankCodes -join ', ')）") }
+            if ($knownRankCodes -cnotcontains $f[2]) { $rosterErrors.Add("第 $n 列：身分代碼不在已知清單內（可用：$($knownRankCodes -join ', ')）") }
         }
         if ($rosterRows -eq 0 -and $rosterErrors.Count -eq 0) { $rosterErrors.Add('沒有任何人員列') }
     }

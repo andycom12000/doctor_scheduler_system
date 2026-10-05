@@ -69,6 +69,12 @@ public static class ApiHost
 
     public static async Task<WebApplication> BuildAsync(ApiHostOptions options, CancellationToken cancellationToken = default)
     {
+        // 名冊來源二選一：放在最前面，免得建好 host 才發現選項矛盾
+        if (options.SeedReferenceRoster && options.RosterFilePath is not null)
+        {
+            throw new ArgumentException("SeedReferenceRoster 與 RosterFilePath 不可同時指定", nameof(options));
+        }
+
         // ContentRoot 預設是目前工作目錄；WPF exe 由捷徑啟動時那可以是任何地方。
         // portable 的前提是一切都在程式旁，與 SchedulerDatabase.DefaultPath 一樣以 AppContext.BaseDirectory 為準。
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
