@@ -25,6 +25,7 @@
   -->
   <ItemGroup>
     <Compile Include="..\..\src\Scheduler.Shell\WebViewBridge.cs" Link="WebViewBridge.cs" />
+    <Compile Include="..\..\src\Scheduler.Shell\ShellSafety.cs" Link="ShellSafety.cs" />
   </ItemGroup>
 
 </Project>
