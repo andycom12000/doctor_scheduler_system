@@ -5,6 +5,7 @@
  * 狀態切換／刪除）。純函式在 `staffList.ts`，這裡只接資料與畫面。
  */
 import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { Plus, Search } from 'lucide-vue-next'
 import PageLayout from '@/components/PageLayout.vue'
 import { useConfirm } from '@/composables/useConfirm'
@@ -32,6 +33,7 @@ import {
   type StatusFilter,
   visibleStaff,
 } from './staffList'
+import { confirmLeaveIfDirty } from './leaveGuard'
 
 const { ym } = useYearMonth()
 
@@ -131,6 +133,9 @@ async function confirmDiscardIfDirty(): Promise<boolean> {
     cancelText: '繼續編輯',
   })
 }
+
+// 路由離開同樣會丟掉表單修改（#99），與設定頁一致用 onBeforeRouteLeave 攔。
+onBeforeRouteLeave(() => confirmLeaveIfDirty(dirty.value))
 
 async function startCreate(): Promise<void> {
   if (!(await confirmDiscardIfDirty())) return
