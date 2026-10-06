@@ -24,7 +24,7 @@ import { useToast } from '@/composables/useToast'
 import { rememberJobId } from '../variants/jobStorage'
 import { extractBusyJobId } from './lib/solverKickoff'
 import NoStaffGuide from '@/components/NoStaffGuide.vue'
-import { allStaffInactive, hasNoActiveStaff, NO_ACTIVE_STAFF_REASON } from '../staff/rosterGuard'
+import { allStaffInactive, hasNoActiveStaff, solveDisabledReason } from '../staff/rosterGuard'
 import EmptyState from './EmptyState.vue'
 import AreaByDayGrid from './AreaByDayGrid.vue'
 import DayByStaffGrid from './DayByStaffGrid.vue'
@@ -92,6 +92,10 @@ const staffListRes = useResource(staffListKey, () => listStaff())
 const noActiveStaff = computed(() => hasNoActiveStaff(staffListRes.data.value) === true)
 // 求解入口只在確定有人時開放；名冊還沒載入或載入失敗（null）也不開。
 const canSolve = computed(() => hasNoActiveStaff(staffListRes.data.value) === false)
+// 停用原因：可見小字 + aria-describedby；按鈕用 aria-disabled 保持可聚焦（issue #95）
+const solveBlockedReason = computed(() =>
+  solveDisabledReason(staffListRes.data.value, !!staffListRes.error.value),
+)
 const rosterAllInactive = computed(() => allStaffInactive(staffListRes.data.value))
 
 const rankSettingsKey = ref('settings/ranks')
@@ -440,6 +444,7 @@ const writeBusy = computed(
 // 任務指示與空月份的「求解」連結都導向 /variants/{ym}；issue 內文另寫「SCREEN 05」，
 // 兩者不一致時取任務指示與空月份連結一致的那個（PR 說明有記錄）。
 function goToVariants(): void {
+  if (!canSolve.value) return
   router.push({ name: 'variants', params: { ym: ym.value } })
 }
 
@@ -539,11 +544,14 @@ const emptyStateLoading = computed(
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runExport">匯出 Excel</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runPrint">列印</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runValidate">驗證約束</button>
+        <span v-if="solveBlockedReason" id="solve-disabled-reason" class="schedule__solve-reason" data-testid="solve-disabled-reason">
+          {{ solveBlockedReason }}
+        </span>
         <button
           type="button"
           class="btn btn-secondary"
-          :disabled="!canSolve"
-          :title="noActiveStaff ? NO_ACTIVE_STAFF_REASON : undefined"
+          :aria-disabled="!canSolve ? 'true' : undefined"
+          :aria-describedby="solveBlockedReason ? 'solve-disabled-reason' : undefined"
           @click="goToVariants"
         >
           重新求解
@@ -650,6 +658,11 @@ const emptyStateLoading = computed(
 </template>
 
 <style scoped>
+.schedule__solve-reason {
+  font-size: 12px;
+  color: var(--color-accent-900);
+}
+
 .schedule-state {
   padding: var(--space-4);
   font-size: 13px;
