@@ -50,6 +50,15 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
+    /// <summary>顯示前把起始尺寸夾進工作區（小螢幕不讓標題列跑出上緣），再置中。</summary>
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        var area = SystemParameters.WorkArea;
+        (Width, Height) = WindowSizing.Clamp(Width, Height, area.Width, area.Height, MinWidth, MinHeight);
+        Left = area.Left + (area.Width - Width) / 2;
+        Top = area.Top + (area.Height - Height) / 2;
+    }
+
     /// <summary>
     /// 啟動順序：data/ 可寫檢查 → Api（資料庫啟動流程在裡面）→ WebView2 環境 → 攔截 → 導向 index.html。
     /// 任何一步失敗都以對話框說明後關閉，不讓 async void 的例外把 process 炸掉（驗收清單第 4 項）。

@@ -53,7 +53,7 @@ const currentName = computed(() => route.name?.toString())
         </RouterLink>
       </nav>
       <div class="shell__badge">
-        <span class="tag tag-neutral">本機執行 · 免安裝</span>
+        <span class="tag tag-neutral shell__tag">本機執行 · 免安裝</span>
         <span class="shell__version" title="版本">v{{ appVersion }}</span>
       </div>
     </header>
@@ -156,8 +156,34 @@ const currentName = computed(() => route.name?.toString())
 
 /* 窄視窗先讓出版本號，導覽不能被擠掉 */
 @media (max-width: 900px) {
-  .shell__version {
+  .shell__badge {
     display: none;
+  }
+
+  .shell__topbar {
+    gap: var(--space-4);
+  }
+
+  .shell__nav-list {
+    gap: var(--space-4);
+  }
+}
+
+/* 再窄：導覽縮字距，最後保底可橫向捲動（不重疊、仍可點） */
+@media (max-width: 720px) {
+  .shell__topbar {
+    gap: var(--space-3);
+    padding: 0 var(--space-3);
+  }
+
+  .shell__nav-list {
+    gap: var(--space-3);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .shell__brand-name {
+    letter-spacing: 0;
   }
 }
 

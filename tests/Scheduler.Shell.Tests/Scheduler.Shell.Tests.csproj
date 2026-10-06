@@ -26,6 +26,7 @@
   <ItemGroup>
     <Compile Include="..\..\src\Scheduler.Shell\WebViewBridge.cs" Link="WebViewBridge.cs" />
     <Compile Include="..\..\src\Scheduler.Shell\ShellSafety.cs" Link="ShellSafety.cs" />
+    <Compile Include="..\..\src\Scheduler.Shell\WindowSizing.cs" Link="WindowSizing.cs" />
   </ItemGroup>
 
 </Project>
