@@ -4,11 +4,15 @@
  * 版面依 docs/design-ref/screen-01.html 的 `.nv` 頂部導覽（issue #52）；
  * 年月切換器不在這裡，改由有 `:ym` 的頁面各自透過 `PageLayout` 顯示在標題列左側。
  */
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import { watchCalendarSync } from '@/composables/useCalendarSyncNotice'
 import { useYearMonth } from '@/composables/useYearMonth'
+
+// 後端啟動後在背景更新行事曆；有實際更新才 toast 一句話，其餘安靜（#112）
+onMounted(() => void watchCalendarSync())
 
 const route = useRoute()
 const { ym } = useYearMonth()

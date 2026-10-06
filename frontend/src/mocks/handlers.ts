@@ -3,6 +3,7 @@ import type {
   AreaSettings,
   Calendar,
   CalendarDayOverride,
+  CalendarSyncStatus,
   ConstraintSettings,
   CreateSolverJobRequest,
   EligibilityMatrix,
@@ -49,7 +50,7 @@ import {
 import { store, type SolverJobState } from './store'
 
 /**
- * Mock 端點，與 api-contract.yaml 的 42 個操作一一對應，依契約的 tag 分段。
+ * Mock 端點，與 api-contract.yaml 的 43 個操作一一對應，依契約的 tag 分段。
  *
  * **SSE 備註**：`/solver-jobs/{jobId}/stream` 用 `ReadableStream` 模擬
  * `text/event-stream`，本機瀏覽器測試沒問題；但 MSW 對 `EventSource` 攔截的
@@ -799,6 +800,21 @@ const settingsHandlers = [
     const value: MonthlyOverride = { ...body, yearMonth: ym }
     store.monthlyOverrides.set(ym, value)
     return HttpResponse.json(value)
+  }),
+
+  // 自動更新在 mock 裡永遠是「沒開」：前端輪詢一次就結束，不會出現 toast。
+  // 字面路徑要排在 :year 前面。
+  http.get('/api/calendars/sync-status', () => {
+    const response: CalendarSyncStatus = {
+      enabled: false,
+      running: false,
+      finishedAt: null,
+      updatedYears: [],
+      lastSuccessAt: null,
+      lastError: null,
+      years: [],
+    }
+    return HttpResponse.json(response)
   }),
 
   http.get('/api/calendars/:year', ({ params }) => {

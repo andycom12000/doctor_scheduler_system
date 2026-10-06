@@ -35,6 +35,16 @@ public partial class MainWindow : Window
 #endif
 
     /// <summary>
+    /// 行事曆自動更新（#112）只在發佈包（Release）打開：Debug 的開發機不要每次 F5 都連外網。
+    /// 與 <see cref="SeedReferenceRoster"/> 同理用編譯期常數，不被使用者的環境變數意外改變。
+    /// </summary>
+#if DEBUG
+    private const bool CalendarAutoSync = false;
+#else
+    private const bool CalendarAutoSync = true;
+#endif
+
+    /// <summary>
     /// 發佈包的名冊檔（#82）：<c>build/publish.ps1 -RosterFile</c> 驗證後複製到這裡。與 <c>data/</c> 並列、
     /// 不放在裡面：data/ 是執行期狀態，使用者清掉它重來時名冊檔要留著。不存在就是空名冊，正常啟動。
     /// 相對路徑由 <see cref="ApiHost.RosterFileRelativePath"/> 提供（單一來源）。DEBUG 不匯入（用假名參考名單）。
@@ -73,7 +83,8 @@ public partial class MainWindow : Window
                 new ApiHostOptions(
                     UseTestServer: true,
                     SeedReferenceRoster: SeedReferenceRoster,
-                    RosterFilePath: SeedReferenceRoster ? null : RosterFile),
+                    RosterFilePath: SeedReferenceRoster ? null : RosterFile,
+                    CalendarAutoSync: CalendarAutoSync),
                 _shutdown.Token);
             await _app.StartAsync(_shutdown.Token);
             _api = _app.GetTestClient();

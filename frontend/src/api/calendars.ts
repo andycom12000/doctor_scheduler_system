@@ -1,6 +1,6 @@
 /** `settings` 標籤（契約分類），但概念上獨立於五份設定文件：以年為單位的行事曆事實來源。 */
 import { apiGet, apiPatch } from './client'
-import type { Calendar, CalendarDay, CalendarDayOverride } from './types'
+import type { Calendar, CalendarDay, CalendarDayOverride, CalendarSyncStatus } from './types'
 
 export function getCalendar(year: number, signal?: AbortSignal): Promise<Calendar> {
   return apiGet<Calendar>(`/calendars/${year}`, { signal })
@@ -13,4 +13,9 @@ export function overrideCalendarDay(
   signal?: AbortSignal,
 ): Promise<CalendarDay> {
   return apiPatch<CalendarDay>(`/calendars/${year}/${date}`, body, { signal })
+}
+
+/** 行事曆自動更新的狀態（#112）。前端啟動後輪詢，見 `composables/useCalendarSyncNotice.ts`。 */
+export function getCalendarSyncStatus(signal?: AbortSignal): Promise<CalendarSyncStatus> {
+  return apiGet<CalendarSyncStatus>('/calendars/sync-status', { signal })
 }

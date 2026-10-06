@@ -8,7 +8,7 @@
   絕不可混用**，講「點數」或「假日」而不指明是哪一個，一律視為錯誤。
 - `docs/ARCHITECTURE.md` — 技術決策已定案。**第 2 節是「已排除方案」，提任何技術選型前先看過**，
   Blazor / Tauri / Electron / MAUI / Timefold / meta-framework 等都已評估並否決，理由都在裡面。
-- `api-contract.yaml` — 前後端唯一耦合點。42 個操作、52 個 schema。
+- `api-contract.yaml` — 前後端唯一耦合點。43 個操作、53 個 schema。
 - `docs/adr/` — 四個領域決策的理由。動到不可排班日、約束模型、變體產生方式、月結轉快照之前先讀。
 - `docs/constraint-defaults.md` — 7 硬 / 7 軟約束的唯一預設值。seed、mock、測試 fixture 都從它抄，不得另發明代碼或數字。
 
@@ -71,6 +71,13 @@
   **匯出端點**也接上了（§6.4）：`Application/Schedules/ScheduleExportQueries` 攤成格式無關的 `ExportTable`
   （兩種版面、停用者只在有值班時出現、國定假日印名稱），`Api/Export/XlsxRenderer` 用 ClosedXML 轉位元組。
   Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 42 個操作已全部落地
+  **行事曆自動更新**（#112）：啟動後背景從人事總處辦公日曆表（data.gov.tw 資料集 14718，失敗退 jsDelivr 鏡像）
+  更新今年、明年與已有資料的年份。解析／驗證／比對在 `Application/Calendars/Sync/`（Big5 用 BCL 的
+  `CodePagesEncodingProvider`，不需套件），HTTP 來源、`BackgroundService`、`data/calendar-sync.log` 在
+  `Api/CalendarSync/`，狀態存 `app_meta`（不動 schema）。`ApiHostOptions.CalendarAutoSync` 預設 false（測試／e2e
+  不連網；`Program.cs` 預設開、環境變數 `SCHEDULER_CALENDAR_AUTO_SYNC=false` 可關，只有 Release Shell 打開）；
+  `Overridden` 的列不動；差異只看三個旗標、不看名稱；同步過的年份種子不再補內建值；端點
+  `GET /api/calendars/sync-status`（第 43 個操作），前端啟動輪詢、有更新才 toast
 - **求解**已落地（ARCHITECTURE §4.8）。`Scheduler.Application/Solving/`：`ISolver`（一次解一份；權重另放
   `EffectiveWeights`，因為 `ConstraintDefinition.Weight` 上限 100 裝不下乘過 1.5 的數）、`VariantProfiles`
   （三個具名立場的乘數表、多樣性 15 格）、`SolverJobService`（singleton，單一 slot、狀態機、序列三份、

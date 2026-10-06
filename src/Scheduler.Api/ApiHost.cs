@@ -2,11 +2,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Scheduler.Api.CalendarSync;
 using Scheduler.Api.Endpoints;
 using Scheduler.Api.Http;
 using Scheduler.Api.Solving;
 using Scheduler.Application.BlockedDays;
 using Scheduler.Application.Calendars;
+using Scheduler.Application.Calendars.Sync;
 using Scheduler.Application.People;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Scheduling;
@@ -46,6 +48,11 @@ namespace Scheduler.Api;
 /// 檔案存在、資料庫從沒匯入過、人員表空的才匯入，匯入後寫標記不再匯入；檔案不存在或驗證不過就不匯入、正常啟動。
 /// 與 <paramref name="SeedReferenceRoster"/> 同時指定會丟 <see cref="ArgumentException"/>。
 /// </param>
+/// <param name="CalendarAutoSync">
+/// 啟動後在背景從官方來源更新行事曆（#112）。**預設 false，fail-safe**：測試、e2e、直接部署 Api 都不該連外網。
+/// 只有 Release 的 Shell 與開發期 <c>Program.cs</c> 明確傳 true。測試要驗證這條路時用
+/// <see cref="ConfigureServices"/> 把 <see cref="Scheduler.Application.Calendars.Sync.ICalendarSource"/> 換成假的。
+/// </param>
 public sealed record ApiHostOptions(
     bool UseTestServer = false,
     string? DatabasePath = null,
@@ -53,7 +60,8 @@ public sealed record ApiHostOptions(
     Action<IServiceCollection>? ConfigureServices = null,
     string[]? Args = null,
     bool SeedReferenceRoster = false,
-    string? RosterFilePath = null);
+    string? RosterFilePath = null,
+    bool CalendarAutoSync = false);
 
 /// <summary>
 /// 唯一一份 HTTP pipeline 的組裝（ARCHITECTURE §3.2 規則 2）。開發期 Program.cs 與正式版 Shell
@@ -100,6 +108,7 @@ public static class ApiHost
         }
 
         AddApplication(builder.Services);
+        AddCalendarSync(builder.Services, options);
         options.ConfigureServices?.Invoke(builder.Services);
 
         builder.Services.ConfigureHttpJsonOptions(o =>
@@ -122,6 +131,28 @@ public static class ApiHost
         app.MapSolverEndpoints();
 
         return app;
+    }
+
+    /// <summary>
+    /// 行事曆自動更新（#112）。用例與狀態查詢永遠註冊（GET sync-status 任何時候都要答得出來）；
+    /// 來源與背景工作只在 <see cref="ApiHostOptions.CalendarAutoSync"/> 時註冊。
+    /// 紀錄檔與資料庫同在 <c>data/</c>（portable 只寫程式旁）。
+    /// </summary>
+    private static void AddCalendarSync(IServiceCollection services, ApiHostOptions options)
+    {
+        services.AddScoped<CalendarSyncService>();
+        services.AddScoped<CalendarSyncQueries>();
+        services.AddSingleton(new CalendarSyncProgress(options.CalendarAutoSync));
+        services.AddSingleton<ICalendarSyncLog>(sp => new FileCalendarSyncLog(
+            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(options.DatabasePath ?? SchedulerDatabase.DefaultPath))!, "calendar-sync.log"),
+            sp.GetRequiredService<TimeProvider>()));
+
+        if (options.CalendarAutoSync)
+        {
+            services.AddSingleton<ICalendarSource>(_ => new OfficialCalendarSource(CalendarHttp.CreateClient()));
+            services.AddSingleton<ICalendarSource>(_ => new MirrorCalendarSource(CalendarHttp.CreateClient()));
+            services.AddHostedService<CalendarSyncWorker>();
+        }
     }
 
     /// <summary>Application 零套件相依，DI 註冊住在這裡。與 repository 同為 scoped。</summary>

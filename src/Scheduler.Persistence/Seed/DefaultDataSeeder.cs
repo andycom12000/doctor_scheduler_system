@@ -53,8 +53,11 @@ public static class DefaultDataSeeder
 
         // 逐日補缺：內建表有、資料庫沒有的日子才寫；資料庫已有的（含使用者覆寫）一律不動，
         // 這樣新版加進來的年份舊資料庫也拿得到。
+        // 例外：官方資料已同步過的年份（#112）不再補內建值——官方說某天是平日而同步刪了那列時，
+        // 補回去會讓離線啟動時又出現過期的假日。順序是：內建 → 自動更新覆蓋非覆寫列 → 使用者覆寫優先。
         var existingDates = (await db.CalendarDays.Select(d => d.Date).ToListAsync(cancellationToken)).ToHashSet();
-        foreach (var day in BuiltInCalendar.Days.Where(d => !existingDates.Contains(d.Date)))
+        var syncedYears = await CalendarSyncStateRepository.ReadSyncedYearsAsync(db, cancellationToken);
+        foreach (var day in BuiltInCalendar.Days.Where(d => !existingDates.Contains(d.Date) && !syncedYears.Contains(d.Date.Year)))
         {
             await calendar.UpsertAsync(new CalendarException(day, Overridden: false), cancellationToken);
         }

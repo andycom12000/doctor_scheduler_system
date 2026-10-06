@@ -3,6 +3,7 @@ using Scheduler.Api.Export;
 using Scheduler.Api.Http;
 using Scheduler.Application.BlockedDays;
 using Scheduler.Application.Calendars;
+using Scheduler.Application.Calendars.Sync;
 using Scheduler.Application.People;
 using Scheduler.Application.Persistence;
 using Scheduler.Application.Schedules;
@@ -88,6 +89,10 @@ internal static class ReadEndpoints
 
         settings.MapGet("/monthly-overrides/{ym}", async (string ym, ISettingsRepository r, CancellationToken ct) =>
             (await r.GetMonthlyOverrideAsync(Parse.YearMonth(ym), ct)).ToContract());
+
+        // 字面路徑優先於 {year}，不會被吃掉
+        app.MapGet("/api/calendars/sync-status", async (CalendarSyncQueries q, CancellationToken ct) =>
+            (await q.GetStatusAsync(ct)).ToContract());
 
         app.MapGet("/api/calendars/{year}", async (string year, CalendarQueries q, CancellationToken ct) =>
             (await q.GetYearAsync(Parse.Year(year), ct)).ToContract());

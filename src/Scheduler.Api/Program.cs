@@ -14,6 +14,7 @@ using Scheduler.Api;
 // 沒設就是上面的預設（data/scheduler.db + 參考名單），只影響這個開發期進入點，不影響 Shell。
 //   SCHEDULER_DATABASE_PATH         SQLite 檔案路徑（沒設＝程式旁的 data/scheduler.db）
 //   SCHEDULER_SEED_REFERENCE_ROSTER true／false（不分大小寫）；false 就不種參考名單（沒設＝true，其他值丟例外）
+//   SCHEDULER_CALENDAR_AUTO_SYNC    true／false；false 就不在啟動時連外網更新行事曆（沒設＝true，#112）。e2e 設 false
 var databasePath = Environment.GetEnvironmentVariable("SCHEDULER_DATABASE_PATH");
 var seedFlag = Environment.GetEnvironmentVariable("SCHEDULER_SEED_REFERENCE_ROSTER");
 var seedReferenceRoster = string.IsNullOrWhiteSpace(seedFlag)
@@ -21,8 +22,15 @@ var seedReferenceRoster = string.IsNullOrWhiteSpace(seedFlag)
         ? parsedSeed
         : throw new ArgumentException($"SCHEDULER_SEED_REFERENCE_ROSTER 只接受 true 或 false，收到「{seedFlag}」"));
 
+var syncFlag = Environment.GetEnvironmentVariable("SCHEDULER_CALENDAR_AUTO_SYNC");
+var calendarAutoSync = string.IsNullOrWhiteSpace(syncFlag)
+    || (bool.TryParse(syncFlag, out var parsedSync)
+        ? parsedSync
+        : throw new ArgumentException($"SCHEDULER_CALENDAR_AUTO_SYNC 只接受 true 或 false，收到「{syncFlag}」"));
+
 var app = await ApiHost.BuildAsync(new ApiHostOptions(
     Args: args,
     DatabasePath: string.IsNullOrWhiteSpace(databasePath) ? null : databasePath,
-    SeedReferenceRoster: seedReferenceRoster));
+    SeedReferenceRoster: seedReferenceRoster,
+    CalendarAutoSync: calendarAutoSync));
 app.Run();

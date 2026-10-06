@@ -939,6 +939,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MonthlyOverride' }
 
+  /api/calendars/sync-status:
+    get:
+      tags: [settings]
+      operationId: getCalendarSyncStatus
+      summary: 行事曆自動更新的狀態
+      description: |
+        程式啟動後，後端在背景從官方來源（人事行政總處辦公日曆表，政府資料開放平台資料集 14718；
+        主來源失敗時用社群鏡像備援）更新今年、明年與已有資料年份的行事曆。使用者覆寫過的日子不動。
+
+        前端啟動後輪詢這個端點：`running` 為 true 表示背景工作還沒結束；變成 false 後，
+        `updatedYears` 非空就顯示一句 toast（例如「已更新 2028 年行事曆」）。`enabled` 為 false
+        （未開自動更新）時 `running` 恆為 false，不必輪詢。
+
+        `finishedAt`、`updatedYears` 只描述**本次程式執行**的那一輪；`lastSuccessAt`、`lastError`、
+        `years` 跨啟動保存。同步失敗（斷網、逾時、格式不符）一律安靜，原因寫在程式旁的
+        `data/calendar-sync.log`，`lastError` 只放一句摘要。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarSyncStatus' }
+
   /api/calendars/{year}:
     parameters:
       - name: year
@@ -2034,6 +2057,39 @@ components:
         holidayName: { type: [string, 'null'] }
         quotaPointValue: { type: integer }
         overridden: { type: boolean, description: 是否被排班者手動覆寫過 }
+
+    CalendarSyncStatus:
+      type: object
+      required: [enabled, running, finishedAt, updatedYears, lastSuccessAt, lastError, years]
+      properties:
+        enabled: { type: boolean, description: 這次執行有沒有開自動更新 }
+        running: { type: boolean, description: 背景工作是否還沒結束 }
+        finishedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 本次執行的背景工作結束時間；還沒結束為 null
+        updatedYears:
+          type: array
+          items: { type: integer }
+          description: 本次執行實際寫入了變動的年份，遞增排序
+        lastSuccessAt:
+          type: [string, 'null']
+          format: date-time
+          description: 最近一次至少有一年成功取得官方資料的時間（跨啟動）
+        lastError: { type: [string, 'null'], description: 最近一輪的失敗摘要；沒有失敗為 null }
+        years:
+          type: array
+          description: 曾成功同步過的年份與來源
+          items:
+            type: object
+            required: [year, source, syncedAt]
+            properties:
+              year: { type: integer }
+              source:
+                type: string
+                enum: [official, mirror]
+                description: official = 人事行政總處；mirror = 社群鏡像（備援）
+              syncedAt: { type: string, format: date-time }
 
     CalendarDayOverride:
       type: object

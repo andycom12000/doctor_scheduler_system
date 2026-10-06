@@ -147,6 +147,8 @@ async function main(): Promise<number> {
       ASPNETCORE_URLS: `http://${HOST}:${API_PORT}`,
       SCHEDULER_DATABASE_PATH: dbPath,
       SCHEDULER_SEED_REFERENCE_ROSTER: 'false',
+      // 行事曆自動更新會連外網；E2E 要可重現、不依賴網路（#112）
+      SCHEDULER_CALENDAR_AUTO_SYNC: 'false',
       // EF Core 每個 SQL 都會記 info，E2E 的 log 太吵
       'Logging__LogLevel__Microsoft.EntityFrameworkCore': 'Warning',
       // 後端本身沒有業務 log；verbose 時打開請求紀錄，才看得到求解、發布等呼叫

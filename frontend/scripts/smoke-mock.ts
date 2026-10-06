@@ -120,6 +120,19 @@ async function main() {
 
     }
 
+    console.log('2c. GET /calendars/sync-status')
+    {
+      const res = await fetch(`${BASE}/calendars/sync-status`)
+      assert(res.status === 200, 'GET /calendars/sync-status → 200')
+      const body = await res.json()
+      assert(typeof body.enabled === 'boolean' && typeof body.running === 'boolean', 'sync-status enabled／running 是 boolean')
+      assert(Array.isArray(body.updatedYears) && Array.isArray(body.years), 'sync-status updatedYears／years 是陣列')
+      // 真後端可能已同步過（years 非空）；欄位齊全即可，null 欄位要明確輸出
+      for (const key of ['finishedAt', 'lastSuccessAt', 'lastError']) {
+        assert(key in body, `sync-status 有 ${key} 欄位（可為 null）`)
+      }
+    }
+
     await mockOnly('2b. PATCH /calendars/2026/2026-11-05', '會在真後端留下一筆行事曆覆寫', async () => {
       // 刻意挑 seed 月（2026-08／2026-09）以外的日期——這支腳本後面還會斷言
       // 額度點數與公平性點數，若覆寫落在 seed 月內會汙染那些數字。

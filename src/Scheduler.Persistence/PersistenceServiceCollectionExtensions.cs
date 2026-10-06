@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Scheduler.Application.Calendars.Sync;
 using Scheduler.Application.Persistence;
 using Scheduler.Persistence.Repositories;
 
@@ -45,6 +46,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ISettingsRepository, SettingsRepository>();
         services.AddScoped<ICalendarRepository, CalendarRepository>();
         services.AddScoped<ISolverJobRepository, SolverJobRepository>();
+        services.AddScoped<ICalendarSyncStateRepository, CalendarSyncStateRepository>();
         return services;
     }
 }
