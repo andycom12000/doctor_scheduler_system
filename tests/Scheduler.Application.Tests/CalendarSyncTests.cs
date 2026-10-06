@@ -242,6 +242,10 @@ public sealed class CalendarSyncTests
         public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
 
+    /// <summary>真實的年度檔至少有元旦；只有週末的檔案會被當空殼拒絕。</summary>
+    private static Dictionary<DateOnly, (int, string)> NewYearOnly(int year) =>
+        new() { [new DateOnly(year, 1, 1)] = (2, "開國紀念日") };
+
     private static IReadOnlyList<OfficialDay> Official(int year, Dictionary<DateOnly, (int, string)>? special = null) =>
         OfficialCalendar.ParseCsv(YearCsv(year, special), year);
 
@@ -257,15 +261,14 @@ public sealed class CalendarSyncTests
     [Fact]
     public async Task Run_FetchesThisYearAndNextYear_WritesExceptionsAndRecordsState()
     {
-        var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : null));
+        var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
         var (service, store, state, _) = Build(sources: source);
 
         var result = await service.RunAsync();
 
         Assert.Equal(new[] { 2027, 2028 }, source.Calls);
-        Assert.Equal(new[] { 2028 }, result.UpdatedYears);
-        Assert.Equal(YearSyncOutcome.Unchanged, result.Years[2027]);
-        Assert.Equal(3, store.CalendarExceptions.Count);
+        Assert.Equal(new[] { 2027, 2028 }, result.UpdatedYears);
+        Assert.Equal(4, store.CalendarExceptions.Count); // 2027 的元旦 + 2028 的三天
         Assert.All(store.CalendarExceptions.Values, e => Assert.False(e.Overridden));
         Assert.Equal(new[] { 2027, 2028 }, state.State.Years.Select(y => y.Year));
         Assert.All(state.State.Years, y => Assert.Equal("official", y.Source));
@@ -373,7 +376,7 @@ public sealed class CalendarSyncTests
     public async Task Run_PrimaryNotPublishedDoesNotUseMirror()
     {
         var primary = new FakeSource("official", false, y => y == 2027
-            ? Official(y)
+            ? Official(y, NewYearOnly(y))
             : throw new CalendarSyncException(CalendarSyncFailure.NotPublished, "尚未公告"));
         var mirror = new FakeSource("mirror", true, y => Official(y, Holidays2028()));
         var (service, store, state, _) = Build(sources: new ICalendarSource[] { primary, mirror });
@@ -382,7 +385,7 @@ public sealed class CalendarSyncTests
 
         Assert.Equal(YearSyncOutcome.NotPublished, result.Years[2028]);
         Assert.Empty(mirror.Calls);
-        Assert.Empty(store.CalendarExceptions);
+        Assert.DoesNotContain(store.CalendarExceptions.Keys, d => d.Year == 2028);
         Assert.Equal(new[] { 2027 }, state.State.Years.Select(y => y.Year));
         Assert.Null(state.State.LastError); // 尚未公告不是故障
     }
@@ -403,6 +406,25 @@ public sealed class CalendarSyncTests
         Assert.NotNull(state.State.LastError);
         Assert.Contains(log.Lines, l => l.Contains("逾時"));
         Assert.Contains(log.Lines, l => l.Contains("格式不符"));
+    }
+
+    [Fact]
+    public async Task Run_EmptyShellYearIsRejected_BuiltInHolidaysSurvive()
+    {
+        // 通過全部驗證、但一個例外日都沒有的「空殼」年份（例如鏡像在官方公告前放的骨架）不能把內建假日刪光
+        var store = new InMemoryStore();
+        var builtIn = new DateOnly(2027, 2, 5);
+        store.CalendarExceptions[builtIn] = Exception(builtIn, "除夕");
+        var source = new FakeSource("mirror", true, y => Official(y));
+        var primary = new FakeSource("official", false, _ => throw new HttpRequestException("連不上"));
+        var (service, _, state, log) = Build(store, primary, source);
+
+        var result = await service.RunAsync();
+
+        Assert.Equal(YearSyncOutcome.Failed, result.Years[2027]);
+        Assert.True(store.CalendarExceptions.ContainsKey(builtIn));
+        Assert.Empty(state.State.Years); // 沒記成已同步，種子照常補缺
+        Assert.Contains(log.Lines, l => l.Contains("空殼"));
     }
 
     [Fact]

@@ -1,7 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Scheduler.Application.Calendars.Sync;
 using Scheduler.Application.Persistence;
 using Scheduler.Persistence.Repositories;
 

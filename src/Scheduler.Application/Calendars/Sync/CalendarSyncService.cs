@@ -24,25 +24,6 @@ public interface ICalendarSyncLog
     void Write(string message);
 }
 
-public sealed record SyncedYear(int Year, string Source, DateTimeOffset SyncedAt);
-
-/// <summary>跨啟動保存的同步狀態（<c>app_meta</c>）。</summary>
-public sealed record CalendarSyncState(
-    DateTimeOffset? LastSuccessAt,
-    IReadOnlyList<SyncedYear> Years,
-    string? LastError)
-{
-    public static CalendarSyncState Empty { get; } = new(null, Array.Empty<SyncedYear>(), null);
-}
-
-public interface ICalendarSyncStateRepository
-{
-    Task<CalendarSyncState> GetAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>登記變更、不落盤（與其他 repository 一致，由 <see cref="IUnitOfWork"/> 提交）。</summary>
-    Task SaveAsync(CalendarSyncState state, CancellationToken cancellationToken = default);
-}
-
 /// <summary>
 /// 本次程式執行期間的同步進度（singleton，記憶體內）。前端啟動後輪詢它，等 <see cref="Running"/> 變 false 再決定要不要 toast。
 /// <see cref="Enabled"/> 為 false（測試、e2e、未開自動更新）時一開始就不是 running。
@@ -228,6 +209,14 @@ public sealed class CalendarSyncService
         }
 
         var target = OfficialCalendar.ToExceptions(days);
+        if (target.Count == 0)
+        {
+            // 台灣每年 1/1 一定放假，真正的年度檔不可能一個例外日都沒有。這是只有週末的空殼（例如備援鏡像在
+            // 官方公告前先放的骨架）：照單全收會把該年全部非覆寫的內建假日刪光，所以整份拒絕。
+            _log.Write($"{year}: {sourceName} 的資料沒有任何國定假日或補班日，視為空殼、整份不寫");
+            return (YearSyncOutcome.Failed, null);
+        }
+
         var rows = (await _calendar.GetExceptionsAsync(new DateOnly(year, 1, 1), new DateOnly(year, 12, 31), cancellationToken))
             .ToDictionary(e => e.Day.Date);
 

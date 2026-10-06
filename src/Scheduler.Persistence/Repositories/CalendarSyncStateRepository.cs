@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Scheduler.Application.Calendars.Sync;
+using Scheduler.Application.Persistence;
 using Scheduler.Persistence.Entities;
 
 namespace Scheduler.Persistence.Repositories;
