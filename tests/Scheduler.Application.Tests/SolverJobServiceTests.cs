@@ -259,12 +259,18 @@ public class SolverJobServiceTests
         // 縫的回呼等 RunTask 完成（RunAsync 的 finally 已 Dispose），再放行 Cancel，確定性地踩進去
         var (service, store, _) = Setup();
         var created = await service.CreateAsync(Oct, 1, 1);
-        service.AfterLiveLookup = runTask => runTask!.Wait(TimeSpan.FromSeconds(10));
+        var hit = false;
+        service.AfterLiveLookup = runTask =>
+        {
+            hit = true;
+            runTask!.Wait(TimeSpan.FromSeconds(10));
+        };
 
         var view = await service.CancelAsync(created.Record.JobId);
 
         Assert.Equal(SolverJobStatus.Succeeded, view.Record.Status);
         Assert.Equal(SolverJobStatus.Succeeded, store.Jobs[created.Record.JobId].Status);
+        Assert.True(hit, "空窗沒踩到：CancelAsync 查表時工作已不在 _live");
     }
 
     [Fact]

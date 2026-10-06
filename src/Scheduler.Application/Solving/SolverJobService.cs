@@ -182,7 +182,7 @@ public sealed class SolverJobService
             {
                 // 工作剛好在查表與 Cancel 之間收尾並 Dispose 了 CTS：等於已結束，下面回目前的終態即可。
                 // 不採「Dispose 與 Cancel 同鎖」：Cancel 會同步執行已註冊的回呼（求解器的 StopSearch 等），
-                // 抱著 _gate 跑外部回呼有死鎖風險；Dispose 只會在終態落盤之後發生，catch 之後資料庫一定已是終態
+                // 抱著 _gate 跑外部回呼有死鎖風險；Dispose 只發生在終態落盤（或落盤三次失敗放棄）之後
             }
 
             if (live.RunTask is not null)
