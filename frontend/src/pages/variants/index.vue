@@ -418,6 +418,8 @@ async function applyToSchedule(variantId: string): Promise<void> {
   try {
     await applyVariant(ym.value, { jobId: jobId.value, variantId })
     await invalidate(`schedules/${ym.value}`)
+    // 年月切換器的狀態標籤讀月份清單 key，不一起失效會停在「尚無班表」（#105）
+    await invalidate('schedules')
     await router.push({ name: 'schedule', params: { ym: ym.value } })
   } catch (err) {
     applyError.value = describeError(err)
