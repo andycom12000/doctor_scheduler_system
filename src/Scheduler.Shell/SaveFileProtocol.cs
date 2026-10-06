@@ -21,6 +21,8 @@ public static class SaveFileProtocol
     /// <summary>單檔上限（解碼後位元組）。匯出檔只有幾十 KB，上限是擋異常訊息，不是業務限制。</summary>
     public const int MaxBytes = 20 * 1024 * 1024;
 
+    private const string WindowsInvalidChars = "<>:\"/\\|?*";
+
     public const string Saved = "saved";
     public const string Cancelled = "cancelled";
     public const string Failed = "error";
@@ -100,8 +102,8 @@ public static class SaveFileProtocol
         // 兩種分隔符都要切：在非 Windows 的測試主機上 Path.GetFileName 不認得反斜線
         var name = requested.Trim();
         name = name[(name.LastIndexOfAny(['/', '\\']) + 1)..];
-        var invalid = Path.GetInvalidFileNameChars();
-        name = string.Concat(name.Select(c => invalid.Contains(c) || c == ':' ? '_' : c)).Trim().TrimEnd('.');
+        // 寫死 Windows 的非法字元集，不依賴 Path.GetInvalidFileNameChars（Linux 上只回 \0 和 /，測試會漂）
+        name = string.Concat(name.Select(c => c < 32 || WindowsInvalidChars.Contains(c) ? '_' : c)).Trim().TrimEnd('.');
         if (name.Length == 0) return fallback;
 
         return name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? name : name + ".xlsx";

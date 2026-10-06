@@ -71,6 +71,7 @@ public class SaveFileProtocolTests
     [InlineData("C:\\Windows\\evil.xlsx", "evil.xlsx")]
     [InlineData("../../evil.xlsx", "evil.xlsx")]
     [InlineData("a:b*c?.xlsx", "a_b_c_.xlsx")]
+    [InlineData("a<b>c\"d|e\u0001f.xlsx", "a_b_c_d_e_f.xlsx")]
     public void 檔名只留檔名部分_換掉非法字元_副檔名只認_xlsx(string? requested, string expected)
         => Assert.Equal(expected, SaveFileProtocol.SafeFileName(requested));
 

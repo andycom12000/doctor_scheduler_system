@@ -194,11 +194,11 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        string json;
+        ParseOutcome outcome;
         try
         {
             if (!SaveFileProtocol.IsTrustedSource(e.Source)) return;
-            json = e.WebMessageAsJson;
+            outcome = SaveFileProtocol.Parse(e.WebMessageAsJson);
         }
         catch (Exception ex)
         {
@@ -206,7 +206,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        var outcome = SaveFileProtocol.Parse(json);
         if (!outcome.IsForUs) return;
         if (outcome.Request is null)
         {
@@ -244,7 +243,8 @@ public partial class MainWindow : Window
             catch (Exception ex)
             {
                 ShellSafety.Report("SaveFile", ex);
-                Reply(request.Id, SaveFileProtocol.Failed, ex.Message);
+                // 覆寫既有檔時寫到一半失敗，那個檔可能已被截斷
+                Reply(request.Id, SaveFileProtocol.Failed, $"{ex.Message}（選定位置的檔案可能不完整，請確認或重新匯出）");
             }
         });
     }
