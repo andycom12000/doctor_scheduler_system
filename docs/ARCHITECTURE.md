@@ -440,11 +440,15 @@ self-contained 的 Shell 引用它要關掉 `ValidateExecutableReferencesMatchSe
 ### 6.4 匯出檔案
 
 `GET /api/schedules/{ym}/export` **直接回檔案位元組**，不回下載連結。
-前端用 `URL.createObjectURL` 觸發，Shell 接手 WebView2 的 `DownloadStarting` 跳系統存檔對話框
-（WebView2 預設不問就存進「下載」，#33 實測），
+前端用 `fetch` 拿到位元組後，由 `frontend/src/realtime.ts` 的 `saveFile` 分平台：
+開發期（瀏覽器）走隱藏的 `<a download>`；Shell 內**不走 Chromium 的下載機制**——它在使用者選位置之前就會把內容寫進
+「下載」資料夾的 `GUID.tmp`，取消時不刪（#70，違反 §10 驗收）。改成 `chrome.webview.postMessage` 把檔名與
+base64 位元組交給 Shell（`SaveFileProtocol`，只收 `app.local` 來源、有大小上限、檔名清過），Shell 跳系統存檔對話框，
+只在使用者按儲存後才把位元組寫進選定路徑，再用 `PostWebMessageAsJson` 回 `saved`／`cancelled`／`error`；
+取消時任何地方都不留檔。`DownloadStarting` 一律 `Handled + Cancel` 當保險。
+錯誤（例如 409 `DOUBLE_BOOKING_PRESENT`）發生在 `fetch` 階段，與存檔無關，照原本的錯誤 toast。
 使用者存到哪裡是他家的事，不碰 `data/`。
 系統對話框由 Windows shell 自己寫的紀錄（對話框 MRU、資料夾檢視狀態）是 §10「登錄檔無任何寫入」的唯一例外。
-已知問題：Chromium 在使用者選好位置前就把內容寫進「下載」的 `GUID.tmp`，取消時不會刪（#70）。
 
 雲端版一字不用改——這也是不採用「回一個帶 `expiresAt` 的 URL」的理由：
 portable 環境沒有 HTTP server 能提供那種連結，也沒有可放暫存檔的地方。

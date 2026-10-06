@@ -36,7 +36,8 @@ import CandidatePanel from './CandidatePanel.vue'
 import { buildStaffDirectory, dutiesByArea, dutiesByStaff, toDayColumns, vacancyCountMap } from './lib/scheduleGrid'
 import { buildCellRenderIndex, projectRenderIndexToAreaView, projectRenderIndexToStaffView } from './lib/violationStyle'
 import { resolveJumpTarget } from './lib/cellNav'
-import { downloadBlob, outputPromptKind, promptDraftOutput, type DraftOutputDecision } from './lib/draftOutput'
+import { saveFile } from '@/realtime'
+import { outputPromptKind, promptDraftOutput, type DraftOutputDecision } from './lib/draftOutput'
 import { doubleBookingBlockMessage, printBlockMessage } from './lib/hardViolationBadge'
 import { exportFileName, exportLayoutFor, isHardViolationsPresent, needsPublishedEditConfirm } from './lib/writeFlow'
 import { isPrintShortcut, printHeading, printTabFor, type ScheduleTab } from './lib/printSheet'
@@ -347,7 +348,11 @@ const exporting = ref(false)
 
 async function downloadExport(month: string): Promise<void> {
   const { blob, filename } = await exportSchedule(month, exportLayoutFor(activeTab.value))
-  downloadBlob(blob, exportFileName(filename, month))
+  const name = exportFileName(filename, month)
+  const result = await saveFile(blob, name)
+  // 瀏覽器（開發期）沒有存檔對話框的回報，不提示；殼的結果用 toast 一句話
+  if (result === 'saved') toast.info(`已匯出 ${name}`)
+  else if (result === 'cancelled') toast.info('已取消匯出')
 }
 
 async function runExport(): Promise<void> {
