@@ -128,7 +128,7 @@ const titleText = computed(() => emptyStateTitle(props.ym))
   font: 600 10px/1 var(--font-heading);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
 /* PageLayout 傳了 `fill`：body 本身 padding 已歸零、`display:flex`，這裡自己撐滿 */

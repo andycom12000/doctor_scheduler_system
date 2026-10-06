@@ -62,7 +62,7 @@ defineProps<{
 .no-staff__kicker {
   font: 600 10px/1 var(--font-heading);
   letter-spacing: 0.12em;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
 .no-staff__title {
