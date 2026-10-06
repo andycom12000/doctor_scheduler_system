@@ -107,8 +107,9 @@ function joinNames(list: StaffCountView[], limit = 6): string {
       <!-- 判斷依據見 logic.ts 的 evaluateWardSqueezeHint（ARCHITECTURE §9.1）；這裡只顯示結論，
            不在畫面文字裡帶內部文件章節號。 -->
       <div v-if="wardSqueezeHint?.show" class="ward-hint">
-        低年級可值一般病房的剩餘供給吃緊（邊際供需比約 {{ wardSqueezeHint.ratio?.toFixed(2) }} 倍）：低年級登記越多，
-        資深越被拉進 ICU 擠掉 R2/R3，「R2/R3 優先 ICU」這條偏好可能被犧牲。
+        不可排班日的登記讓一般病房的低年級供給比沒人登記時明顯變少（供需比由
+        {{ wardSqueezeHint.baselineRatio?.toFixed(2) }} 降到 {{ wardSqueezeHint.ratio?.toFixed(2) }}）：
+        資深醫師會被拉進 ICU 擠掉 R2/R3，「R2/R3 優先 ICU」這條偏好可能被犧牲。
       </div>
     </section>
 

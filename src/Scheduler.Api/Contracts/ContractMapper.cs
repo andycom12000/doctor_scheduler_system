@@ -107,6 +107,7 @@ internal static class ContractMapper
                 d.Date,
                 d.Shortages.Select(s => new FeasibilityShortageDto(s.AreaTypeCode, s.Required, s.AvailableStaff)).ToArray())).ToArray(),
             r.BySupply.Select(t => new FeasibilityTierDto(t.AreaTypeCodes, t.DemandPoints, t.SupplyPoints, t.Headroom)).ToArray(),
+            r.BaselineBySupply.Select(t => new FeasibilityTierDto(t.AreaTypeCodes, t.DemandPoints, t.SupplyPoints, t.Headroom)).ToArray(),
             r.Warnings);
 
     // -- 設定 ---------------------------------------------------------------

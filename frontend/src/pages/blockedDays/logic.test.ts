@@ -313,78 +313,107 @@ describe('buildShortageDays', () => {
   })
 })
 
+type Tiers = FeasibilityReport['bySupply']
+
+/** 三層巢狀供需：只有最後一層（一般病房）的邊際供給／需求會被用到。 */
+function tiers(wardSupply: number, wardDemand: number): Tiers {
+  return [
+    { areaTypeCodes: ['CHIEF'], demandPoints: 30, supplyPoints: 60, headroom: 30 },
+    { areaTypeCodes: ['CHIEF', 'ICU'], demandPoints: 60, supplyPoints: 120, headroom: 60 },
+    {
+      areaTypeCodes: ['CHIEF', 'ICU', 'WARD'],
+      demandPoints: 60 + wardDemand,
+      supplyPoints: 120 + wardSupply,
+      headroom: 60 + wardSupply - wardDemand,
+    },
+  ]
+}
+
 describe('evaluateWardSqueezeHint', () => {
+  // 基準：邊際供給 200、邊際需求 100，比值 2.0；5% 的界線是 1.9。
+  const baseline = tiers(200, 100)
+
   it('層數不是 3 時回 null（資格非巢狀不顯示）', () => {
-    expect(evaluateWardSqueezeHint([])).toBeNull()
+    expect(evaluateWardSqueezeHint([], baseline)).toBeNull()
     expect(
-      evaluateWardSqueezeHint([{ areaTypeCodes: ['CHIEF'], demandPoints: 1, supplyPoints: 1, headroom: 0 }]),
+      evaluateWardSqueezeHint([{ areaTypeCodes: ['CHIEF'], demandPoints: 1, supplyPoints: 1, headroom: 0 }], baseline),
     ).toBeNull()
   })
 
-  it('邊際供給遠大於邊際需求時不顯示', () => {
-    const bySupply: FeasibilityReport['bySupply'] = [
-      { areaTypeCodes: ['CHIEF'], demandPoints: 30, supplyPoints: 60, headroom: 30 },
-      { areaTypeCodes: ['CHIEF', 'ICU'], demandPoints: 60, supplyPoints: 120, headroom: 60 },
-      { areaTypeCodes: ['CHIEF', 'ICU', 'WARD'], demandPoints: 150, supplyPoints: 400, headroom: 250 },
-    ]
-    const hint = evaluateWardSqueezeHint(bySupply)
+  it('目前等於基準（零登記）時不顯示', () => {
+    const hint = evaluateWardSqueezeHint(tiers(200, 100), baseline)
+    expect(hint?.ratio).toBeCloseTo(2, 10)
+    expect(hint?.baselineRatio).toBeCloseTo(2, 10)
     expect(hint?.show).toBe(false)
-    // 邊際供給 (400-120)=280，邊際需求 (150-60)=90，比值約 3.1x。
-    expect(hint?.ratio).toBeCloseTo(280 / 90, 5)
   })
 
-  it('邊際供給只比邊際需求多不到 1.5 倍時顯示提示', () => {
-    const bySupply: FeasibilityReport['bySupply'] = [
-      { areaTypeCodes: ['CHIEF'], demandPoints: 30, supplyPoints: 60, headroom: 30 },
-      { areaTypeCodes: ['CHIEF', 'ICU'], demandPoints: 60, supplyPoints: 120, headroom: 60 },
-      { areaTypeCodes: ['CHIEF', 'ICU', 'WARD'], demandPoints: 150, supplyPoints: 219, headroom: 69 },
-    ]
-    const hint = evaluateWardSqueezeHint(bySupply)
-    // 邊際供給 (219-120)=99，邊際需求 90，比值 1.1x < 1.5。
-    expect(hint?.show).toBe(true)
+  it('比基準下降超過 5% 時顯示', () => {
+    expect(evaluateWardSqueezeHint(tiers(189, 100), baseline)?.show).toBe(true)
   })
 
-  it('邊際需求為 0 或負值時不適用', () => {
-    const bySupply: FeasibilityReport['bySupply'] = [
-      { areaTypeCodes: ['CHIEF'], demandPoints: 30, supplyPoints: 60, headroom: 30 },
-      { areaTypeCodes: ['CHIEF', 'ICU'], demandPoints: 60, supplyPoints: 120, headroom: 60 },
-      { areaTypeCodes: ['CHIEF', 'ICU', 'WARD'], demandPoints: 60, supplyPoints: 120, headroom: 60 },
-    ]
-    const hint = evaluateWardSqueezeHint(bySupply)
+  it('剛好下降 5% 不顯示', () => {
+    const hint = evaluateWardSqueezeHint(tiers(190, 100), baseline)
+    expect(hint?.ratio).toBeCloseTo(1.9, 10)
     expect(hint?.show).toBe(false)
+  })
+
+  it('比值高於基準不顯示', () => {
+    expect(evaluateWardSqueezeHint(tiers(250, 100), baseline)?.show).toBe(false)
+  })
+
+  it('基準比值本身小於 1（參考名單的常態）也只看相對下降', () => {
+    const lowBaseline = tiers(87, 100)
+    expect(evaluateWardSqueezeHint(tiers(87, 100), lowBaseline)?.show).toBe(false)
+    expect(evaluateWardSqueezeHint(tiers(80, 100), lowBaseline)?.show).toBe(true)
+  })
+
+  it('基準缺失時不顯示', () => {
+    expect(evaluateWardSqueezeHint(tiers(50, 100), undefined)?.show).toBe(false)
+    expect(evaluateWardSqueezeHint(tiers(50, 100), null)?.show).toBe(false)
+    expect(evaluateWardSqueezeHint(tiers(50, 100), [])?.show).toBe(false)
+  })
+
+  it('基準邊際需求為 0 或負值時不顯示', () => {
+    const zeroDemand = tiers(200, 0)
+    const hint = evaluateWardSqueezeHint(tiers(50, 100), zeroDemand)
+    expect(hint?.baselineRatio).toBeNull()
+    expect(hint?.show).toBe(false)
+  })
+
+  it('目前邊際需求為 0 時不顯示', () => {
+    const hint = evaluateWardSqueezeHint(tiers(200, 0), baseline)
     expect(hint?.ratio).toBeNull()
+    expect(hint?.show).toBe(false)
   })
 })
 
-describe('evaluateWardSqueezeHint · 參考名單真實情境（零登記）', () => {
+describe('evaluateWardSqueezeHint · 參考名單真實情境', () => {
   // 用 mock 的可行性演算（與真後端同一套巢狀累計），名冊是 34 人參考名單。
-  // 2026-10 沒有任何種子登記，就是 ARCHITECTURE §9.1 的「零登記基準」。
-  it('零登記時邊際供給／需求比不到 1.5，提示會常駐顯示（現行門檻的已知特性）', () => {
+  it('零登記時目前等於基準，不顯示提示', () => {
     resetStore()
     expect(store.blockedDays.get('2026-10') ?? []).toHaveLength(0)
     const report = computeFeasibility(store, '2026-10')
-    const hint = evaluateWardSqueezeHint(report.bySupply)
-
-    expect(hint).not.toBeNull()
-    // §9.1：低年級供給遠緊於一般病房專屬需求，連零登記都打不平（比值 < 1）。
-    expect(hint?.ratio).toBeLessThan(1.5)
-    expect(hint?.show).toBe(true)
+    expect(report.baselineBySupply).toEqual(report.bySupply)
+    const hint = evaluateWardSqueezeHint(report.bySupply, report.baselineBySupply)
+    expect(hint?.ratio).toBeCloseTo(hint!.baselineRatio!, 10)
+    expect(hint?.show).toBe(false)
   })
 
-  it('登記越多比值越低、提示不會因為登記而消失（單調）', () => {
+  it('低年級登記到額度上限撐不滿（只剩 10/29 到 10/31 三天可排）後比值比基準低、顯示提示；基準不受登記影響', () => {
     resetStore()
-    const baseline = evaluateWardSqueezeHint(computeFeasibility(store, '2026-10').bySupply)
+    const baseline = computeFeasibility(store, '2026-10').baselineBySupply
     const juniors = store.staff.filter((s) => s.status === 'active' && s.eligibleAreaTypes.length === 1)
     store.blockedDays.set(
       '2026-10',
       juniors.flatMap((s) =>
-        ['2026-10-05', '2026-10-06', '2026-10-07'].map((date) => ({ staffId: s.id, date })),
+        Array.from({ length: 28 }, (_, i) => ({ staffId: s.id, date: `2026-10-${String(i + 1).padStart(2, '0')}` })),
       ),
     )
-    const loaded = evaluateWardSqueezeHint(computeFeasibility(store, '2026-10').bySupply)
-    expect(loaded?.ratio).not.toBeNull()
-    expect(loaded!.ratio!).toBeLessThanOrEqual(baseline!.ratio!)
-    expect(loaded?.show).toBe(true)
+    const report = computeFeasibility(store, '2026-10')
+    expect(report.baselineBySupply).toEqual(baseline)
+    const hint = evaluateWardSqueezeHint(report.bySupply, report.baselineBySupply)
+    expect(hint!.ratio!).toBeLessThan(hint!.baselineRatio!)
+    expect(hint?.show).toBe(true)
     resetStore()
   })
 })

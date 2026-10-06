@@ -218,6 +218,7 @@ public sealed class ReadEndpointTests : IClassFixture<ApiFixture>
     {
         var body = await _api.GetAsync("/api/blocked-days/2026-10/feasibility", "getFeasibility");
         Assert.Equal(3, body["bySupply"]!.AsArray().Count);
+        Assert.Equal(3, body["baselineBySupply"]!.AsArray().Count);
         Assert.Equal(31, body["byDate"]!.AsArray().Count);
         Assert.NotNull(body["warnings"]);
     }

@@ -318,20 +318,38 @@ export function buildShortageDays(
 // ---------------------------------------------------------------------------
 
 /**
- * 「一般病房需求 vs 低年級剩餘供給」吃緊的門檻。這裡的邊際供給／需求是從 `bySupply` 巢狀
- * 累計的最後兩層相減得出（見下方函式註解），對應 ARCHITECTURE §9.1 零登記基準：低年級
- * 專屬供給 110 點、一般病房專屬需求 117 點，110/117 ≈ 0.94——連基準都打不平；
- * 沿用設計稿的 1.5 倍門檻校準。
+ * 「一般病房需求 vs 低年級剩餘供給」的提示門檻：目前的邊際供需比，要比**沒人登記時**
+ * （後端回的 `baselineBySupply`）的邊際供需比低超過這個比例才提示（#98）。
+ *
+ * 為什麼不用固定倍數：ARCHITECTURE §9.1 的零登記基準本來就偏緊（參考名單逐月約 0.87～0.94），
+ * 固定門檻不是每月常亮就是永遠不亮。相對基準比，提示才代表「登記讓供給變少了」。
+ * 基準由後端算，名冊組成與當月國定假日都會影響它，前端不自己猜。
  */
-const WARD_SQUEEZE_RATIO_THRESHOLD = 1.5
+const WARD_SQUEEZE_DROP_FROM_BASELINE = 0.05
+
+/** 浮點比較的容差：剛好下降 5% 不算「超過」。 */
+const RATIO_EPSILON = 1e-9
 
 export interface WardSqueezeHint {
   /** 是否顯示「R2/R3 優先 ICU 會被犧牲」提示。 */
   show: boolean
-  /** 邊際供給（低年級可用供給）與邊際需求（一般病房需求）的比值；`marginalDemand <= 0` 時為 null。 */
+  /** 目前邊際供給（低年級可用供給）與邊際需求（一般病房需求）的比值；`marginalDemand <= 0` 時為 null。 */
   ratio: number | null
+  /** 沒人登記時的同一個比值；基準缺失或基準邊際需求 <= 0 時為 null。 */
+  baselineRatio: number | null
   marginalHeadroom: number
   marginalDemand: number
+}
+
+/** 最後兩層相減得出的「一般病房」邊際供需比；層數不是三層或邊際需求 <= 0 回 null。 */
+function marginalWardLayer(bySupply: FeasibilityReport['bySupply']) {
+  if (bySupply.length !== 3) return null
+  const midLayer = bySupply[1]
+  const fullLayer = bySupply[2]
+  const marginalHeadroom = fullLayer.headroom - midLayer.headroom
+  const marginalDemand = fullLayer.demandPoints - midLayer.demandPoints
+  const ratio = marginalDemand > 0 ? (marginalHeadroom + marginalDemand) / marginalDemand : null
+  return { ratio, marginalHeadroom, marginalDemand }
 }
 
 /**
@@ -342,21 +360,24 @@ export interface WardSqueezeHint {
  * 最後一層（全部）與倒數第二層（總值＋ICU）的 `headroom` 差，等於「一般病房」這個邊際層
  * 自己的供需缺口：headroom 定義為 supply − demand，兩層相減時資深＋中階的部分互相抵消，
  * 只剩下低年級（一般病房專屬）的供給與一般病房專屬需求，不需要另外重新統計人數。
+ *
+ * 顯示條件：目前比值 < 基準比值 × (1 − 5%)。基準缺失（舊後端／沒傳）或基準邊際需求 <= 0 時不顯示。
  */
-export function evaluateWardSqueezeHint(bySupply: FeasibilityReport['bySupply']): WardSqueezeHint | null {
-  if (bySupply.length !== 3) return null
-  const midLayer = bySupply[1]
-  const fullLayer = bySupply[2]
-  const marginalHeadroom = fullLayer.headroom - midLayer.headroom
-  const marginalDemand = fullLayer.demandPoints - midLayer.demandPoints
+export function evaluateWardSqueezeHint(
+  bySupply: FeasibilityReport['bySupply'],
+  baselineBySupply?: FeasibilityReport['baselineBySupply'] | null,
+): WardSqueezeHint | null {
+  const current = marginalWardLayer(bySupply)
+  if (!current) return null
+  const baseline = baselineBySupply ? marginalWardLayer(baselineBySupply) : null
+  const baselineRatio = baseline?.ratio ?? null
+  const { ratio, marginalHeadroom, marginalDemand } = current
 
-  if (marginalDemand <= 0) {
-    return { show: false, ratio: null, marginalHeadroom, marginalDemand }
-  }
-
-  const marginalSupply = marginalHeadroom + marginalDemand
-  const ratio = marginalSupply / marginalDemand
-  return { show: ratio < WARD_SQUEEZE_RATIO_THRESHOLD, ratio, marginalHeadroom, marginalDemand }
+  const show =
+    ratio !== null &&
+    baselineRatio !== null &&
+    ratio < baselineRatio * (1 - WARD_SQUEEZE_DROP_FROM_BASELINE) - RATIO_EPSILON
+  return { show, ratio, baselineRatio, marginalHeadroom, marginalDemand }
 }
 
 // ---------------------------------------------------------------------------

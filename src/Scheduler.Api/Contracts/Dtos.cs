@@ -102,6 +102,7 @@ public sealed record FeasibilityReportDto(
     bool Feasible,
     IReadOnlyList<FeasibilityByDateDto> ByDate,
     IReadOnlyList<FeasibilityTierDto> BySupply,
+    IReadOnlyList<FeasibilityTierDto> BaselineBySupply,
     IReadOnlyList<string> Warnings);
 
 public sealed record FeasibilityByDateDto(DateOnly Date, IReadOnlyList<FeasibilityShortageDto> Shortages);

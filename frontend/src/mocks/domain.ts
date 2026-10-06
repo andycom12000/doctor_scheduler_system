@@ -863,7 +863,7 @@ export function computeFeasibility(store: MockStore, ym: string): FeasibilityRep
     return { date, shortages }
   })
 
-  const bySupply = FEASIBILITY_TIERS.map((areaTypeCodes) => {
+  const supplyTiers = (blocked: Map<string, Set<string>>) => FEASIBILITY_TIERS.map((areaTypeCodes) => {
     const demandPoints = dates.reduce((sum, date) => {
       const perDay = store.areas
         .filter((a) => areaTypeCodes.includes(a.areaTypeCode))
@@ -878,7 +878,7 @@ export function computeFeasibility(store: MockStore, ym: string): FeasibilityRep
     for (const s of eligible) {
       const cap = quotaCapFor(store, s.rankCode, ym) ?? 0
       // 登記日不消耗額度：每人供給 = min(上限, 沒登記的日子的額度點數總和)。
-      const blockedDates = blockedByStaff.get(s.id) ?? new Set<string>()
+      const blockedDates = blocked.get(s.id) ?? new Set<string>()
       const availablePoints = dates
         .filter((d) => !blockedDates.has(d))
         .reduce((sum, d) => sum + quotaPointValueOf(store, d), 0)
@@ -886,11 +886,15 @@ export function computeFeasibility(store: MockStore, ym: string): FeasibilityRep
     }
     return { areaTypeCodes, demandPoints, supplyPoints, headroom: supplyPoints - demandPoints }
   })
+  const bySupply = supplyTiers(blockedByStaff)
+  // 基準：同一個月份、沒有任何登記（#98）。與後端 BlockedDayQueries 同一算法。
+  const baselineBySupply = supplyTiers(new Map())
 
   return {
     feasible: bySupply.every((t) => t.headroom >= 0) && byDate.every((d) => d.shortages.length === 0),
     byDate,
     bySupply,
+    baselineBySupply,
     warnings: previousMonthWarnings(store, ym),
   }
 }

@@ -21,6 +21,7 @@ public sealed record FeasibilityReport(
     bool Feasible,
     IReadOnlyList<FeasibilityByDate> ByDate,
     IReadOnlyList<FeasibilityTier> BySupply,
+    IReadOnlyList<FeasibilityTier> BaselineBySupply,
     IReadOnlyList<string> Warnings);
 
 public sealed record FeasibilityByDate(DateOnly Date, IReadOnlyList<FeasibilityShortage> Shortages);
@@ -77,6 +78,8 @@ public sealed class BlockedDayQueries
     /// 層次從資格矩陣推出來，不寫死 CHIEF／ICU／WARD；沒有額度上限的身分（NP）不算供給，
     /// 用「上限是 null」判斷，不看身分代碼</item>
     /// </list>
+    /// <c>baselineBySupply</c> 是同一個月份、同一份名冊與行事曆、但「沒有任何不可排班日登記」的 <c>bySupply</c>，
+    /// 給前端判斷登記讓供給比基準少多少（#98）。基準由後端算，名冊組成與國定假日都會影響它。
     /// </summary>
     public async Task<FeasibilityReport> GetFeasibilityAsync(YearMonth month, CancellationToken cancellationToken = default)
     {
@@ -106,6 +109,21 @@ public sealed class BlockedDayQueries
             byDate.Add(new FeasibilityByDate(date, shortages));
         }
 
+        var bySupply = SupplyTiers(month, loaded, ctx, requiredByType, active, blockedByStaff);
+        var baselineBySupply = SupplyTiers(month, loaded, ctx, requiredByType, active, Enumerable.Empty<BlockedDay>().ToLookup(b => b.StaffId, b => b.Date));
+
+        var feasible = byDate.All(d => d.Shortages.Count == 0) && bySupply.All(t => t.Headroom >= 0);
+        return new FeasibilityReport(feasible, byDate, bySupply, baselineBySupply, loaded.Warnings);
+    }
+
+    private static List<FeasibilityTier> SupplyTiers(
+        YearMonth month,
+        LoadedContext loaded,
+        Domain.Scheduling.SchedulingContext ctx,
+        IReadOnlyDictionary<string, int> requiredByType,
+        IReadOnlyList<Staff> active,
+        ILookup<string, DateOnly> blockedByStaff)
+    {
         var bySupply = new List<FeasibilityTier>();
         var tier = new List<string>();
         foreach (var type in TiersOf(loaded, ctx))
@@ -131,8 +149,7 @@ public sealed class BlockedDayQueries
             bySupply.Add(new FeasibilityTier(tier.ToArray(), demand, supply, supply - demand));
         }
 
-        var feasible = byDate.All(d => d.Shortages.Count == 0) && bySupply.All(t => t.Headroom >= 0);
-        return new FeasibilityReport(feasible, byDate, bySupply, loaded.Warnings);
+        return bySupply;
     }
 
     /// <summary>區域類型由資格最窄（能值的身分最少）到最寬排，同寬時照設定順序。</summary>
