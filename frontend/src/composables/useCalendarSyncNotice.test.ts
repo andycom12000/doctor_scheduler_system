@@ -183,6 +183,41 @@ describe('createCalendarSyncGate', () => {
     expect(deps.notify).not.toHaveBeenCalled()
   })
 
+  it('部分成功時 refresh 期間不露出重試（不會在輪詢收尾前被按下而卡死）；之後重試仍會輪詢到結束', async () => {
+    let release: () => void = () => {}
+    const gateOpen = new Promise<void>((resolve) => (release = resolve))
+    const { gate, deps } = gateWith(
+      [
+        status({ updatedYears: [2027], failureKind: 'unavailable', lastError: '2028 年未能取得資料' }),
+        status({ updatedYears: [2027, 2028] }),
+      ],
+      [status({ running: true })],
+    )
+    deps.refresh.mockImplementationOnce(() => gateOpen)
+
+    const started = gate.start()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(gate.phase.value).toBe('running') // refresh 還沒完成：仍鎖著、沒有按鈕
+    release()
+    await started
+    expect(gate.phase.value).toBe('unavailable')
+
+    await gate.retry()
+    expect(gate.phase.value).toBe('open') // 重試後有人輪詢、收到結束狀態
+    expect(deps.fetchStatus).toHaveBeenCalledTimes(2)
+  })
+
+  it('觸發重試失敗而原本就在等待（running）：補一條輪詢，不會停在無按鈕的畫面', async () => {
+    const { gate, deps } = gateWith([status({ running: true }), status({})])
+    deps.startSync.mockRejectedValue(new Error('boom'))
+    // 模擬在 running 階段被呼叫重試
+    gate.phase.value = 'running'
+    await gate.retry()
+    expect(gate.phase.value).toBe('open')
+    expect(deps.fetchStatus).toHaveBeenCalled()
+  })
+
   it('預設的狀態查詢帶逾時訊號，端點卡住不會讓遮罩永遠空白', async () => {
     vi.resetModules()
     const getStatus = vi.fn(async (_signal?: AbortSignal) => status({}))

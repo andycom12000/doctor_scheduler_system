@@ -6,7 +6,7 @@
 > 必休／希望休兩層、留職停薪、伺服器端分頁——**這些在定案的系統裡都不存在**。
 > 看到設計稿裡還有這些東西，就是待修訂項，見 `DESIGN_REVISIONS.md`。
 
-權威來源是 repo 的 `api-contract.yaml`（OpenAPI，42 個操作、52 個 schema）。
+權威來源是 repo 的 `api-contract.yaml`（OpenAPI，44 個操作、54 個 schema）。
 本檔是給設計用的摘要，形狀有疑義時以 `api-contract.yaml` 為準。
 術語見 `CONTEXT.md`，約束的代碼與預設值見 `CONSTRAINT_DEFAULTS.md`。
 

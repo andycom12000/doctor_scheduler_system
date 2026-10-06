@@ -70,13 +70,13 @@
   nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。
   **匯出端點**也接上了（§6.4）：`Application/Schedules/ScheduleExportQueries` 攤成格式無關的 `ExportTable`
   （兩種版面、停用者只在有值班時出現、國定假日印名稱），`Api/Export/XlsxRenderer` 用 ClosedXML 轉位元組。
-  Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 44 個操作已全部落地
-  **行事曆自動更新**（#112）：啟動後背景從人事總處開放資料（失敗退鏡像）更新行事曆。解析比對在 `Application/Calendars/Sync/`，
+  Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 44 個操作已全部落地。
+- **行事曆自動更新**（#112）：啟動後背景從人事總處開放資料（失敗退鏡像）更新行事曆。解析比對在 `Application/Calendars/Sync/`，
   HTTP 來源／背景工作／`data/calendar-sync.log` 在 `Api/CalendarSync/`，狀態存 `app_meta`。
   `ApiHostOptions.CalendarAutoSync` 預設 false，**只有 Release Shell 開**（開發期 `Program.cs` 預設也關，要試時設
   `SCHEDULER_CALENDAR_AUTO_SYNC=true`）；端點 `GET /api/calendars/sync-status`、`POST /api/calendars/sync`（重試，冪等）；
   同步中所有寫入回 409 `CALENDAR_SYNC_IN_PROGRESS`、前端全畫面遮罩，失敗分 `unavailable`（取不到資料，可略過）與
-  `writeFailed`（寫入失敗，只能重試）；有更新才 toast
+  `writeFailed`（寫入失敗，只能重試）；有更新才 toast。
 - **求解**已落地（ARCHITECTURE §4.8）。`Scheduler.Application/Solving/`：`ISolver`（一次解一份；權重另放
   `EffectiveWeights`，因為 `ConstraintDefinition.Weight` 上限 100 裝不下乘過 1.5 的數）、`VariantProfiles`
   （三個具名立場的乘數表、多樣性 15 格）、`SolverJobService`（singleton，單一 slot、狀態機、序列三份、

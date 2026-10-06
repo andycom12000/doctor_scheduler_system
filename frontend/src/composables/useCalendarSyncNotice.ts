@@ -22,6 +22,8 @@ import { useToast } from './useToast'
 export const SYNC_POLL_INTERVAL_MS = 1500
 /** 狀態查詢的逾時：端點卡住不能讓使用者看著透明遮罩乾等。 */
 export const SYNC_STATUS_TIMEOUT_MS = 5000
+/** 觸發重試的逾時：卡住時退回原本的失敗畫面。 */
+export const SYNC_START_TIMEOUT_MS = 10000
 /** 連續幾次查不到狀態就放棄、解鎖（狀態端點壞了不能把使用者永遠鎖在畫面外）。 */
 export const SYNC_MAX_STATUS_ERRORS = 2
 
@@ -64,7 +66,7 @@ export interface GateDeps {
 
 const defaultDeps: GateDeps = {
   fetchStatus: () => getCalendarSyncStatus(AbortSignal.timeout(SYNC_STATUS_TIMEOUT_MS)),
-  startSync: () => startCalendarSync(),
+  startSync: () => startCalendarSync(AbortSignal.timeout(SYNC_START_TIMEOUT_MS)),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   notify: (text) => void useToast().info(text),
   refresh: async () => {
@@ -89,41 +91,48 @@ export function createCalendarSyncGate(overrides: Partial<GateDeps> = {}): Calen
   const phase = ref<GatePhase>('checking')
   const status = ref<CalendarSyncStatus | null>(null)
   let continuedWithStale = false
-  let polling = false
+  let current: Promise<void> | null = null
   let refreshed = false
 
   async function apply(s: CalendarSyncStatus): Promise<void> {
     status.value = s
-    phase.value = phaseOf(s, continuedWithStale)
+    const next = phaseOf(s, continuedWithStale)
     if (!s.running && s.updatedYears.length > 0 && !refreshed) {
+      // 先刷新、後換畫面：刷新期間仍是鎖住的 running，不會提早冒出「重試」讓人在輪詢還沒收尾時按
       refreshed = true
+      phase.value = 'running'
       await deps.refresh()
+      phase.value = next
       // 有失敗時不 toast：遮罩已說明哪些年份更新、哪些失敗，不要兩個訊息打架
       if (!s.failureKind) deps.notify(syncToastText(s.updatedYears, s.affectedPublishedMonths))
+      return
     }
+    phase.value = next
   }
 
-  async function poll(): Promise<void> {
-    if (polling) return
-    polling = true
-    try {
-      let errors = 0
-      for (;;) {
-        try {
-          const s = await deps.fetchStatus()
-          errors = 0
-          await apply(s)
-          if (!s.running) return
-        } catch {
-          if (++errors >= SYNC_MAX_STATUS_ERRORS) {
-            phase.value = 'open'
-            return
-          }
+  function poll(): Promise<void> {
+    if (current) return current
+    current = pollLoop().finally(() => {
+      current = null
+    })
+    return current
+  }
+
+  async function pollLoop(): Promise<void> {
+    let errors = 0
+    for (;;) {
+      try {
+        const s = await deps.fetchStatus()
+        errors = 0
+        await apply(s)
+        if (!s.running) return
+      } catch {
+        if (++errors >= SYNC_MAX_STATUS_ERRORS) {
+          phase.value = 'open'
+          return
         }
-        await deps.sleep(SYNC_POLL_INTERVAL_MS)
       }
-    } finally {
-      polling = false
+      await deps.sleep(SYNC_POLL_INTERVAL_MS)
     }
   }
 
@@ -136,8 +145,12 @@ export function createCalendarSyncGate(overrides: Partial<GateDeps> = {}): Calen
       await apply(await deps.startSync())
     } catch {
       phase.value = before === 'stale' ? 'unavailable' : before // 觸發失敗：留在原本的錯誤畫面
+      // 原本就在鎖住的等待狀態（running／checking）：沒人輪詢就會永遠停在那，補上一條
+      if (before === 'running' || before === 'checking') await poll()
       return
     }
+    // 若還有一條舊輪詢在收尾（它看到的可能是過期的 running=false），等它結束再重新輪詢
+    if (current) await current
     await poll()
   }
 

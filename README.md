@@ -19,7 +19,7 @@ portable 桌面程式（WPF 殼 + WebView2 渲染 + Vite SPA 前端）。
 
 ## 現況
 
-後端各層與前端畫面已落地，契約 42 個操作全數實作，求解、匯出、發佈包腳本都已可用。
+後端各層與前端畫面已落地，契約 44 個操作全數實作，求解、匯出、發佈包腳本都已可用。
 還在進行的工作與各層細節見 [`CLAUDE.md`](CLAUDE.md) 的「現況」與
 [GitHub Issues](https://github.com/andycom12000/doctor_scheduler_system/issues)。
 

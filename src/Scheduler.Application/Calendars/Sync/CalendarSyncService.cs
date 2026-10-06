@@ -212,10 +212,16 @@ public sealed class CalendarSyncService
         // 只同步今年與明年：過去的年份不會再變，每次啟動都重抓只會拉長（離線時的）等待
         var thisYear = _time.GetLocalNow().Year;
         var years = new[] { thisYear, thisYear + 1 };
-        CalendarSyncState previous;
-        using (var scope = _scopes.Create())
+        var previous = CalendarSyncState.Empty;
+        try
         {
+            using var scope = _scopes.Create();
             previous = await scope.State.GetAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 讀不到狀態不該讓整輪白做：當作沒有同步過的年份繼續，結果的分類照實算
+            _log.Write($"讀取同步狀態失敗：{ex.GetType().Name}: {ex.Message}");
         }
 
         var knownYears = previous.Years.Select(y => y.Year).ToHashSet();
@@ -226,6 +232,7 @@ public sealed class CalendarSyncService
         var affected = new SortedSet<string>(StringComparer.Ordinal);
         var errors = new List<string>();
         var networkDown = false;
+        var networkFailedSources = new HashSet<string>(); // 同一輪內記住網路層失敗的來源（含 metadata 逾時），後面的年份不再等一次逾時
         foreach (var year in years)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -241,7 +248,7 @@ public sealed class CalendarSyncService
             try
             {
                 var mustExist = year <= thisYear || knownYears.Contains(year);
-                var (outcome, source, months) = await SyncYearAsync(year, mustExist, unreachableYears, cancellationToken);
+                var (outcome, source, months) = await SyncYearAsync(year, mustExist, unreachableYears, networkFailedSources, cancellationToken);
                 outcomes[year] = outcome;
                 if (source is not null)
                 {
@@ -274,8 +281,9 @@ public sealed class CalendarSyncService
             }
         }
 
-        using (var scope = _scopes.Create())
+        try
         {
+            using var scope = _scopes.Create();
             var latest = await scope.State.GetAsync(cancellationToken);
             var merged = latest.Years.Where(y => !synced.ContainsKey(y.Year)).Concat(synced.Values).OrderBy(y => y.Year).ToArray();
             await scope.State.SaveAsync(
@@ -285,6 +293,12 @@ public sealed class CalendarSyncService
                     errors.Count > 0 ? string.Join("；", errors) : null),
                 cancellationToken);
             await scope.UnitOfWork.CommitAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 各年已各自 commit：只有「記錄狀態」失敗，不能把已算出的分類與 updatedYears 丟掉
+            // （離線的 unavailable 不該變成只能重試；已更新的年份前端仍要讓快取失效）
+            _log.Write($"儲存同步狀態失敗：{ex.GetType().Name}: {ex.Message}");
         }
 
         // 只有「拿到通過驗證的資料、但寫入失敗」是 WriteFailed（只能重試）；其餘取不到資料的情況一律 Unavailable（可略過）
@@ -308,7 +322,7 @@ public sealed class CalendarSyncService
     };
 
     private async Task<(YearSyncOutcome Outcome, string? Source, IReadOnlyList<string> AffectedPublishedMonths)> SyncYearAsync(
-        int year, bool mustExist, ISet<int> unreachableYears, CancellationToken cancellationToken)
+        int year, bool mustExist, ISet<int> unreachableYears, ISet<string> networkFailedSources, CancellationToken cancellationToken)
     {
         IReadOnlyList<OfficialDay>? days = null;
         ICalendarSource? chosen = null;
@@ -319,6 +333,16 @@ public sealed class CalendarSyncService
         {
             if (source.IsFallback && !primaryFailed)
             {
+                continue;
+            }
+
+            if (networkFailedSources.Contains(source.Name))
+            {
+                // 這一輪這個來源已經網路層失敗過：不再讓使用者多等一次逾時
+                primaryFailed = true;
+                attempts++;
+                networkFailures++;
+                _log.Write($"{year}: {source.Name} 本輪已網路層失敗，略過");
                 continue;
             }
 
@@ -352,6 +376,7 @@ public sealed class CalendarSyncService
                 if (IsNetworkError(ex))
                 {
                     networkFailures++;
+                    networkFailedSources.Add(source.Name);
                 }
 
                 _log.Write($"{year}: {source.Name} 取得失敗：{ex.GetType().Name}: {ex.Message}");

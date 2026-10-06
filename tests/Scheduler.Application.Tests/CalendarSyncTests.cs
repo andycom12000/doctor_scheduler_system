@@ -313,6 +313,8 @@ public sealed class CalendarSyncTests
 
         /// <summary>upsert 這一天時丟例外（前面幾天已經暫存）。</summary>
         public DateOnly? ThrowOnUpsert { get; set; }
+        public bool FailStateRead { get; set; }
+        public bool FailStateSave { get; set; }
 
         public ICalendarSyncScope Create() => new Scope(this);
 
@@ -381,10 +383,16 @@ public sealed class CalendarSyncTests
                 return true;
             }
 
-            public Task<CalendarSyncState> GetAsync(CancellationToken cancellationToken = default) => _owner._state.GetAsync(cancellationToken);
+            public Task<CalendarSyncState> GetAsync(CancellationToken cancellationToken = default) =>
+                _owner.FailStateRead ? throw new InvalidOperationException("模擬讀狀態失敗") : _owner._state.GetAsync(cancellationToken);
 
             public Task SaveAsync(CalendarSyncState state, CancellationToken cancellationToken = default)
             {
+                if (_owner.FailStateSave)
+                {
+                    throw new InvalidOperationException("模擬存狀態失敗");
+                }
+
                 _pendingState = state;
                 return Task.CompletedTask;
             }
@@ -444,6 +452,47 @@ public sealed class CalendarSyncTests
         Assert.Equal(new[] { 2028 }, state.State.Years.Select(y => y.Year));
         Assert.Contains("2027 年寫入失敗", state.State.LastError);
         Assert.Contains(log.Lines, l => l.Contains("2027") && l.Contains("模擬 commit 失敗"));
+    }
+
+    [Fact]
+    public async Task Run_StateSaveFails_KeepsClassificationAndUpdatedYears()
+    {
+        // 離線 + 存狀態失敗：仍是 Unavailable（可略過），不能變成只能重試
+        var offline = BuildStaging(new InMemoryStore(), new FakeSource("official", false, _ => throw new HttpRequestException("dns")));
+        offline.Scopes.FailStateSave = true;
+        var offlineResult = await offline.Service.RunAsync();
+        Assert.Equal(CalendarSyncFailureKind.Unavailable, offlineResult.FailureKind);
+
+        // 各年已 commit、只有狀態存不進去：updatedYears 要保留，前端才會讓快取失效
+        var store = new InMemoryStore();
+        var online = BuildStaging(store, new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y))));
+        online.Scopes.FailStateSave = true;
+        var result = await online.Service.RunAsync();
+        Assert.Equal(new[] { 2027, 2028 }, result.UpdatedYears);
+        Assert.Null(result.FailureKind);
+        Assert.True(store.CalendarExceptions.ContainsKey(new DateOnly(2028, 1, 3)));
+        Assert.Contains(online.Log.Lines, l => l.Contains("儲存同步狀態失敗"));
+
+        // 開頭讀狀態失敗：照樣跑完這一輪
+        var readFail = BuildStaging(new InMemoryStore(), new FakeSource("official", false, y => Official(y, NewYearOnly(y))));
+        readFail.Scopes.FailStateRead = true;
+        Assert.Equal(new[] { 2027, 2028 }, (await readFail.Service.RunAsync()).UpdatedYears);
+    }
+
+    [Fact]
+    public async Task Run_PrimaryNetworkFailureIsRememberedWithinTheRun()
+    {
+        // 主來源逾時：第二年不再等一次，直接用備援
+        var primary = new FakeSource("official", false, _ => throw new TaskCanceledException("timeout"));
+        var mirror = new FakeSource("mirror", true, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
+        var (service, _, _, _) = Build(sources: new ICalendarSource[] { primary, mirror });
+
+        var result = await service.RunAsync();
+
+        Assert.Equal(new[] { 2027 }, primary.Calls);
+        Assert.Equal(new[] { 2027, 2028 }, mirror.Calls);
+        Assert.Equal(new[] { 2027, 2028 }, result.UpdatedYears);
+        Assert.Null(result.FailureKind);
     }
 
     [Fact]
