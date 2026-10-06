@@ -275,11 +275,11 @@ a {
   border-color: var(--color-accent);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--color-accent-600);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled):not([aria-disabled='true']) {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
 

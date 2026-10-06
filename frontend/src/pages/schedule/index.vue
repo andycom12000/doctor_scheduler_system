@@ -544,9 +544,24 @@ const emptyStateLoading = computed(
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runExport">匯出 Excel</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runPrint">列印</button>
         <button type="button" class="btn btn-secondary" :disabled="writeBusy" @click="runValidate">驗證約束</button>
-        <span v-if="solveBlockedReason" id="solve-disabled-reason" class="schedule__solve-reason" data-testid="solve-disabled-reason">
+        <span
+          v-if="solveBlockedReason"
+          id="solve-disabled-reason"
+          class="tag tag-neutral schedule__solve-reason"
+          :title="solveBlockedReason"
+          data-testid="solve-disabled-reason"
+        >
           {{ solveBlockedReason }}
         </span>
+        <button
+          v-if="staffListRes.error.value"
+          type="button"
+          class="btn btn-secondary"
+          data-testid="solve-staff-retry"
+          @click="staffListRes.reload()"
+        >
+          重試
+        </button>
         <button
           type="button"
           class="btn btn-secondary"
@@ -659,8 +674,11 @@ const emptyStateLoading = computed(
 
 <style scoped>
 .schedule__solve-reason {
-  font-size: 12px;
-  color: var(--color-accent-900);
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: inline-block;
 }
 
 .schedule-state {

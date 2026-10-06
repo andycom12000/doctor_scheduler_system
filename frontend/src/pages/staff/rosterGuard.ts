@@ -22,16 +22,16 @@ export function allStaffInactive(res: ListStaffResponse | null | undefined): boo
 
 export const NO_ACTIVE_STAFF_REASON = '名冊沒有在職人員，無法求解'
 
-export const STAFF_LOAD_FAILED_REASON = '名冊讀取失敗，無法確認能否求解，請重新整理'
-export const STAFF_LOADING_REASON = '名冊載入中，暫時無法求解'
+export const STAFF_LOAD_FAILED_REASON = '名冊讀取失敗，無法確認能否求解'
 
 /**
  * 「重新求解」不能按時要讓人讀得到的原因（issue #95）。可以按則回 null。
- * 讀取失敗與載入中也要有說法，不能只是永遠 disabled；求解入口只在名冊確定有人時開放。
+ * 讀取失敗要有說法，不能只是永遠 disabled；載入中回 null（只停用按鈕，不出字，避免冷載入時工具列跳動）。
+ * 求解入口只在名冊確定有人時開放。
  */
 export function solveDisabledReason(res: ListStaffResponse | null | undefined, loadFailed: boolean): string | null {
   const noStaff = hasNoActiveStaff(res)
   if (noStaff === false) return null
   if (noStaff === true) return NO_ACTIVE_STAFF_REASON
-  return loadFailed ? STAFF_LOAD_FAILED_REASON : STAFF_LOADING_REASON
+  return loadFailed ? STAFF_LOAD_FAILED_REASON : null
 }
