@@ -118,6 +118,8 @@ test('全新資料庫：建人員 → 登記不可排班日 → 求解套用 →
 
   // 5. 排班主表：草稿、看得到值班。為了讓「硬違規確認」一定出現（求解結果可能零違規），
   // 用 API 清掉一格（造一個空缺，同 #83），重新載入後違規側欄必有硬違規。
+  // 狀態 badge 不經 reload 就要是「草稿」（#105：套用變體後清單 key 也要失效）。
+  await expect(page.locator('.status-badge')).toContainText('草稿')
   const schedule = (await (await request.get(`/api/schedules/${MONTH}`)).json()) as {
     duties: Array<{ areaId: string; date: string; staffId: string | null }>
   }
@@ -130,9 +132,6 @@ test('全新資料庫：建人員 → 登記不可排班日 → 求解套用 →
   })
   expect(cleared.status()).toBe(200)
   await page.reload()
-  // 狀態 badge 放到 reload 之後才驗：套用變體後切到排班主表，年月切換器仍顯示「尚無班表」
-  // （變體頁的 apply 只 invalidate `schedules/{ym}`、沒 invalidate 清單 `schedules`），見 PR 說明的範圍外發現。
-  await expect(page.locator('.status-badge')).toContainText('草稿')
   const sidebar = page.locator('.violation-sidebar')
   await expect(sidebar).toBeVisible()
   await expect(sidebar.locator('.violation-sidebar__row').first()).toBeVisible()
