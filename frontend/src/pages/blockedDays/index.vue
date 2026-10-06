@@ -141,7 +141,7 @@ const totalCount = computed(() => (registration.value ? totalRegisteredCount(reg
 const shortageDays = computed(() =>
   feasibility.value ? buildShortageDays(feasibility.value.byDate, chiefCode.value, areaTypeNameByCode.value) : [],
 )
-const wardSqueezeHint = computed(() => (feasibility.value ? evaluateWardSqueezeHint(feasibility.value.bySupply) : null))
+const wardSqueezeHint = computed(() => (feasibility.value ? evaluateWardSqueezeHint(feasibility.value.bySupply, feasibility.value.baselineBySupply) : null))
 
 // 狀態字樣（草稿／已發布／尚無班表）已經是 YearMonthSwitcher 的 `.tag.tag-outline`，
 // 這裡不重複印，改印登記筆數這種切換器不會顯示的資訊（PR #63 審查回饋）。

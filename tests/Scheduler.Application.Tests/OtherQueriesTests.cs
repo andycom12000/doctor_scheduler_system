@@ -77,6 +77,25 @@ public class BlockedDayQueriesTests
     }
 
     [Fact]
+    public async Task 可行性_基準是零登記的供需_不受登記影響_需求點數相同()
+    {
+        var store = new InMemoryStore().WithStaff("r5", DefaultRanks.R5);
+        var q = new BlockedDayQueries(store.Loader);
+        var zero = await q.GetFeasibilityAsync(Oct);
+        Assert.Equal(zero.BySupply.Select(t => t.SupplyPoints), zero.BaselineBySupply.Select(t => t.SupplyPoints));
+
+        foreach (var d in Oct.Days().Take(28)) // 只剩 10/29 到 10/31 三天可排，供給被壓低
+        {
+            store.WithBlockedDay("r5", d);
+        }
+
+        var loaded = await q.GetFeasibilityAsync(Oct);
+        Assert.Equal(zero.BySupply.Select(t => t.SupplyPoints), loaded.BaselineBySupply.Select(t => t.SupplyPoints));
+        Assert.True(loaded.BySupply[0].SupplyPoints < loaded.BaselineBySupply[0].SupplyPoints);
+        Assert.Equal(loaded.BaselineBySupply[0].DemandPoints, loaded.BySupply[0].DemandPoints);
+    }
+
+    [Fact]
     public async Task 可行性_正常登記量不該報無解_登記到只剩幾天才會壓低供給()
     {
         var store = new InMemoryStore().WithStaff("r5", DefaultRanks.R5);

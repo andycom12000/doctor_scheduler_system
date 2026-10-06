@@ -568,8 +568,9 @@ paths:
           （總值 ⊂ R4~R6；ICU ⊂ R2~R6；一般病房 ⊂ 全體），所以不能逐區域類型
           各算各的——R2 會同時被算進 ICU 與一般病房。正確的三道不等式：
           總值需求 ≤ 資深供給；總值＋ICU 需求 ≤ 資深＋中階供給；全部需求 ≤ 全部供給。
-          其中「一般病房需求 vs 低年級剩餘供給」那一層最值得盯——它一旦吃緊，
-          資深就會被拉進 ICU 擠掉 R2/R3，「R2/R3 優先 ICU」這條偏好就會被犧牲。
+          其中「一般病房需求 vs 低年級剩餘供給」那一層最值得盯——登記讓它比沒人登記時
+          明顯變少，資深就會被拉進 ICU 擠掉 R2/R3，「R2/R3 優先 ICU」這條偏好就會被犧牲。
+          `baselineBySupply` 是沒有任何登記時的同形狀基準，供比較用。
       responses:
         '200':
           description: OK
@@ -1573,7 +1574,7 @@ components:
 
     FeasibilityReport:
       type: object
-      required: [feasible, byDate, bySupply]
+      required: [feasible, byDate, bySupply, baselineBySupply]
       properties:
         feasible: { type: boolean }
         byDate:
@@ -1612,6 +1613,22 @@ components:
                 type: integer
                 description: 每人取「額度上限」與「未登記日的額度點數總和」較小者，再加總。登記日不消耗額度
               headroom: { type: integer, description: '`supply − demand`，負數即無解' }
+        baselineBySupply:
+          type: array
+          description: |
+            同一個月份、同一份名冊與行事曆，但**假設沒有任何不可排班日登記**的 `bySupply`（形狀相同）。
+            供前端判斷登記讓「一般病房的低年級供給」比沒人登記時少了多少：基準由後端算，
+            名冊組成與當月國定假日都會影響它，前端不自己猜。
+          items:
+            type: object
+            required: [areaTypeCodes, demandPoints, supplyPoints, headroom]
+            properties:
+              areaTypeCodes:
+                type: array
+                items: { type: string }
+              demandPoints: { type: integer }
+              supplyPoints: { type: integer }
+              headroom: { type: integer }
         warnings:
           type: array
           description: 非阻斷的提醒，例：上月尚未發布、月結轉為空

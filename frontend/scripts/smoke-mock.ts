@@ -337,6 +337,11 @@ async function main() {
       assert(feasibility.status === 200, 'GET feasibility → 200')
       const body = await feasibility.json()
       assert(body.bySupply.length === 3, 'bySupply 有三層巢狀累計')
+      assert(body.baselineBySupply.length === 3, 'baselineBySupply（零登記基準）也是三層')
+      assert(
+        body.baselineBySupply.every((t: { demandPoints: number }, i: number) => t.demandPoints === body.bySupply[i].demandPoints),
+        '基準與目前的需求點數相同（只有供給受登記影響）',
+      )
     }
 
     console.log('9b. blocked-days PUT/DELETE（登記再清除，真後端不留痕）')
