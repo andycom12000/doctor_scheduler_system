@@ -210,6 +210,9 @@ public sealed class CalendarSyncTests
         public string Name { get; }
         public bool IsFallback { get; }
         public List<int> Calls { get; } = new();
+        public int BeginRuns { get; private set; }
+
+        public void BeginRun() => BeginRuns++;
 
         public Task<IReadOnlyList<OfficialDay>> FetchYearAsync(int year, CancellationToken cancellationToken)
         {
@@ -421,24 +424,26 @@ public sealed class CalendarSyncTests
     public async Task Run_CommitFailureOfOneYear_LeavesThatYearUntouched_AndLaterCommitsDoNotCarryItOut()
     {
         var store = new InMemoryStore();
-        var may1 = new DateOnly(2026, 5, 1);
+        var may1 = new DateOnly(2027, 5, 1);
         store.CalendarExceptions[may1] = Exception(may1, "勞動節");
-        // 2026 官方檔只有元旦：套用的話會刪 5/1、加 1/1；但 2026 的 commit 會失敗
+        // 2027 官方檔只有元旦：套用的話會刪 5/1、加 1/1；但 2027 的 commit 會失敗
         var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
         var (service, _, state, log, scopes) = BuildStaging(store, source);
-        scopes.FailCommitForYear = 2026;
+        scopes.FailCommitForYear = 2027;
 
         var result = await service.RunAsync();
 
-        Assert.Equal(YearSyncOutcome.Failed, result.Years[2026]);
-        // 2026 完全沒變：5/1 還在、1/1 沒進去——後面兩年的 commit 與最後的狀態 commit 都沒把它帶出去
+        Assert.Equal(YearSyncOutcome.Failed, result.Years[2027]);
+        // 拿到驗證過的資料卻寫不進去：WriteFailed（只能重試）
+        Assert.Equal(CalendarSyncFailureKind.WriteFailed, result.FailureKind);
+        // 2027 完全沒變：5/1 還在、1/1 沒進去——後面一年的 commit 與最後的狀態 commit 都沒把它帶出去
         Assert.True(store.CalendarExceptions.ContainsKey(may1));
-        Assert.False(store.CalendarExceptions.ContainsKey(new DateOnly(2026, 1, 1)));
-        Assert.Equal(new[] { 2027, 2028 }, result.UpdatedYears);
+        Assert.False(store.CalendarExceptions.ContainsKey(new DateOnly(2027, 1, 1)));
+        Assert.Equal(new[] { 2028 }, result.UpdatedYears);
         Assert.True(store.CalendarExceptions.ContainsKey(new DateOnly(2028, 1, 3)));
-        Assert.Equal(new[] { 2027, 2028 }, state.State.Years.Select(y => y.Year));
-        Assert.Contains("2026", state.State.LastError);
-        Assert.Contains(log.Lines, l => l.Contains("2026") && l.Contains("模擬 commit 失敗"));
+        Assert.Equal(new[] { 2028 }, state.State.Years.Select(y => y.Year));
+        Assert.Contains("2027 年寫入失敗", state.State.LastError);
+        Assert.Contains(log.Lines, l => l.Contains("2027") && l.Contains("模擬 commit 失敗"));
     }
 
     [Fact]
@@ -497,8 +502,7 @@ public sealed class CalendarSyncTests
     public async Task Run_PrimaryHasNoDataForThisYearOrEarlier_IsAFailureAndUsesMirror()
     {
         var store = new InMemoryStore();
-        store.CalendarExceptions[new DateOnly(2026, 5, 1)] = Exception(new DateOnly(2026, 5, 1), "勞動節");
-        // 今年（2027）以及已有資料的 2026：主來源說「沒有」，不可能是尚未公告
+        // 今年（2027）：主來源說「沒有」，不可能是尚未公告
         var primary = new FakeSource("official", false, y => y <= 2027
             ? throw new CalendarSyncException(CalendarSyncFailure.NotPublished, "metadata 沒有")
             : Official(y, Holidays2028()));
@@ -508,7 +512,6 @@ public sealed class CalendarSyncTests
         var result = await service.RunAsync();
 
         Assert.Contains(2027, mirror.Calls);
-        Assert.Contains(2026, mirror.Calls);
         Assert.Equal(YearSyncOutcome.Updated, result.Years[2027]);
         Assert.Equal("mirror", state.State.Years.Single(y => y.Year == 2027).Source);
         Assert.Contains(log.Lines, l => l.Contains("official 尚未公告"));
@@ -529,29 +532,66 @@ public sealed class CalendarSyncTests
     }
 
     [Fact]
-    public async Task Run_FailureKind_UnreachableOnlyWhenEveryAttemptWasANetworkError()
+    public async Task Run_FailureKind_AnyUnobtainableDataIsUnavailable_OnlyWriteFailureIsWriteFailed()
     {
         static FakeSource Down(string name, bool fallback, Exception ex) => new(name, fallback, _ => throw ex);
 
-        var allDown = Build(sources: new ICalendarSource[]
+        // 案主決定：取不到資料的一切情況（網路層、HTTP 403／407／5xx、格式不符、下載中斷）都是 Unavailable
+        var causes = new Exception[]
         {
-            Down("official", false, new HttpRequestException("dns")),
-            Down("mirror", true, new TaskCanceledException("timeout")),
-        });
-        Assert.Equal(CalendarSyncFailureKind.Unreachable, (await allDown.Service.RunAsync()).FailureKind);
+            new HttpRequestException("dns"),
+            new TaskCanceledException("timeout"),
+            new HttpRequestException("proxy", null, System.Net.HttpStatusCode.ProxyAuthenticationRequired),
+            new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 403"),
+            new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 503"),
+            new CalendarSyncException(CalendarSyncFailure.Failed, "格式不符"),
+            new IOException("下載中斷"),
+        };
+        foreach (var cause in causes)
+        {
+            var run = Build(sources: Down("official", false, cause));
+            Assert.Equal(CalendarSyncFailureKind.Unavailable, (await run.Service.RunAsync()).FailureKind);
+        }
 
         var mirrorBadData = Build(sources: new ICalendarSource[]
         {
             Down("official", false, new HttpRequestException("dns")),
             Down("mirror", true, new CalendarSyncException(CalendarSyncFailure.Failed, "格式不符")),
         });
-        Assert.Equal(CalendarSyncFailureKind.Failed, (await mirrorBadData.Service.RunAsync()).FailureKind);
-
-        var http503 = Build(sources: Down("official", false, new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 503")));
-        Assert.Equal(CalendarSyncFailureKind.Failed, (await http503.Service.RunAsync()).FailureKind);
+        Assert.Equal(CalendarSyncFailureKind.Unavailable, (await mirrorBadData.Service.RunAsync()).FailureKind);
 
         var ok = Build(sources: new FakeSource("official", false, y => Official(y, NewYearOnly(y))));
         Assert.Null((await ok.Service.RunAsync()).FailureKind);
+    }
+
+    [Fact]
+    public async Task Run_NetworkDownOnFirstYear_SkipsRemainingYearsImmediately()
+    {
+        var primary = new FakeSource("official", false, _ => throw new HttpRequestException("dns"));
+        var mirror = new FakeSource("mirror", true, _ => throw new TaskCanceledException("timeout"));
+        var (service, _, state, log) = Build(sources: new ICalendarSource[] { primary, mirror });
+
+        var result = await service.RunAsync();
+
+        // 今年兩個來源都是網路層錯誤：明年不再試（離線時使用者最多等一輪逾時）
+        Assert.Equal(new[] { 2027 }, primary.Calls);
+        Assert.Equal(new[] { 2027 }, mirror.Calls);
+        Assert.Equal(YearSyncOutcome.Failed, result.Years[2028]);
+        Assert.Equal(CalendarSyncFailureKind.Unavailable, result.FailureKind);
+        Assert.Contains("2028", state.State.LastError);
+        Assert.Contains(log.Lines, l => l.Contains("2028") && l.Contains("略過"));
+    }
+
+    [Fact]
+    public async Task Run_CallsBeginRunOnEverySourceOncePerRun()
+    {
+        var primary = new FakeSource("official", false, y => Official(y, NewYearOnly(y)));
+        var (service, _, _, _) = Build(sources: primary);
+
+        await service.RunAsync();
+        await service.RunAsync();
+
+        Assert.Equal(2, primary.BeginRuns);
     }
 
     [Fact]
@@ -563,9 +603,22 @@ public sealed class CalendarSyncTests
 
         var result = await service.RunAsync();
 
-        // 2028-01（已發布）有變動；2028-02（草稿）的補班日不算
+        // 2028-01（已發布）有變動；2028-02（草稿）的補班日不算，但它的前一個月（2028-01）本來就在內
         Assert.Equal(new[] { "2028-01" }, result.AffectedPublishedMonths);
-        Assert.Contains(log.Lines, l => l.Contains("2028-01") && l.Contains("已發布"));
+        Assert.Contains(log.Lines, l => l.Contains("2028-01") && l.Contains("已發布") && l.Contains("公平性點數"));
+    }
+
+    [Fact]
+    public async Task Run_ChangeOnFirstOfMonth_AlsoAffectsThePublishedPreviousMonth()
+    {
+        // 2028-01-01 變動：公平性點數看隔日、連值週六有視窗，已發布的 2027-12 也受影響
+        var store = new InMemoryStore().WithPublished(new YearMonth(2027, 12));
+        var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
+        var (service, _, _, _) = Build(store, source);
+
+        var result = await service.RunAsync();
+
+        Assert.Equal(new[] { "2027-12" }, result.AffectedPublishedMonths);
     }
 
     [Fact]
@@ -587,7 +640,7 @@ public sealed class CalendarSyncTests
     }
 
     [Fact]
-    public async Task Run_RefetchesYearsThatAlreadyHaveData()
+    public async Task Run_DoesNotRefetchPastYears()
     {
         var store = new InMemoryStore();
         store.CalendarExceptions[new DateOnly(2026, 5, 1)] = Exception(new DateOnly(2026, 5, 1), "勞動節");
@@ -596,7 +649,7 @@ public sealed class CalendarSyncTests
 
         await service.RunAsync();
 
-        Assert.Equal(new[] { 2026, 2027, 2028 }, source.Calls);
+        Assert.Equal(new[] { 2027, 2028 }, source.Calls);
     }
 
     private static CalendarException Exception(DateOnly date, string name, bool overridden = false) =>

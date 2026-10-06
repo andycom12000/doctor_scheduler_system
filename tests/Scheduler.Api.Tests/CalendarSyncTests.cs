@@ -244,12 +244,12 @@ public sealed class CalendarSyncTests
 
     private sealed class TestHostHandle : IAsyncDisposable
     {
-        private readonly SqliteConnection _connection;
+        private readonly string _databasePath;
 
-        public TestHostHandle(WebApplication app, SqliteConnection connection, ListLog log)
+        public TestHostHandle(WebApplication app, string databasePath, ListLog log)
         {
             App = app;
-            _connection = connection;
+            _databasePath = databasePath;
             Log = log;
         }
 
@@ -273,8 +273,7 @@ public sealed class CalendarSyncTests
         public Task<JsonNode> GetStatusAsync() => GetAsync("/api/calendars/sync-status", "getCalendarSyncStatus");
 
         /// <summary>
-        /// 等背景工作結束（上限 10 秒，逾時視為測試失敗而不是卡死）。等待期間只看記憶體內的進度、不打端點：
-        /// 測試共用同一條 SqliteConnection，worker 還在寫入時不要同時從另一條路徑讀。
+        /// 等背景工作結束（上限 10 秒，逾時視為測試失敗而不是卡死）。等待期間只看記憶體內的進度。
         /// </summary>
         public async Task<JsonNode> WaitUntilFinishedAsync()
         {
@@ -296,20 +295,35 @@ public sealed class CalendarSyncTests
         {
             await App.StopAsync();
             await App.DisposeAsync();
-            await _connection.DisposeAsync();
+            // 檔案要等連線池放掉才刪得掉
+            SqliteConnection.ClearAllPools();
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                try
+                {
+                    File.Delete(_databasePath + suffix);
+                }
+                catch (IOException)
+                {
+                    // 暫存檔，刪不掉就留給系統清
+                }
+            }
         }
     }
 
+    /// <summary>
+    /// 每個測試一個檔案型的暫存資料庫（測完刪除）：背景同步與請求各自開自己的 DbContext／連線，
+    /// 與正式版一樣；共用同一條 in-memory 連線時，背景寫入與端點讀取會互相踩。
+    /// </summary>
     private static async Task<TestHostHandle> HostAsync(bool autoSync, IReadOnlyList<ICalendarSource> sources)
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var databasePath = Path.Combine(Path.GetTempPath(), "sched-calsync-" + Guid.NewGuid().ToString("N") + ".db");
         var log = new ListLog();
         var app = await ApiHost.BuildAsync(new ApiHostOptions(
             UseTestServer: true,
             SeedReferenceRoster: false,
             CalendarAutoSync: autoSync,
-            ConfigurePersistence: services => services.AddSchedulerPersistence(connection),
+            DatabasePath: databasePath,
             ConfigureServices: services =>
             {
                 // 固定「今天」是 2027-10-06：同步今年 2027、明年 2028
@@ -327,7 +341,7 @@ public sealed class CalendarSyncTests
                 }
             }));
         await app.StartAsync();
-        return new TestHostHandle(app, connection, log);
+        return new TestHostHandle(app, databasePath, log);
     }
 
     /// <summary>2028 有一個補假與一個補班日；其他年份與內建資料一致（所以只有 2028 算「有更新」）。</summary>
@@ -356,7 +370,7 @@ public sealed class CalendarSyncTests
         Assert.NotNull(status["finishedAt"]);
         Assert.NotNull(status["lastSuccessAt"]);
         Assert.Null(status["lastError"]);
-        Assert.Equal(new[] { 2026, 2027, 2028 }, status["years"]!.AsArray().Select(y => y!["year"]!.GetValue<int>()));
+        Assert.Equal(new[] { 2027, 2028 }, status["years"]!.AsArray().Select(y => y!["year"]!.GetValue<int>()));
         Assert.All(status["years"]!.AsArray(), y => Assert.Equal("official", y!["source"]!.GetValue<string>()));
 
         var calendar = await host.GetAsync("/api/calendars/2028", "getCalendar");
@@ -460,6 +474,10 @@ public sealed class CalendarSyncTests
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(host, HttpMethod.Get, "/api/calendars/2026")).Status);
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(host, HttpMethod.Get, "/api/staff")).Status);
 
+        // 放行名單：唯讀的 validate、中止求解的 DELETE（資源不存在回 404／422 都行，就是不能是 409）
+        Assert.NotEqual(HttpStatusCode.Conflict, (await SendAsync(host, HttpMethod.Post, "/api/schedules/2026-10/validate", "{}")).Status);
+        Assert.NotEqual(HttpStatusCode.Conflict, (await SendAsync(host, HttpMethod.Delete, "/api/solver-jobs/none")).Status);
+
         source.Release();
         await host.WaitUntilFinishedAsync();
 
@@ -485,8 +503,8 @@ public sealed class CalendarSyncTests
 
         source.Release();
         await host.WaitUntilFinishedAsync();
-        // 只有啟動那一輪：三年（2026、2027、2028）各抓一次，重複觸發沒有多開
-        Assert.Equal(3, source.Calls);
+        // 只有啟動那一輪：今年與明年（2027、2028）各抓一次，重複觸發沒有多開
+        Assert.Equal(2, source.Calls);
     }
 
     [Fact]
@@ -502,7 +520,7 @@ public sealed class CalendarSyncTests
     }
 
     [Fact]
-    public async Task 完全連不上網_failureKind是unreachable_且寫入解鎖()
+    public async Task 完全連不上網_failureKind是unavailable_且寫入解鎖()
     {
         var sources = new ICalendarSource[]
         {
@@ -513,30 +531,103 @@ public sealed class CalendarSyncTests
 
         var status = await host.WaitUntilFinishedAsync();
 
-        Assert.Equal("unreachable", status["failureKind"]!.GetValue<string>());
+        Assert.Equal("unavailable", status["failureKind"]!.GetValue<string>());
         Assert.False(status["running"]!.GetValue<bool>());
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(host, HttpMethod.Patch, "/api/calendars/2028/2028-02-05", """{"isHoliday":true}""")).Status);
     }
 
     [Fact]
-    public async Task 連得上但失敗_failureKind是failed()
+    public async Task 所有取不到資料的情況_failureKind一律是unavailable_行事曆沒被改動()
     {
-        // 主來源連不上、備援連得上但資料壞：整體是「連得上但失敗」，只能重試
-        var sources = new ICalendarSource[]
+        // 案主決定：只有「拿到通過驗證的資料、但寫入失敗」才是 writeFailed（見 Application 測試）。
+        // 其他一律 unavailable，可略過：HTTP 403／407／5xx、封鎖頁或格式不符、下載中斷、空殼、備援資料壞
+        Func<int, IReadOnlyList<OfficialDay>>[] causes =
+        {
+            _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 403"),
+            _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 407"),
+            _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 503"),
+            _ => OfficialCalendar.ParseCsv("<html>blocked by proxy</html>", 2028),
+            _ => throw new IOException("下載中途斷線"),
+            y => OfficialCalendar.ParseCsv(YearCsv(y), y), // 只有週末的空殼
+        };
+
+        string baseline;
+        await using (var plain = await HostAsync(false, new List<ICalendarSource>()))
+        {
+            baseline = (await plain.GetAsync("/api/calendars/2027")).ToJsonString();
+        }
+
+        foreach (var cause in causes)
+        {
+            await using var host = await HostAsync(true, new ICalendarSource[] { new DelegateSource("official", false, cause) });
+            var status = await host.WaitUntilFinishedAsync();
+            Assert.Equal("unavailable", status["failureKind"]!.GetValue<string>());
+            Assert.Empty(status["updatedYears"]!.AsArray());
+            Assert.Equal(baseline, (await host.GetAsync("/api/calendars/2027", "getCalendar")).ToJsonString()); // 內建值原封不動
+        }
+
+        // 主來源連不上、備援連得上但資料壞：也是 unavailable
+        await using var host2 = await HostAsync(true, new ICalendarSource[]
         {
             new DelegateSource("official", false, _ => throw new HttpRequestException("連不上")),
             new DelegateSource("mirror", true, _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "格式不符")),
-        };
-        await using var host = await HostAsync(true, sources);
-        Assert.Equal("failed", (await host.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
-
-        // 主來源 HTTP 5xx（有回應）也是 failed
-        await using var host2 = await HostAsync(true, new ICalendarSource[]
-        {
-            new DelegateSource("official", false, _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 503")),
         });
-        Assert.Equal("failed", (await host2.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
+        Assert.Equal("unavailable", (await host2.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
     }
+
+    [Fact]
+    public async Task 主來源的metadata同一輪只抓一次_兩個年份共用()
+    {
+        var handler = new FakeHandler(r => r.RequestUri!.Host switch
+        {
+            "data.gov.tw" => Text("{\"result\":{\"distribution\":[" +
+                $"{{\"resourceDescription\":\"116年中華民國政府行政機關辦公日曆表\",\"resourceDownloadUrl\":\"https://files.test/116.csv\"}}," +
+                $"{{\"resourceDescription\":\"117年中華民國政府行政機關辦公日曆表\",\"resourceDownloadUrl\":\"https://files.test/117.csv\"}}]}}}}"),
+            "files.test" => Text(r.RequestUri!.AbsolutePath.Contains("116")
+                ? YearCsv(2027, (new DateOnly(2027, 1, 1), 2, "開國紀念日"))
+                : YearCsv(2028, (new DateOnly(2028, 1, 3), 2, "補假"))),
+            _ => Text("", HttpStatusCode.NotFound),
+        });
+        var source = new OfficialCalendarSource(CalendarHttp.CreateClient(handler));
+
+        source.BeginRun();
+        await source.FetchYearAsync(2027, CancellationToken.None);
+        await source.FetchYearAsync(2028, CancellationToken.None);
+        Assert.Equal(1, handler.Requests.Count(u => u == OfficialCalendarSource.MetadataUrl));
+
+        // 下一輪（重試）才重新抓
+        source.BeginRun();
+        await source.FetchYearAsync(2027, CancellationToken.None);
+        Assert.Equal(2, handler.Requests.Count(u => u == OfficialCalendarSource.MetadataUrl));
+    }
+
+    [Fact]
+    public async Task 契約的每個操作_路徑與方法都有對應的實作路由_反之亦然()
+    {
+        await using var host = await HostAsync(false, new List<ICalendarSource>());
+        var routes = host.App.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>().Endpoints
+            .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+            .SelectMany(e => (e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods ?? Array.Empty<string>())
+                .Select(m => (Method: m.ToLowerInvariant(), Path: NormalizePath(e.RoutePattern.RawText!))))
+            .ToHashSet();
+
+        var contract = ContractSchema.Current.Operations()
+            .Select(o => (o.Method, Path: NormalizePath(o.Path)))
+            .ToHashSet();
+
+        Assert.Equal(44, contract.Count);
+        Assert.Empty(contract.Except(routes).Select(x => $"契約有、實作沒有：{x.Method.ToUpperInvariant()} {x.Path}"));
+        Assert.Empty(routes.Where(r => r.Path.StartsWith("/api/", StringComparison.Ordinal)).Except(contract)
+            .Select(x => $"實作有、契約沒有：{x.Method.ToUpperInvariant()} {x.Path}"));
+
+        // 兩個行事曆自動更新的端點各是獨立路徑，不是掛在別的 path 底下
+        Assert.Contains(("get", "/api/calendars/sync-status"), contract);
+        Assert.Contains(("post", "/api/calendars/sync"), contract);
+    }
+
+    /// <summary>路徑參數名稱不同（{year} 與 {y}）不算不一致；化成 {} 比對。</summary>
+    private static string NormalizePath(string path) =>
+        System.Text.RegularExpressions.Regex.Replace(path, @"\{[^}/]+\}", "{}").TrimEnd('/').ToLowerInvariant() is { Length: > 0 } p ? p : "/";
 
     [Fact]
     public async Task 重試_上一輪失敗後可再跑一輪_成功就清掉failureKind()
@@ -546,7 +637,7 @@ public sealed class CalendarSyncTests
             ? throw new HttpRequestException("斷線")
             : Official2028(y));
         await using var host = await HostAsync(true, new ICalendarSource[] { flaky });
-        Assert.Equal("unreachable", (await host.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
+        Assert.Equal("unavailable", (await host.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
 
         fail = false;
         var (_, started) = await SendAsync(host, HttpMethod.Post, "/api/calendars/sync");

@@ -23,9 +23,35 @@ internal sealed class OfficialCalendarSource : ICalendarSource
 
     public bool IsFallback => false;
 
+    // 同一輪只抓一次 metadata（兩個年份共用）；成功才快取，失敗下一年還會再試一次
+    private readonly object _gate = new();
+    private string? _metadata;
+
+    public void BeginRun()
+    {
+        lock (_gate)
+        {
+            _metadata = null;
+        }
+    }
+
     public async Task<IReadOnlyList<OfficialDay>> FetchYearAsync(int year, CancellationToken cancellationToken)
     {
-        var metadata = await CalendarHttp.GetStringAsync(_http, MetadataUrl, cancellationToken);
+        string? metadata;
+        lock (_gate)
+        {
+            metadata = _metadata;
+        }
+
+        if (metadata is null)
+        {
+            metadata = await CalendarHttp.GetStringAsync(_http, MetadataUrl, cancellationToken);
+            lock (_gate)
+            {
+                _metadata = metadata;
+            }
+        }
+
         var url = OfficialDatasetMetadata.PickDownloadUrl(metadata, year)
             ?? throw new CalendarSyncException(CalendarSyncFailure.NotPublished, "metadata 裡沒有該年的辦公日曆表");
 
@@ -177,15 +203,17 @@ internal sealed class CalendarSyncRunner
     /// 重試：沒開、或已經在跑就什麼都不做（冪等，回 false）；否則先把狀態標成 running 再在背景開跑，
     /// 所以呼叫端緊接著讀到的狀態一定是 running。
     /// </summary>
-    public bool StartIfIdle()
+    /// <returns>有開跑時，開跑當下（running）的進度快照；沒開跑（沒開或已在跑）回 null。</returns>
+    public CalendarSyncProgressSnapshot? StartIfIdle()
     {
         if (!_progress.TryBegin())
         {
-            return false;
+            return null;
         }
 
+        var snapshot = _progress.Snapshot();
         _ = Task.Run(() => RunAsync(_lifetime.ApplicationStopping));
-        return true;
+        return snapshot;
     }
 
     public async Task RunAsync(CancellationToken stoppingToken)
@@ -205,7 +233,8 @@ internal sealed class CalendarSyncRunner
         }
         catch (Exception ex)
         {
-            failure = CalendarSyncFailureKind.Failed;
+            // 取不到資料的情況都在 service 內處理掉了；逃到這裡的是資料庫之類的內部失敗，只能重試
+            failure = CalendarSyncFailureKind.WriteFailed;
             _log.Write($"同步中止：{ex.GetType().Name}: {ex.Message}");
         }
         finally

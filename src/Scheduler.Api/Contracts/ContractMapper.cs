@@ -187,8 +187,8 @@ internal static class ContractMapper
             v.AffectedPublishedMonths,
             v.FailureKind switch
             {
-                CalendarSyncFailureKind.Unreachable => "unreachable",
-                CalendarSyncFailureKind.Failed => "failed",
+                CalendarSyncFailureKind.Unavailable => "unavailable",
+                CalendarSyncFailureKind.WriteFailed => "writeFailed",
                 _ => null,
             },
             v.LastSuccessAt,

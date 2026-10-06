@@ -17,6 +17,11 @@ public interface ICalendarSource
     bool IsFallback { get; }
 
     Task<IReadOnlyList<OfficialDay>> FetchYearAsync(int year, CancellationToken cancellationToken);
+
+    /// <summary>每一輪同步開始前呼叫一次，讓來源丟掉上一輪的快取（例如 metadata 同一輪只抓一次）。</summary>
+    void BeginRun()
+    {
+    }
 }
 
 /// <summary>同步紀錄（<c>data/calendar-sync.log</c>）。實作必須吞掉自己的例外。</summary>
@@ -45,6 +50,13 @@ public interface ICalendarSyncScopeFactory
 {
     ICalendarSyncScope Create();
 }
+
+public sealed record CalendarSyncProgressSnapshot(
+    bool Running,
+    DateTimeOffset? FinishedAt,
+    IReadOnlyList<int> UpdatedYears,
+    IReadOnlyList<string> AffectedPublishedMonths,
+    CalendarSyncFailureKind? FailureKind);
 
 /// <summary>
 /// 本次程式執行期間的同步進度（singleton，記憶體內）。前端啟動後輪詢它，等 <see cref="Running"/> 變 false 再決定要不要 toast。
@@ -78,11 +90,11 @@ public sealed class CalendarSyncProgress
         }
     }
 
-    public (bool Running, DateTimeOffset? FinishedAt, IReadOnlyList<int> UpdatedYears, IReadOnlyList<string> AffectedPublishedMonths, CalendarSyncFailureKind? FailureKind) Snapshot()
+    public CalendarSyncProgressSnapshot Snapshot()
     {
         lock (_gate)
         {
-            return (_running, _finishedAt, _updatedYears, _affectedPublishedMonths, _failureKind);
+            return new CalendarSyncProgressSnapshot(_running, _finishedAt, _updatedYears, _affectedPublishedMonths, _failureKind);
         }
     }
 
@@ -134,13 +146,16 @@ public enum YearSyncOutcome
 }
 
 /// <summary>
-/// 這一輪同步失敗的性質：<see cref="Unreachable"/> 完全連不上網（主來源與備援都是網路層錯誤），
-/// 前端可讓使用者「先用現有資料」；<see cref="Failed"/> 連得上但中途失敗（驗證不過、寫入失敗…），只能重試。
+/// 這一輪同步失敗的性質（案主決定）：只有「已拿到通過驗證的資料、但寫入失敗」是 <see cref="WriteFailed"/>（只能重試）；
+/// 其他取不到資料的情況一律 <see cref="Unavailable"/>，前端可讓使用者「先用現有資料」。
 /// </summary>
 public enum CalendarSyncFailureKind
 {
-    Unreachable,
-    Failed,
+    /// <summary>取不到資料（網路層錯誤、HTTP 錯誤含 403／407、封鎖頁或格式不符、空殼、下載中斷…）：行事曆沒有被改動，可略過。</summary>
+    Unavailable,
+
+    /// <summary>已拿到通過驗證的官方資料、但寫入資料庫失敗：只能重試。</summary>
+    WriteFailed,
 }
 
 public sealed record CalendarSyncRunResult(
@@ -152,7 +167,7 @@ public sealed record CalendarSyncRunResult(
 }
 
 /// <summary>
-/// 自動更新的用例：今年、明年與資料庫裡已有資料的年份（不含更晚的），逐年抓、驗證、和現有資料逐日比對、只寫有差異的。
+/// 自動更新的用例：只同步今年與明年（過去的年份不再重抓），逐年抓、驗證、和現有資料逐日比對、只寫有差異的。
 ///
 /// 寫入規則：
 /// <list type="bullet">
@@ -189,13 +204,17 @@ public sealed class CalendarSyncService
 
     public async Task<CalendarSyncRunResult> RunAsync(CancellationToken cancellationToken = default)
     {
+        foreach (var source in _sources)
+        {
+            source.BeginRun(); // 例如主來源的 metadata 同一輪只抓一次
+        }
+
+        // 只同步今年與明年：過去的年份不會再變，每次啟動都重抓只會拉長（離線時的）等待
         var thisYear = _time.GetLocalNow().Year;
-        int[] years;
+        var years = new[] { thisYear, thisYear + 1 };
         CalendarSyncState previous;
         using (var scope = _scopes.Create())
         {
-            var existing = await scope.Calendar.GetExceptionsAsync(new DateOnly(2000, 1, 1), new DateOnly(thisYear + 1, 12, 31), cancellationToken);
-            years = existing.Select(e => e.Day.Date.Year).Append(thisYear).Append(thisYear + 1).Distinct().OrderBy(y => y).ToArray();
             previous = await scope.State.GetAsync(cancellationToken);
         }
 
@@ -203,11 +222,22 @@ public sealed class CalendarSyncService
         var outcomes = new Dictionary<int, YearSyncOutcome>();
         var synced = new Dictionary<int, SyncedYear>();
         var unreachableYears = new HashSet<int>();
+        var writeFailedYears = new HashSet<int>();
         var affected = new SortedSet<string>(StringComparer.Ordinal);
         var errors = new List<string>();
+        var networkDown = false;
         foreach (var year in years)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (networkDown)
+            {
+                // 前一年兩個來源都是網路層錯誤：網路是通的才值得再試，不要再讓使用者等一輪逾時
+                outcomes[year] = YearSyncOutcome.Failed;
+                errors.Add($"{year} 年未能取得資料");
+                _log.Write($"{year}: 網路不通，略過");
+                continue;
+            }
+
             try
             {
                 var mustExist = year <= thisYear || knownYears.Contains(year);
@@ -225,7 +255,8 @@ public sealed class CalendarSyncService
 
                 if (outcome == YearSyncOutcome.Failed)
                 {
-                    errors.Add($"{year} 年更新失敗");
+                    errors.Add($"{year} 年未能取得資料");
+                    networkDown = unreachableYears.Contains(year);
                 }
             }
             catch (OperationCanceledException)
@@ -234,9 +265,11 @@ public sealed class CalendarSyncService
             }
             catch (Exception ex)
             {
-                // 例如資料庫寫入失敗：那一年的 scope 已整個丟掉（沒有任何殘留），其他年照跑
+                // 走到這裡的一定是「已拿到通過驗證的資料、但寫入資料庫失敗」（取不到資料的情況都在 SyncYearAsync 裡處理掉了）。
+                // 那一年的 scope 已整個丟掉（沒有任何殘留），其他年照跑
                 outcomes[year] = YearSyncOutcome.Failed;
-                errors.Add($"{year} 年更新失敗");
+                writeFailedYears.Add(year);
+                errors.Add($"{year} 年寫入失敗");
                 _log.Write($"{year}: 寫入失敗：{ex.GetType().Name}: {ex.Message}");
             }
         }
@@ -254,18 +287,17 @@ public sealed class CalendarSyncService
             await scope.UnitOfWork.CommitAsync(cancellationToken);
         }
 
-        // 有失敗的年份：全部都是「完全連不上」才算 unreachable；只要有一年是連得上卻失敗，整體就是 failed
-        var failedYears = outcomes.Where(p => p.Value == YearSyncOutcome.Failed).Select(p => p.Key).ToArray();
-        CalendarSyncFailureKind? failureKind = failedYears.Length == 0
-            ? null
-            : failedYears.All(unreachableYears.Contains) ? CalendarSyncFailureKind.Unreachable : CalendarSyncFailureKind.Failed;
+        // 只有「拿到通過驗證的資料、但寫入失敗」是 WriteFailed（只能重試）；其餘取不到資料的情況一律 Unavailable（可略過）
+        CalendarSyncFailureKind? failureKind = writeFailedYears.Count > 0
+            ? CalendarSyncFailureKind.WriteFailed
+            : outcomes.Values.Any(o => o == YearSyncOutcome.Failed) ? CalendarSyncFailureKind.Unavailable : null;
 
         return new CalendarSyncRunResult(outcomes, affected.ToArray(), failureKind);
     }
 
     /// <summary>
-    /// 網路層的錯誤（DNS、連線、TLS、proxy、逾時）：連都連不上。伺服器有回應但狀態碼不對、
-    /// 下載到了但驗證失敗，都是「連得上、但失敗」，不算。
+    /// 網路層的錯誤（DNS、連線、TLS、proxy、逾時）：連都連不上。兩個來源在同一年都是這種錯誤時，
+    /// 剩下的年份直接略過。伺服器有回應但狀態碼不對（含 403、407）、下載到了但驗證失敗，不算。
     /// </summary>
     internal static bool IsNetworkError(Exception ex) => ex switch
     {
@@ -399,8 +431,9 @@ public sealed class CalendarSyncService
             .Where(h => h.Status == ScheduleStatus.Published)
             .Select(h => h.YearMonth)
             .ToHashSet();
+        // 變動日所在月份，以及前一個月：公平性點數看隔日、連值週六有視窗，月底最後一天會看到下個月的第一天
         var affected = changedDates
-            .Select(d => new YearMonth(d.Year, d.Month))
+            .SelectMany(d => new[] { new YearMonth(d.Year, d.Month), new YearMonth(d.AddMonths(-1).Year, d.AddMonths(-1).Month) })
             .Where(published.Contains)
             .Distinct()
             .OrderBy(m => m)
@@ -411,7 +444,7 @@ public sealed class CalendarSyncService
         _log.Write($"{year}: 已更新 {changedDates.Count} 天（{chosen.Name}）");
         if (affected.Length > 0)
         {
-            _log.Write($"{year}: 變動落在已發布月份 {string.Join("、", affected)}，額度點數可能改變");
+            _log.Write($"{year}: 變動影響已發布月份 {string.Join("、", affected)}，額度點數或公平性點數可能改變");
         }
 
         return (YearSyncOutcome.Updated, chosen.Name, affected);
@@ -444,10 +477,14 @@ public sealed class CalendarSyncQueries
         _progress = progress;
     }
 
-    public async Task<CalendarSyncStatusView> GetStatusAsync(CancellationToken cancellationToken = default)
+    /// <param name="snapshot">
+    /// 呼叫端已經取好的進度快照（重試端點：緊接在開始同步之後取，回應才保證是 running，
+    /// 不會因為背景跑得太快、或讀 app_meta 的空檔被追過去而回「已結束」）。沒給就現在取，且先於讀資料庫。
+    /// </param>
+    public async Task<CalendarSyncStatusView> GetStatusAsync(CalendarSyncProgressSnapshot? snapshot = null, CancellationToken cancellationToken = default)
     {
+        var (running, finishedAt, updated, affected, failureKind) = snapshot ?? _progress.Snapshot();
         var state = await _state.GetAsync(cancellationToken);
-        var (running, finishedAt, updated, affected, failureKind) = _progress.Snapshot();
         return new CalendarSyncStatusView(_progress.Enabled, running, finishedAt, updated, affected, failureKind, state.LastSuccessAt, state.LastError, state.Years);
     }
 }

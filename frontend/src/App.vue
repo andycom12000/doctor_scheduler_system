@@ -59,12 +59,13 @@ const currentName = computed(() => route.name?.toString())
       </div>
     </header>
 
+    <!-- 行事曆自動更新（#112）：同步中全畫面鎖住、失敗只能重試／略過；狀態機在 useCalendarSyncNotice -->
+    <CalendarSyncOverlay />
+
     <main class="shell__content">
       <RouterView />
     </main>
 
-    <!-- 行事曆自動更新（#112）：同步中全畫面鎖住、失敗只能重試／略過；狀態機在 useCalendarSyncNotice -->
-    <CalendarSyncOverlay />
     <ConfirmDialog class="screen-only" />
     <ToastHost class="screen-only" />
   </div>

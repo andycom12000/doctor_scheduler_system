@@ -8,7 +8,7 @@
   絕不可混用**，講「點數」或「假日」而不指明是哪一個，一律視為錯誤。
 - `docs/ARCHITECTURE.md` — 技術決策已定案。**第 2 節是「已排除方案」，提任何技術選型前先看過**，
   Blazor / Tauri / Electron / MAUI / Timefold / meta-framework 等都已評估並否決，理由都在裡面。
-- `api-contract.yaml` — 前後端唯一耦合點。44 個操作、53 個 schema。
+- `api-contract.yaml` — 前後端唯一耦合點。44 個操作、54 個 schema。
 - `docs/adr/` — 四個領域決策的理由。動到不可排班日、約束模型、變體產生方式、月結轉快照之前先讀。
 - `docs/constraint-defaults.md` — 7 硬 / 7 軟約束的唯一預設值。seed、mock、測試 fixture 都從它抄，不得另發明代碼或數字。
 
@@ -73,9 +73,10 @@
   Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 44 個操作已全部落地
   **行事曆自動更新**（#112）：啟動後背景從人事總處開放資料（失敗退鏡像）更新行事曆。解析比對在 `Application/Calendars/Sync/`，
   HTTP 來源／背景工作／`data/calendar-sync.log` 在 `Api/CalendarSync/`，狀態存 `app_meta`。
-  `ApiHostOptions.CalendarAutoSync` 預設 false，只有 Release Shell 與 `Program.cs`（`SCHEDULER_CALENDAR_AUTO_SYNC=false` 可關）開；
-  端點 `GET /api/calendars/sync-status`、`POST /api/calendars/sync`（重試，冪等）；同步中所有寫入回 409
-  `CALENDAR_SYNC_IN_PROGRESS`、前端全畫面遮罩，失敗分 `unreachable`（可略過）與 `failed`（只能重試）；有更新才 toast
+  `ApiHostOptions.CalendarAutoSync` 預設 false，**只有 Release Shell 開**（開發期 `Program.cs` 預設也關，要試時設
+  `SCHEDULER_CALENDAR_AUTO_SYNC=true`）；端點 `GET /api/calendars/sync-status`、`POST /api/calendars/sync`（重試，冪等）；
+  同步中所有寫入回 409 `CALENDAR_SYNC_IN_PROGRESS`、前端全畫面遮罩，失敗分 `unavailable`（取不到資料，可略過）與
+  `writeFailed`（寫入失敗，只能重試）；有更新才 toast
 - **求解**已落地（ARCHITECTURE §4.8）。`Scheduler.Application/Solving/`：`ISolver`（一次解一份；權重另放
   `EffectiveWeights`，因為 `ConstraintDefinition.Weight` 上限 100 裝不下乘過 1.5 的數）、`VariantProfiles`
   （三個具名立場的乘數表、多樣性 15 格）、`SolverJobService`（singleton，單一 slot、狀態機、序列三份、
@@ -137,7 +138,7 @@ Shell 是 net8.0-windows，只守得到 csproj 層，編譯期由那個旗標守
 ```bash
 dotnet build                              # 建置全部
 dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層 + 契約守法 + 求解器漂移守門
-dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
+dotnet run --project src/Scheduler.Api    # 開發期後端 :5080（行事曆自動更新預設關；要試：SCHEDULER_CALENDAR_AUTO_SYNC=true）
 
 cd frontend
 npm run dev          # :5173，/api proxy 到 :5080

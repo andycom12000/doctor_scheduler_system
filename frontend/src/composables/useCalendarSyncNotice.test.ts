@@ -4,6 +4,7 @@ import {
   SYNC_MAX_STATUS_ERRORS,
   createCalendarSyncGate,
   isLocked,
+  failureDetail,
   phaseOf,
   syncToastText,
 } from './useCalendarSyncNotice'
@@ -46,24 +47,24 @@ describe('phaseOf／isLocked', () => {
     expect(phaseOf(status({ enabled: false, running: true }), false)).toBe('open')
   })
 
-  it('running 鎖住；failed 與 unreachable 也鎖住；成功解鎖', () => {
+  it('running 鎖住；writeFailed 與 unavailable 也鎖住；成功解鎖', () => {
     expect(phaseOf(status({ running: true }), false)).toBe('running')
-    expect(phaseOf(status({ failureKind: 'failed' }), false)).toBe('failed')
-    expect(phaseOf(status({ failureKind: 'unreachable' }), false)).toBe('unreachable')
+    expect(phaseOf(status({ failureKind: 'writeFailed' }), false)).toBe('writeFailed')
+    expect(phaseOf(status({ failureKind: 'unavailable' }), false)).toBe('unavailable')
     expect(phaseOf(status({}), false)).toBe('open')
-    for (const p of ['checking', 'running', 'failed', 'unreachable'] as const) expect(isLocked(p)).toBe(true)
+    for (const p of ['checking', 'running', 'writeFailed', 'unavailable'] as const) expect(isLocked(p)).toBe(true)
     for (const p of ['stale', 'open'] as const) expect(isLocked(p)).toBe(false)
   })
 
-  it('failed 不能被「先用現有資料」略過；unreachable 略過後變 stale', () => {
-    expect(phaseOf(status({ failureKind: 'failed' }), true)).toBe('failed')
-    expect(phaseOf(status({ failureKind: 'unreachable' }), true)).toBe('stale')
+  it('writeFailed 不能被「先用現有資料」略過；unavailable 略過後變 stale', () => {
+    expect(phaseOf(status({ failureKind: 'writeFailed' }), true)).toBe('writeFailed')
+    expect(phaseOf(status({ failureKind: 'unavailable' }), true)).toBe('stale')
   })
 
   it('toast 文字：一年、多年、已發布月份提醒', () => {
     expect(syncToastText([2028])).toBe('已更新 2028 年行事曆')
     expect(syncToastText([2027, 2028])).toBe('已更新 2027、2028 年行事曆')
-    expect(syncToastText([2028], ['2028-01'])).toBe('已更新 2028 年行事曆。已發布月份的額度點數可能改變')
+    expect(syncToastText([2028], ['2028-01'])).toBe('已更新 2028 年行事曆。已發布月份的額度點數或公平性點數可能改變')
   })
 })
 
@@ -89,7 +90,7 @@ describe('createCalendarSyncGate', () => {
     expect(seen).toEqual(['running', 'running'])
     expect(gate.phase.value).toBe('open')
     expect(deps.refresh).toHaveBeenCalledTimes(1)
-    expect(deps.notify).toHaveBeenCalledWith('已更新 2028 年行事曆。已發布月份的額度點數可能改變')
+    expect(deps.notify).toHaveBeenCalledWith('已更新 2028 年行事曆。已發布月份的額度點數或公平性點數可能改變')
   })
 
   it('預設的 refresh 讓 calendars／schedules／blocked-days 失效', async () => {
@@ -111,16 +112,16 @@ describe('createCalendarSyncGate', () => {
     expect(deps.refresh).not.toHaveBeenCalled()
   })
 
-  it('failed：停在失敗畫面，只能重試；重試成功才解鎖', async () => {
+  it('writeFailed：停在失敗畫面，只能重試；重試成功才解鎖', async () => {
     const { gate, deps } = gateWith(
-      [status({ failureKind: 'failed' }), status({ running: true }), status({ updatedYears: [2028] })],
+      [status({ failureKind: 'writeFailed' }), status({ running: true }), status({ updatedYears: [2028] })],
       [status({ running: true })],
     )
     await gate.start()
-    expect(gate.phase.value).toBe('failed')
+    expect(gate.phase.value).toBe('writeFailed')
 
-    gate.continueWithStale() // failed 不能略過
-    expect(gate.phase.value).toBe('failed')
+    gate.continueWithStale() // writeFailed 不能略過
+    expect(gate.phase.value).toBe('writeFailed')
 
     await gate.retry()
     expect(deps.startSync).toHaveBeenCalledTimes(1)
@@ -128,10 +129,10 @@ describe('createCalendarSyncGate', () => {
     expect(deps.notify).toHaveBeenCalledTimes(1)
   })
 
-  it('unreachable：可以重試；也可以先用現有資料（stale，解鎖但持續提醒）', async () => {
-    const { gate } = gateWith([status({ failureKind: 'unreachable' })])
+  it('unavailable：可以重試；也可以先用現有資料（stale，解鎖但持續提醒）', async () => {
+    const { gate } = gateWith([status({ failureKind: 'unavailable' })])
     await gate.start()
-    expect(gate.phase.value).toBe('unreachable')
+    expect(gate.phase.value).toBe('unavailable')
     expect(isLocked(gate.phase.value)).toBe(true)
 
     gate.continueWithStale()
@@ -139,23 +140,23 @@ describe('createCalendarSyncGate', () => {
     expect(isLocked(gate.phase.value)).toBe(false)
   })
 
-  it('stale 後再按重試：回到鎖住並重跑；仍連不上就回 unreachable', async () => {
+  it('stale 後再按重試：回到鎖住並重跑；仍取不到就回 unavailable', async () => {
     const { gate } = gateWith(
-      [status({ failureKind: 'unreachable' }), status({ failureKind: 'unreachable' })],
+      [status({ failureKind: 'unavailable' }), status({ failureKind: 'unavailable' })],
       [status({ running: true })],
     )
     await gate.start()
     gate.continueWithStale()
     await gate.retry()
-    expect(gate.phase.value).toBe('unreachable')
+    expect(gate.phase.value).toBe('unavailable')
   })
 
   it('重試端點出錯：留在原本的錯誤畫面', async () => {
-    const { gate, deps } = gateWith([status({ failureKind: 'failed' })])
+    const { gate, deps } = gateWith([status({ failureKind: 'writeFailed' })])
     await gate.start()
     deps.startSync.mockRejectedValue(new Error('boom'))
     await gate.retry()
-    expect(gate.phase.value).toBe('failed')
+    expect(gate.phase.value).toBe('writeFailed')
   })
 
   it('狀態端點連續出錯就解鎖，不把使用者永遠鎖住', async () => {
@@ -170,5 +171,39 @@ describe('createCalendarSyncGate', () => {
     const { gate, deps } = gateWith([status({ running: true }), status({})])
     await Promise.all([gate.start(), gate.start()])
     expect(deps.fetchStatus).toHaveBeenCalledTimes(2)
+  })
+
+  it('部分成功、部分失敗：快取照樣失效，但不 toast（遮罩照實說明）', async () => {
+    const { gate, deps } = gateWith([
+      status({ updatedYears: [2027], failureKind: 'unavailable', lastError: '2028 年未能取得資料' }),
+    ])
+    await gate.start()
+    expect(gate.phase.value).toBe('unavailable')
+    expect(deps.refresh).toHaveBeenCalledTimes(1)
+    expect(deps.notify).not.toHaveBeenCalled()
+  })
+
+  it('預設的狀態查詢帶逾時訊號，端點卡住不會讓遮罩永遠空白', async () => {
+    vi.resetModules()
+    const getStatus = vi.fn(async (_signal?: AbortSignal) => status({}))
+    vi.doMock('@/api/calendars', () => ({ getCalendarSyncStatus: getStatus, startCalendarSync: vi.fn() }))
+    const mod = await import('./useCalendarSyncNotice')
+    await mod.createCalendarSyncGate({ notify: () => {}, refresh: async () => {} }).start()
+    expect(getStatus.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal)
+    vi.doUnmock('@/api/calendars')
+  })
+})
+
+describe('failureDetail', () => {
+  it('取不到資料且沒更新任何年份：說明行事曆沒有被改動', () => {
+    const text = failureDetail(status({ failureKind: 'unavailable', lastError: '2027 年未能取得資料；2028 年未能取得資料' }))
+    expect(text).toContain('行事曆沒有被改動')
+  })
+
+  it('部分成功：說明哪些年份已更新、哪些失敗', () => {
+    const text = failureDetail(status({ failureKind: 'writeFailed', updatedYears: [2027], lastError: '2028 年寫入失敗' }))
+    expect(text).toContain('已更新 2027 年')
+    expect(text).toContain('2028 年寫入失敗')
+    expect(text).not.toContain('沒有被改動')
   })
 })

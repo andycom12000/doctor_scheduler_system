@@ -92,7 +92,7 @@ internal static class ReadEndpoints
 
         // 字面路徑優先於 {year}，不會被吃掉
         app.MapGet("/api/calendars/sync-status", async (CalendarSyncQueries q, CancellationToken ct) =>
-            (await q.GetStatusAsync(ct)).ToContract());
+            (await q.GetStatusAsync(cancellationToken: ct)).ToContract());
 
         app.MapGet("/api/calendars/{year}", async (string year, CalendarQueries q, CancellationToken ct) =>
             (await q.GetYearAsync(Parse.Year(year), ct)).ToContract());
