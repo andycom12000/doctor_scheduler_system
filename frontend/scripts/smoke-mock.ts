@@ -120,6 +120,29 @@ async function main() {
 
     }
 
+    console.log('2c. GET /calendars/sync-status')
+    {
+      const res = await fetch(`${BASE}/calendars/sync-status`)
+      assert(res.status === 200, 'GET /calendars/sync-status → 200')
+      const body = await res.json()
+      assert(typeof body.enabled === 'boolean' && typeof body.running === 'boolean', 'sync-status enabled／running 是 boolean')
+      assert(Array.isArray(body.updatedYears) && Array.isArray(body.years), 'sync-status updatedYears／years 是陣列')
+      // 真後端可能已同步過（years 非空）；欄位齊全即可，null 欄位要明確輸出
+      for (const key of ['finishedAt', 'lastSuccessAt', 'lastError', 'failureKind']) {
+        assert(key in body, `sync-status 有 ${key} 欄位（可為 null）`)
+      }
+      assert(Array.isArray(body.affectedPublishedMonths), 'sync-status affectedPublishedMonths 是陣列')
+
+      // 重試端點：冪等，沒開自動更新時只回目前狀態（打真後端不會真的去連外網，smoke 的後端是關閉自動更新啟動的才安全，
+      // 所以只有 enabled=false 時才打）
+      if (body.enabled === false) {
+        const retry = await fetch(`${BASE}/calendars/sync`, { method: 'POST' })
+        assert(retry.status === 200, 'POST /calendars/sync → 200')
+        const retried = await retry.json()
+        assert(retried.enabled === false && retried.running === false, '沒開自動更新時 POST /calendars/sync 不啟動同步')
+      }
+    }
+
     await mockOnly('2b. PATCH /calendars/2026/2026-11-05', '會在真後端留下一筆行事曆覆寫', async () => {
       // 刻意挑 seed 月（2026-08／2026-09）以外的日期——這支腳本後面還會斷言
       // 額度點數與公平性點數，若覆寫落在 seed 月內會汙染那些數字。

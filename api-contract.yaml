@@ -153,6 +153,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/SetDutyRequest' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: 寫入成功，回傳改動後的格子與全量違規
           content:
@@ -182,6 +184,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/SwapDutiesRequest' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -276,7 +280,8 @@ paths:
         '409':
           description: |
             `DOUBLE_BOOKING_PRESENT`（同人同日兩區，不能略過）或
-            `HARD_VIOLATIONS_PRESENT`（尚有硬約束違規且未確認）
+            `HARD_VIOLATIONS_PRESENT`（尚有硬約束違規且未確認），或
+            `CALENDAR_SYNC_IN_PROGRESS`（行事曆自動更新執行中）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -519,7 +524,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 超過每人每月上限
+          description: 超過每人每月上限；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -534,6 +539,8 @@ paths:
       summary: 清除一格
       description: 清除筆刷。對未登記的格子呼叫是冪等的，回 200。人員不存在回 `404`，日期不在該月回 `422`。
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -614,7 +621,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SolverJob' }
         '409':
-          description: 已有求解工作在執行中（`SOLVER_BUSY`，`details.jobId` 是正在跑的那一個）
+          description: 已有求解工作在執行中（`SOLVER_BUSY`，`details.jobId` 是正在跑的那一個）；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -735,7 +742,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 該月值班表已發布
+          description: 該月值班表已發布；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -781,7 +788,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AreaSettings' }
         '409':
-          description: 有區域或區域類型仍被引用（`AREA_IN_USE` / `AREA_TYPE_IN_USE`）
+          description: 有區域或區域類型仍被引用（`AREA_IN_USE` / `AREA_TYPE_IN_USE`）；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -816,7 +823,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RankSettings' }
         '409':
-          description: 有身分或身分組仍被引用（`RANK_IN_USE`）
+          description: 有身分或身分組仍被引用（`RANK_IN_USE`）；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -843,6 +850,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/EligibilityMatrix' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -870,6 +879,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/PointRules' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -901,6 +912,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ConstraintSettings' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -933,11 +946,55 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/MonthlyOverride' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MonthlyOverride' }
+
+  /api/calendars/sync-status:
+    get:
+      tags: [settings]
+      operationId: getCalendarSyncStatus
+      summary: 行事曆自動更新的狀態
+      description: |
+        程式啟動後，後端在背景從官方來源（人事行政總處辦公日曆表，政府資料開放平台資料集 14718；
+        主來源失敗時用社群鏡像備援）更新今年與明年的行事曆。使用者覆寫過的日子不動。
+
+        前端一開就查這個端點，並在 `running` 為 true 時輪詢到結束。`enabled` 為 false
+        （未開自動更新：開發期、mock、Debug Shell）時 `running` 恆為 false，不鎖畫面、不必輪詢。
+
+        `finishedAt`、`updatedYears`、`affectedPublishedMonths`、`failureKind` 只描述**本次程式執行**
+        目前這一輪；`lastSuccessAt`、`lastError`、`years` 跨啟動保存。失敗時後端不跳視窗，
+        原因寫在程式旁的 `data/calendar-sync.log`，`lastError` 放一句摘要（哪些年份失敗）；
+        前端依 `failureKind` 在遮罩上呈現，並照實說明哪些年份已更新、哪些失敗。
+
+        **同步執行中（`running`）所有寫入端點回 `409 CALENDAR_SYNC_IN_PROGRESS`，讀取照常**
+        （例外：本端點的 `POST /calendars/sync`、唯讀的 `POST /schedules/{ym}/validate`、
+        中止求解的 `DELETE /solver-jobs/{jobId}`）；前端在這段期間以全畫面遮罩鎖住操作。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarSyncStatus' }
+
+  /api/calendars/sync:
+    post:
+      tags: [settings]
+      operationId: startCalendarSync
+      summary: 重試行事曆自動更新
+      description: |
+        立即在背景再跑一輪同步，回傳目前狀態（此時 `running` 為 true）。**冪等**：沒開自動更新
+        （`enabled: false`）或已經在跑時不另起一輪，直接回目前狀態。此端點不受同步執行中的 409 擋。
+      responses:
+        '200':
+          description: 目前狀態
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarSyncStatus' }
 
   /api/calendars/{year}:
     parameters:
@@ -988,6 +1045,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/CalendarDayOverride' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -1044,7 +1103,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Staff' }
         '409':
-          description: 員編重複（`EMPLOYEE_NO_TAKEN`）
+          description: 員編重複（`EMPLOYEE_NO_TAKEN`）；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1080,7 +1139,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 員編重複（`EMPLOYEE_NO_TAKEN`）
+          description: 員編重複（`EMPLOYEE_NO_TAKEN`）；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1102,7 +1161,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 已有值班紀錄
+          description: 已有值班紀錄；同步執行中（行事曆自動更新）也會回 `CALENDAR_SYNC_IN_PROGRESS`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1131,6 +1190,8 @@ paths:
               properties:
                 status: { $ref: '#/components/schemas/StaffStatus' }
       responses:
+        '409':
+          $ref: '#/components/responses/CalendarSyncInProgress'
         '200':
           description: OK
           content:
@@ -1167,6 +1228,13 @@ components:
   responses:
     NotFound:
       description: 找不到
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    CalendarSyncInProgress:
+      description: |
+        行事曆自動更新執行中（`CALENDAR_SYNC_IN_PROGRESS`）：所有寫入端點暫時被擋，等同步結束再試。
+        讀取照常；見 `GET /calendars/sync-status`。
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1213,6 +1281,7 @@ components:
         - STAFF_HAS_DUTIES               # 已有值班紀錄者不可硬刪
         - SOLVER_BUSY                    # 已有求解工作在執行中
         - SOLVER_FAILED
+        - CALENDAR_SYNC_IN_PROGRESS      # 行事曆自動更新執行中：所有寫入端點暫時回 409，讀取照常
 
     Severity:
       type: string
@@ -2034,6 +2103,54 @@ components:
         holidayName: { type: [string, 'null'] }
         quotaPointValue: { type: integer }
         overridden: { type: boolean, description: 是否被排班者手動覆寫過 }
+
+    CalendarSyncStatus:
+      type: object
+      required: [enabled, running, finishedAt, updatedYears, affectedPublishedMonths, failureKind, lastSuccessAt, lastError, years]
+      properties:
+        enabled: { type: boolean, description: 這次執行有沒有開自動更新 }
+        running: { type: boolean, description: 背景工作是否還沒結束 }
+        finishedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 本次執行的背景工作結束時間；還沒結束為 null
+        updatedYears:
+          type: array
+          items: { type: integer }
+          description: 本次執行實際寫入了變動的年份，遞增排序
+        affectedPublishedMonths:
+          type: array
+          items: { type: string, pattern: '^\d{4}-\d{2}$' }
+          description: |
+            本次執行的變動影響哪些**已發布**月份（yyyy-MM，遞增）：變動日所在月份，加上前一個月
+            （公平性點數看隔日、連值週六有視窗）。那些月份的額度點數或公平性點數可能改變，前端 toast 多帶一句提醒
+        failureKind:
+          type: [string, 'null']
+          enum: [unavailable, writeFailed, null]
+          description: |
+            本次執行這一輪同步失敗的性質；`running` 為 true 或沒有失敗時為 null。
+            `unavailable` = 取不到可用的資料（網路層錯誤、HTTP 錯誤含 403／407、封鎖頁或格式不符導致解析／驗證失敗、
+            下載中斷、空殼、主來源故障且鏡像尚未公告）：行事曆沒有被改動，前端可讓使用者「重試」或「先用現有資料」繼續；
+            `writeFailed` = 已拿到通過驗證的官方資料、但寫入資料庫失敗：只能重試。
+            兩者並存時（例如一年寫入失敗、另一年取不到）回 `writeFailed`。
+        lastSuccessAt:
+          type: [string, 'null']
+          format: date-time
+          description: 最近一次至少有一年成功取得官方資料的時間（跨啟動）
+        lastError: { type: [string, 'null'], description: 最近一輪的失敗摘要；沒有失敗為 null }
+        years:
+          type: array
+          description: 曾成功同步過的年份與來源
+          items:
+            type: object
+            required: [year, source, syncedAt]
+            properties:
+              year: { type: integer }
+              source:
+                type: string
+                enum: [official, mirror]
+                description: official = 人事行政總處；mirror = 社群鏡像（備援）
+              syncedAt: { type: string, format: date-time }
 
     CalendarDayOverride:
       type: object

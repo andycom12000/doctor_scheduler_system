@@ -22,6 +22,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   STAFF_HAS_DUTIES: '這位人員已有值班紀錄，無法刪除，請改為停用。',
   SOLVER_BUSY: '已有求解工作正在執行中，請等待完成或先中止。',
   SOLVER_FAILED: '求解工作失敗，請重新求解。',
+  CALENDAR_SYNC_IN_PROGRESS: '正在更新行事曆，請稍候再操作。',
 }
 
 /** 取得可直接顯示給使用者的中文訊息。非 `ApiError`（網路中斷、程式錯誤等）回一般性訊息。 */

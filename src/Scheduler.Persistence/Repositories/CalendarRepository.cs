@@ -44,6 +44,31 @@ internal sealed class CalendarRepository : ICalendarRepository
         entity.Overridden = exception.Overridden;
     }
 
+    public async Task<bool> UpsertIfNotOverriddenAsync(CalendarException exception, CancellationToken cancellationToken = default)
+    {
+        // 讀取不走追蹤快取：要看資料庫當下的值，不是 scope 內較早載入的
+        var current = await _db.CalendarDays.AsNoTracking().SingleOrDefaultAsync(d => d.Date == exception.Day.Date, cancellationToken);
+        if (current is { Overridden: true })
+        {
+            return false;
+        }
+
+        await UpsertAsync(exception, cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> RemoveIfNotOverriddenAsync(DateOnly date, CancellationToken cancellationToken = default)
+    {
+        var current = await _db.CalendarDays.AsNoTracking().SingleOrDefaultAsync(d => d.Date == date, cancellationToken);
+        if (current is null || current.Overridden)
+        {
+            return false;
+        }
+
+        await RemoveAsync(date, cancellationToken);
+        return true;
+    }
+
     public async Task RemoveAsync(DateOnly date, CancellationToken cancellationToken = default)
     {
         var entity = await _db.CalendarDays.FindAsync(new object[] { date }, cancellationToken);

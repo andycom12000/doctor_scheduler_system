@@ -30,6 +30,21 @@ public sealed class ContractSchema
 
     public static ContractSchema Current => Instance.Value;
 
+    /// <summary>契約裡所有操作的 (小寫 HTTP 方法, 路徑)。</summary>
+    public IEnumerable<(string Method, string Path)> Operations()
+    {
+        foreach (var (path, pathItem) in (JsonObject)_document["paths"]!)
+        {
+            foreach (var (method, _) in (JsonObject)pathItem!)
+            {
+                if (method != "parameters")
+                {
+                    yield return (method.ToLowerInvariant(), path);
+                }
+            }
+        }
+    }
+
     public bool HasResponse(string operationId, int status) =>
         FindOperation(operationId)["responses"]?[status.ToString(CultureInfo.InvariantCulture)] is not null;
 

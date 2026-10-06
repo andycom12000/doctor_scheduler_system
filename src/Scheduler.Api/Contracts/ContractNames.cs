@@ -98,6 +98,7 @@ internal static class ContractNames
         ErrorCode.StaffHasDuties => "STAFF_HAS_DUTIES",
         ErrorCode.SolverBusy => "SOLVER_BUSY",
         ErrorCode.SolverFailed => "SOLVER_FAILED",
+        ErrorCode.CalendarSyncInProgress => "CALENDAR_SYNC_IN_PROGRESS",
         _ => throw Unknown(v),
     };
 
@@ -161,6 +162,7 @@ internal static class ContractNames
         ErrorCode.EmployeeNoTaken => StatusCodes.Status409Conflict,
         ErrorCode.StaffHasDuties => StatusCodes.Status409Conflict,
         ErrorCode.SolverBusy => StatusCodes.Status409Conflict,
+        ErrorCode.CalendarSyncInProgress => StatusCodes.Status409Conflict,
         ErrorCode.SolverFailed => StatusCodes.Status500InternalServerError,
         _ => throw Unknown(v),
     };

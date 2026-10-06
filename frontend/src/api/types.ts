@@ -61,6 +61,7 @@ export type MonthlyOverride = components['schemas']['MonthlyOverride']
 export type Calendar = components['schemas']['Calendar']
 export type CalendarDay = components['schemas']['CalendarDay']
 export type CalendarDayOverride = components['schemas']['CalendarDayOverride']
+export type CalendarSyncStatus = components['schemas']['CalendarSyncStatus']
 
 export type StaffStatus = components['schemas']['StaffStatus']
 export type StaffCounts = components['schemas']['StaffCounts']

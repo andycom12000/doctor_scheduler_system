@@ -19,6 +19,7 @@ public enum ErrorCode
     StaffHasDuties,
     SolverBusy,
     SolverFailed,
+    CalendarSyncInProgress,
 }
 
 /// <summary>

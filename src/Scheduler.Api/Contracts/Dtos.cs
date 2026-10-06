@@ -186,6 +186,19 @@ public sealed record CalendarDayDto(
     int QuotaPointValue,
     bool Overridden);
 
+public sealed record CalendarSyncStatusDto(
+    bool Enabled,
+    bool Running,
+    DateTimeOffset? FinishedAt,
+    IReadOnlyList<int> UpdatedYears,
+    IReadOnlyList<string> AffectedPublishedMonths,
+    string? FailureKind,
+    DateTimeOffset? LastSuccessAt,
+    string? LastError,
+    IReadOnlyList<CalendarSyncedYearDto> Years);
+
+public sealed record CalendarSyncedYearDto(int Year, string Source, DateTimeOffset SyncedAt);
+
 // -- 人員 ---------------------------------------------------------------
 
 public sealed record StaffListDto(IReadOnlyList<StaffDto> Items, StaffCountsDto Counts);

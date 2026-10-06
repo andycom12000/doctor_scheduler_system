@@ -1,5 +1,6 @@
 using Scheduler.Application.BlockedDays;
 using Scheduler.Application.Calendars;
+using Scheduler.Application.Calendars.Sync;
 using Scheduler.Application.Errors;
 using Scheduler.Application.People;
 using Scheduler.Application.Schedules;
@@ -176,6 +177,23 @@ internal static class ContractMapper
             d.Day.HolidayName,
             d.QuotaPointValue,
             d.Overridden);
+
+    public static CalendarSyncStatusDto ToContract(this CalendarSyncStatusView v) =>
+        new(
+            v.Enabled,
+            v.Running,
+            v.FinishedAt,
+            v.UpdatedYears,
+            v.AffectedPublishedMonths,
+            v.FailureKind switch
+            {
+                CalendarSyncFailureKind.Unavailable => "unavailable",
+                CalendarSyncFailureKind.WriteFailed => "writeFailed",
+                _ => null,
+            },
+            v.LastSuccessAt,
+            v.LastError,
+            v.Years.Select(y => new CalendarSyncedYearDto(y.Year, y.Source, y.SyncedAt)).ToArray());
 
     // -- 人員 ---------------------------------------------------------------
 

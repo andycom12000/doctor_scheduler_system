@@ -45,6 +45,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ISettingsRepository, SettingsRepository>();
         services.AddScoped<ICalendarRepository, CalendarRepository>();
         services.AddScoped<ISolverJobRepository, SolverJobRepository>();
+        services.AddScoped<ICalendarSyncStateRepository, CalendarSyncStateRepository>();
         return services;
     }
 }

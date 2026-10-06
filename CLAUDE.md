@@ -8,7 +8,7 @@
   絕不可混用**，講「點數」或「假日」而不指明是哪一個，一律視為錯誤。
 - `docs/ARCHITECTURE.md` — 技術決策已定案。**第 2 節是「已排除方案」，提任何技術選型前先看過**，
   Blazor / Tauri / Electron / MAUI / Timefold / meta-framework 等都已評估並否決，理由都在裡面。
-- `api-contract.yaml` — 前後端唯一耦合點。42 個操作、52 個 schema。
+- `api-contract.yaml` — 前後端唯一耦合點。44 個操作、54 個 schema。
 - `docs/adr/` — 四個領域決策的理由。動到不可排班日、約束模型、變體產生方式、月結轉快照之前先讀。
 - `docs/constraint-defaults.md` — 7 硬 / 7 軟約束的唯一預設值。seed、mock、測試 fixture 都從它抄，不得另發明代碼或數字。
 
@@ -70,7 +70,13 @@
   nullable，缺欄位由 mapper 判定，不讓反序列化默默塞預設值。
   **匯出端點**也接上了（§6.4）：`Application/Schedules/ScheduleExportQueries` 攤成格式無關的 `ExportTable`
   （兩種版面、停用者只在有值班時出現、國定假日印名稱），`Api/Export/XlsxRenderer` 用 ClosedXML 轉位元組。
-  Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 42 個操作已全部落地
+  Api 是目前唯一掛 ClosedXML 的專案，Application 仍是零套件。契約 44 個操作已全部落地。
+- **行事曆自動更新**（#112）：啟動後背景從人事總處開放資料（失敗退鏡像）更新行事曆。解析比對在 `Application/Calendars/Sync/`，
+  HTTP 來源／背景工作／`data/calendar-sync.log` 在 `Api/CalendarSync/`，狀態存 `app_meta`。
+  `ApiHostOptions.CalendarAutoSync` 預設 false，**只有 Release Shell 開**（開發期 `Program.cs` 預設也關，要試時設
+  `SCHEDULER_CALENDAR_AUTO_SYNC=true`）；端點 `GET /api/calendars/sync-status`、`POST /api/calendars/sync`（重試，冪等）；
+  同步中所有寫入回 409 `CALENDAR_SYNC_IN_PROGRESS`、前端全畫面遮罩，失敗分 `unavailable`（取不到資料，可略過）與
+  `writeFailed`（寫入失敗，只能重試）；有更新才 toast。
 - **求解**已落地（ARCHITECTURE §4.8）。`Scheduler.Application/Solving/`：`ISolver`（一次解一份；權重另放
   `EffectiveWeights`，因為 `ConstraintDefinition.Weight` 上限 100 裝不下乘過 1.5 的數）、`VariantProfiles`
   （三個具名立場的乘數表、多樣性 15 格）、`SolverJobService`（singleton，單一 slot、狀態機、序列三份、
@@ -132,7 +138,7 @@ Shell 是 net8.0-windows，只守得到 csproj 層，編譯期由那個旗標守
 ```bash
 dotnet build                              # 建置全部
 dotnet test                               # 架構規則 + 領域規則 + 存取層 + 應用層 + 契約守法 + 求解器漂移守門
-dotnet run --project src/Scheduler.Api    # 開發期後端 :5080
+dotnet run --project src/Scheduler.Api    # 開發期後端 :5080（行事曆自動更新預設關；要試：SCHEDULER_CALENDAR_AUTO_SYNC=true）
 
 cd frontend
 npm run dev          # :5173，/api proxy 到 :5080
@@ -215,6 +221,10 @@ gh pr create        # base 自動是 develop（預設分支已設定）
 
 ## 專案特有的坑
 
+- **行事曆自動更新的「差異」只看 isHoliday／isPublicHoliday／isMakeUpWorkday，不看名稱**——官方備註（「補假」）
+  比內建名稱（「小年夜補假」）籠統，算差異會每個人首次啟動都被改名並跳 toast。
+- **同步成功過的年份，種子的逐日補缺不再補內建值**（`DefaultDataSeeder` 讀 `app_meta` 的同步狀態），
+  否則官方刪掉的日子離線重開又被補回。同步每年一個獨立 scope、一次 commit，不要改成共用一個 DbContext。
 - **`Scheduler.Shell` 看不到 Application／Domain／Persistence／Solver 的型別**——傳遞引用關掉了，
   這是規則 2 的編譯期保證，不要為了圖方便打開。Api 對 Shell 暴露的東西簽章只能用 BCL 型別
   （`ISolverProgressFeed` 就是這樣設計的），否則 Shell 會 CS0012。順帶讓 `System.Windows.Application`

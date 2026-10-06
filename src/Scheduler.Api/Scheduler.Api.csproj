@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Scheduler.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Scheduler.Application\Scheduler.Application.csproj" />
     <ProjectReference Include="..\Scheduler.Solver\Scheduler.Solver.csproj" />
     <ProjectReference Include="..\Scheduler.Persistence\Scheduler.Persistence.csproj" />

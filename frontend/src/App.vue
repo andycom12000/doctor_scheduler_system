@@ -8,6 +8,7 @@ import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import CalendarSyncOverlay from '@/components/CalendarSyncOverlay.vue'
 import { useYearMonth } from '@/composables/useYearMonth'
 
 const route = useRoute()
@@ -57,6 +58,9 @@ const currentName = computed(() => route.name?.toString())
         <span class="shell__version" title="版本">v{{ appVersion }}</span>
       </div>
     </header>
+
+    <!-- 行事曆自動更新（#112）：同步中全畫面鎖住、失敗只能重試／略過；狀態機在 useCalendarSyncNotice -->
+    <CalendarSyncOverlay />
 
     <main class="shell__content">
       <RouterView />

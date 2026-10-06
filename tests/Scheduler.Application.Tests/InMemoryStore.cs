@@ -278,6 +278,28 @@ public sealed class InMemoryStore : IScheduleRepository, IBlockedDayRepository, 
         return Task.CompletedTask;
     }
 
+    public async Task<bool> UpsertIfNotOverriddenAsync(CalendarException exception, CancellationToken ct = default)
+    {
+        if (CalendarExceptions.TryGetValue(exception.Day.Date, out var current) && current.Overridden)
+        {
+            return false;
+        }
+
+        await UpsertAsync(exception, ct);
+        return true;
+    }
+
+    public async Task<bool> RemoveIfNotOverriddenAsync(DateOnly date, CancellationToken ct = default)
+    {
+        if (!CalendarExceptions.TryGetValue(date, out var current) || current.Overridden)
+        {
+            return false;
+        }
+
+        await RemoveAsync(date, ct);
+        return true;
+    }
+
     // ---- ISolverJobRepository ----
 
     public Task<SolverJobRecord?> FindAsync(string jobId, CancellationToken ct = default) =>
