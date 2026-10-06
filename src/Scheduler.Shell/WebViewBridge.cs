@@ -76,8 +76,8 @@ public static class WebViewBridge
     };
 
     /// <summary>
-    /// 下載要跳的「另存新檔」對話框內容：WebView2 預設會不問就存進「下載」資料夾（#33 實測），
-    /// 所以 Shell 接手 <c>DownloadStarting</c>，以它建議的路徑當預設檔名與資料夾，讓使用者自己選位置。
+    /// 「另存新檔」對話框內容：以建議的檔名（或路徑）帶出預設檔名與副檔名篩選。目前只傳檔名
+    /// （<see cref="SaveFileProtocol"/>），資料夾留空由 Windows 決定。
     /// </summary>
     public static SaveDialogSpec SaveDialogFor(string suggestedPath)
     {

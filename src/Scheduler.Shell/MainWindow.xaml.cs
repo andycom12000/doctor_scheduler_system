@@ -92,6 +92,7 @@ public partial class MainWindow : Window
             core.AddWebResourceRequestedFilter($"{WebViewBridge.Origin}*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
             core.WebResourceRequested += OnWebResourceRequested;
             core.DownloadStarting += OnDownloadStarting;
+            core.WebMessageReceived += OnWebMessageReceived;
             core.ContextMenuRequested += OnContextMenuRequested;
 #if DEBUG
             core.Settings.AreDevToolsEnabled = true;
@@ -186,37 +187,42 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 匯出 Excel 的 <c>&lt;a download&gt;</c> 落到這裡。不接手的話 WebView2 會不問就存進「下載」資料夾、只跳一個角落提示
-    /// （#33 實測），使用者找不到檔案也選不了位置。改成跳系統「另存新檔」對話框；取消就整個取消下載。
-    /// Handled 一律設 true，關掉 WebView2 自己的下載提示。
-    /// 不在事件處理函式裡直接跑模態迴圈：照 WebView2 對事件重入的建議拿 deferral，事件返回後再由 Dispatcher 開對話框，
-    /// 選完才 Complete。對話框開著的這段時間前端的 blob URL 必須還活著，見 frontend 的 <c>downloadBlob</c>。
-    /// 已知問題：Chromium 在使用者選好之前就把內容寫進「下載」資料夾的 GUID.tmp，取消時那個檔不會刪（#70）。
+    /// 匯出不走 Chromium 的下載機制：它會在使用者選位置之前就把內容寫進「下載」資料夾的 GUID.tmp，
+    /// 取消時不刪（#70）。前端改用 postMessage 把位元組交過來（見 <see cref="SaveFileProtocol"/>），
+    /// 這裡跳系統「另存新檔」，只在按儲存後才寫入選定路徑；取消就什麼都不寫。
+    /// 不在事件處理函式裡直接跑模態迴圈：事件返回後再由 Dispatcher 開對話框。
     /// </summary>
-    private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        CoreWebView2Deferral deferral;
+        ParseOutcome outcome;
         try
         {
-            e.Handled = true;
-            deferral = e.GetDeferral();
+            if (!SaveFileProtocol.IsTrustedSource(e.Source)) return;
+            outcome = SaveFileProtocol.Parse(e.WebMessageAsJson);
         }
         catch (Exception ex)
         {
-            ShellSafety.Report("DownloadStarting", ex);
+            ShellSafety.Report("WebMessageReceived", ex);
             return;
         }
 
+        if (!outcome.IsForUs) return;
+        if (outcome.Request is null)
+        {
+            if (outcome.Id is not null) Reply(outcome.Id, SaveFileProtocol.Failed, outcome.Error);
+            return;
+        }
+
+        var request = outcome.Request;
         // InvokeAsync 的 Task 不會有人 await；內部每一步都已自己 try，這裡只回傳不觀察
         _ = Dispatcher.InvokeAsync(() =>
         {
             try
             {
-                var spec = WebViewBridge.SaveDialogFor(e.ResultFilePath);
+                var spec = WebViewBridge.SaveDialogFor(request.FileName);
                 var dialog = new Microsoft.Win32.SaveFileDialog
                 {
                     FileName = spec.FileName,
-                    InitialDirectory = spec.InitialDirectory,
                     DefaultExt = spec.DefaultExt,
                     Filter = spec.Filter,
                     AddExtension = true,
@@ -224,28 +230,42 @@ public partial class MainWindow : Window
                     // 不要在 %APPDATA%\Microsoft\Windows\Recent 留 .lnk（portable：data/ 以外不寫）
                     AddToRecent = false,
                 };
-                if (dialog.ShowDialog(this) == true)
+                if (dialog.ShowDialog(this) != true)
                 {
-                    e.ResultFilePath = dialog.FileName;
+                    Reply(request.Id, SaveFileProtocol.Cancelled);
+                    return;
                 }
-                else
-                {
-                    e.Cancel = true;
-                }
+
+                // 直接寫到使用者選的路徑，不先寫旁邊的暫存檔再改名：那也是一種中間檔
+                File.WriteAllBytes(dialog.FileName, request.Bytes);
+                Reply(request.Id, SaveFileProtocol.Saved);
             }
             catch (Exception ex)
             {
-                // 對話框開不起來就不下載，總比默默存到使用者不知道的地方好
-                ShellSafety.Report("DownloadStarting.Dialog", ex);
-                ShellSafety.Try(() => e.Cancel = true, "DownloadStarting.Cancel");
-            }
-            finally
-            {
-                // args 已失效（例如 WebView2 關閉中）時這兩個 COM 呼叫也會丟；Shell 沒有全域例外處理，不能讓它炸掉 process
-                ShellSafety.Try(deferral.Complete, "DownloadStarting.Complete");
+                ShellSafety.Report("SaveFile", ex);
+                // 覆寫既有檔時寫到一半失敗，那個檔可能已被截斷
+                Reply(request.Id, SaveFileProtocol.Failed, $"{ex.Message}（選定位置的檔案可能不完整，請確認或重新匯出）");
             }
         });
     }
+
+    /// <summary>
+    /// 保險：前端已不再觸發下載，若還有任何下載（例如日後誰又寫了 <c>&lt;a download&gt;</c>）就整個取消，
+    /// 免得 WebView2 不問就存進「下載」資料夾、留下 GUID.tmp。
+    /// </summary>
+    private static void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    {
+        ShellSafety.Try(() =>
+        {
+            e.Handled = true;
+            e.Cancel = true;
+        }, "DownloadStarting");
+    }
+
+    private void Reply(string id, string status, string? message = null) =>
+        ShellSafety.Try(
+            () => WebView.CoreWebView2.PostWebMessageAsJson(SaveFileProtocol.ResultJson(id, status, message)),
+            "SaveFile.Reply");
 
     private async Task<CoreWebView2WebResourceResponse> ForwardToApiAsync(CoreWebView2 core, Uri uri, CoreWebView2WebResourceRequest request)
     {
