@@ -50,6 +50,9 @@ public sealed class SolverJobService
     private readonly List<Channel<SolverProgressSnapshot>> _broadcast = new();
     private bool _slotTaken;
 
+    /// <summary>僅供測試：<see cref="CancelAsync"/> 拿到活工作之後、呼叫 Cancel 之前觸發（參數是該工作的 RunTask）。</summary>
+    internal Action<Task?>? AfterLiveLookup { get; set; }
+
     /// <summary>
     /// 佔著 slot 的工作編號，佔 slot 的當下就決定、與 <see cref="_slotTaken"/> 在同一個鎖裡設定。
     /// 工作登記進 <see cref="_live"/> 之前（撈資料、寫第一筆紀錄的那段）撞到 slot 的人也拿得到 <c>details.jobId</c>。
@@ -169,7 +172,19 @@ public sealed class SolverJobService
 
         if (live is not null)
         {
-            live.Cancellation.Cancel();
+            // 測試縫：在「已拿到 live、尚未 Cancel」的空窗停住，讓測試確定性地讓工作跑完並 Dispose
+            AfterLiveLookup?.Invoke(live.RunTask);
+            try
+            {
+                live.Cancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 工作剛好在查表與 Cancel 之間收尾並 Dispose 了 CTS：等於已結束，下面回目前的終態即可。
+                // 不採「Dispose 與 Cancel 同鎖」：Cancel 會同步執行已註冊的回呼（求解器的 StopSearch 等），
+                // 抱著 _gate 跑外部回呼有死鎖風險；Dispose 只會在終態落盤之後發生，catch 之後資料庫一定已是終態
+            }
+
             if (live.RunTask is not null)
             {
                 await Task.WhenAny(live.RunTask, Task.Delay(TimeSpan.FromSeconds(10), cancellationToken));
