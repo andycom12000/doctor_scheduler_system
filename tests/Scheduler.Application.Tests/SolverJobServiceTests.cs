@@ -256,14 +256,21 @@ public class SolverJobServiceTests
     public async Task 中止遇上工作剛好結束_不丟_ObjectDisposedException_回終態()
     {
         // 空窗：CancelAsync 已從 _live 拿到工作、尚未 Cancel；此時讓工作跑完並 Dispose CancellationTokenSource。
-        // 縫的回呼等 RunTask 完成（RunAsync 的 finally 已 Dispose），再放行 Cancel，確定性地踩進去
-        var (service, store, _) = Setup();
+        // 假求解器卡在閘門上（不看 ct，放行後照常成功），保證 CancelAsync 查表時工作還在 _live；
+        // 縫的回呼先開閘門、再等 RunTask 完成（RunAsync 的 finally 已 Dispose），才放行 Cancel，確定性地踩進去
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (service, store, _) = Setup(async (r, _) =>
+        {
+            await release.Task;
+            return OneDuty(r);
+        });
         var created = await service.CreateAsync(Oct, 1, 1);
         var hit = false;
         service.AfterLiveLookup = runTask =>
         {
             hit = true;
-            runTask!.Wait(TimeSpan.FromSeconds(10));
+            release.SetResult();
+            Assert.True(runTask!.Wait(TimeSpan.FromSeconds(10)), "工作沒有在時限內收尾");
         };
 
         var view = await service.CancelAsync(created.Record.JobId);
