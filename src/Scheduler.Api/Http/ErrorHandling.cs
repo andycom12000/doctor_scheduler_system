@@ -28,6 +28,31 @@ internal static class ErrorHandling
 }
 
 /// <summary>
+/// 行事曆自動更新執行中（#112）：所有寫入（POST／PUT／PATCH／DELETE）回 409 <c>CALENDAR_SYNC_IN_PROGRESS</c>，
+/// 讀取照常。唯一例外是觸發同步本身的 <c>POST /api/calendars/sync</c>（冪等，回目前狀態）。
+/// 同步每年各自一個 scope 寫入，鎖住使用者的寫入順便讓「比對與寫入之間被使用者覆寫」的競態不可能發生。
+/// 必須排在 <see cref="ErrorHandling.UseSchedulerErrors"/> 之後，才會被轉成 ErrorResponse。
+/// </summary>
+internal static class CalendarSyncGuard
+{
+    public static IApplicationBuilder UseCalendarSyncGuard(this IApplicationBuilder app) =>
+        app.Use(async (context, next) =>
+        {
+            var request = context.Request;
+            var isWrite = !HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method) && !HttpMethods.IsOptions(request.Method);
+            if (isWrite
+                && request.Path.StartsWithSegments("/api")
+                && !request.Path.Equals("/api/calendars/sync", StringComparison.OrdinalIgnoreCase)
+                && context.RequestServices.GetRequiredService<Application.Calendars.Sync.CalendarSyncProgress>().Running)
+            {
+                throw new SchedulerException(ErrorCode.CalendarSyncInProgress, "正在更新行事曆，請稍候再操作");
+            }
+
+            await next(context);
+        });
+}
+
+/// <summary>
 /// 路徑與查詢參數的解析。Minimal API 內建的 binding 失敗會回沒有 <c>ErrorResponse</c> 形狀的 400，
 /// 所以參數一律以字串接、在這裡解析，格式錯誤統一是 422 <c>INVALID_REQUEST</c>。
 /// </summary>

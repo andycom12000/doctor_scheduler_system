@@ -1,7 +1,9 @@
+using Scheduler.Api.CalendarSync;
 using Scheduler.Api.Contracts;
 using Scheduler.Api.Http;
 using Scheduler.Application.BlockedDays;
 using Scheduler.Application.Calendars;
+using Scheduler.Application.Calendars.Sync;
 using Scheduler.Application.People;
 using Scheduler.Application.Schedules;
 using Scheduler.Application.Settings;
@@ -64,6 +66,13 @@ internal static class WriteEndpoints
 
         settings.MapPut("/monthly-overrides/{ym}", async (string ym, HttpContext http, SettingsCommands c, CancellationToken ct) =>
             (await c.ReplaceMonthlyOverrideAsync(Parse.YearMonth(ym), (await RequestBody.ReadAsync<MonthlyOverrideDto>(http)).ToQuotaCapByRank(), ct)).ToContract());
+
+        // 重試行事曆自動更新。冪等：沒開或已在跑就不另起一輪，一律回目前狀態。
+        app.MapPost("/api/calendars/sync", async (CalendarSyncRunner runner, CalendarSyncQueries q, CancellationToken ct) =>
+        {
+            runner.StartIfIdle();
+            return (await q.GetStatusAsync(ct)).ToContract();
+        });
 
         app.MapPatch("/api/calendars/{year}/{date}", async (string year, string date, HttpContext http, CalendarCommands c, CancellationToken ct) =>
         {

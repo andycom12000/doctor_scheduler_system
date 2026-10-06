@@ -255,7 +255,317 @@ public sealed class CalendarSyncTests
         store ??= new InMemoryStore();
         var state = new MemoryState();
         var log = new ListLog();
-        return (new CalendarSyncService(store, state, store, sources, log, new FixedTime()), store, state, log);
+        return (new CalendarSyncService(new StoreScopes(store, state), sources, log, new FixedTime()), store, state, log);
+    }
+
+    /// <summary>沒有交易語意的 scope：直接用記憶體 store（一般情境夠用）。</summary>
+    private sealed class StoreScopes : ICalendarSyncScopeFactory
+    {
+        private readonly InMemoryStore _store;
+        private readonly MemoryState _state;
+
+        public StoreScopes(InMemoryStore store, MemoryState state)
+        {
+            _store = store;
+            _state = state;
+        }
+
+        public ICalendarSyncScope Create() => new Scope(_store, _state);
+
+        private sealed class Scope : ICalendarSyncScope
+        {
+            public Scope(InMemoryStore store, MemoryState state)
+            {
+                Calendar = store;
+                Schedules = store;
+                UnitOfWork = store;
+                State = state;
+            }
+
+            public ICalendarRepository Calendar { get; }
+            public ICalendarSyncStateRepository State { get; }
+            public IScheduleRepository Schedules { get; }
+            public IUnitOfWork UnitOfWork { get; }
+            public void Dispose() { }
+        }
+    }
+
+    /// <summary>
+    /// 有交易語意的 scope：每個 scope 的寫入先暫存，commit 才套用到底下的 store；scope 丟掉＝暫存全丟。
+    /// 可以指定哪一次 commit 失敗、或在哪一天的 upsert 丟例外，用來驗證「每年獨立 scope，失敗不留殘渣」。
+    /// </summary>
+    private sealed class StagingScopes : ICalendarSyncScopeFactory
+    {
+        private readonly InMemoryStore _store;
+        private readonly MemoryState _state;
+
+        public StagingScopes(InMemoryStore store, MemoryState state)
+        {
+            _store = store;
+            _state = state;
+        }
+
+        /// <summary>暫存裡有任何一筆落在這一年，commit 就失敗。</summary>
+        public int? FailCommitForYear { get; set; }
+
+        /// <summary>upsert 這一天時丟例外（前面幾天已經暫存）。</summary>
+        public DateOnly? ThrowOnUpsert { get; set; }
+
+        public ICalendarSyncScope Create() => new Scope(this);
+
+        private sealed class Scope : ICalendarSyncScope, ICalendarRepository, ICalendarSyncStateRepository, IUnitOfWork
+        {
+            private readonly StagingScopes _owner;
+            private readonly List<Action> _pending = new();
+            private readonly List<DateOnly> _pendingDates = new();
+            private CalendarSyncState? _pendingState;
+
+            public Scope(StagingScopes owner)
+            {
+                _owner = owner;
+            }
+
+            public ICalendarRepository Calendar => this;
+            public ICalendarSyncStateRepository State => this;
+            public IScheduleRepository Schedules => _owner._store;
+            public IUnitOfWork UnitOfWork => this;
+            public void Dispose() { }
+
+            public Task<IReadOnlyList<CalendarException>> GetExceptionsAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default) =>
+                ((ICalendarRepository)_owner._store).GetExceptionsAsync(from, to, cancellationToken);
+
+            public Task<CalendarException?> FindAsync(DateOnly date, CancellationToken cancellationToken = default) =>
+                ((ICalendarRepository)_owner._store).FindAsync(date, cancellationToken);
+
+            public Task UpsertAsync(CalendarException exception, CancellationToken cancellationToken = default)
+            {
+                if (_owner.ThrowOnUpsert == exception.Day.Date)
+                {
+                    throw new InvalidOperationException("模擬寫入中途失敗");
+                }
+
+                _pendingDates.Add(exception.Day.Date);
+                _pending.Add(() => _owner._store.CalendarExceptions[exception.Day.Date] = exception);
+                return Task.CompletedTask;
+            }
+
+            public Task RemoveAsync(DateOnly date, CancellationToken cancellationToken = default)
+            {
+                _pendingDates.Add(date);
+                _pending.Add(() => _owner._store.CalendarExceptions.Remove(date));
+                return Task.CompletedTask;
+            }
+
+            public async Task<bool> UpsertIfNotOverriddenAsync(CalendarException exception, CancellationToken cancellationToken = default)
+            {
+                if (_owner._store.CalendarExceptions.TryGetValue(exception.Day.Date, out var current) && current.Overridden)
+                {
+                    return false;
+                }
+
+                await UpsertAsync(exception, cancellationToken);
+                return true;
+            }
+
+            public async Task<bool> RemoveIfNotOverriddenAsync(DateOnly date, CancellationToken cancellationToken = default)
+            {
+                if (!_owner._store.CalendarExceptions.TryGetValue(date, out var current) || current.Overridden)
+                {
+                    return false;
+                }
+
+                await RemoveAsync(date, cancellationToken);
+                return true;
+            }
+
+            public Task<CalendarSyncState> GetAsync(CancellationToken cancellationToken = default) => _owner._state.GetAsync(cancellationToken);
+
+            public Task SaveAsync(CalendarSyncState state, CancellationToken cancellationToken = default)
+            {
+                _pendingState = state;
+                return Task.CompletedTask;
+            }
+
+            public Task CommitAsync(CancellationToken cancellationToken = default)
+            {
+                if (_owner.FailCommitForYear is { } year && _pendingDates.Any(d => d.Year == year))
+                {
+                    throw new InvalidOperationException("模擬 commit 失敗");
+                }
+
+                foreach (var apply in _pending)
+                {
+                    apply();
+                }
+
+                if (_pendingState is not null)
+                {
+                    _owner._state.SaveAsync(_pendingState, cancellationToken);
+                }
+
+                return Task.CompletedTask;
+            }
+        }
+    }
+
+    private static (CalendarSyncService Service, InMemoryStore Store, MemoryState State, ListLog Log, StagingScopes Scopes) BuildStaging(
+        InMemoryStore store, params ICalendarSource[] sources)
+    {
+        var state = new MemoryState();
+        var log = new ListLog();
+        var scopes = new StagingScopes(store, state);
+        return (new CalendarSyncService(scopes, sources, log, new FixedTime()), store, state, log, scopes);
+    }
+
+    [Fact]
+    public async Task Run_CommitFailureOfOneYear_LeavesThatYearUntouched_AndLaterCommitsDoNotCarryItOut()
+    {
+        var store = new InMemoryStore();
+        var may1 = new DateOnly(2026, 5, 1);
+        store.CalendarExceptions[may1] = Exception(may1, "勞動節");
+        // 2026 官方檔只有元旦：套用的話會刪 5/1、加 1/1；但 2026 的 commit 會失敗
+        var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
+        var (service, _, state, log, scopes) = BuildStaging(store, source);
+        scopes.FailCommitForYear = 2026;
+
+        var result = await service.RunAsync();
+
+        Assert.Equal(YearSyncOutcome.Failed, result.Years[2026]);
+        // 2026 完全沒變：5/1 還在、1/1 沒進去——後面兩年的 commit 與最後的狀態 commit 都沒把它帶出去
+        Assert.True(store.CalendarExceptions.ContainsKey(may1));
+        Assert.False(store.CalendarExceptions.ContainsKey(new DateOnly(2026, 1, 1)));
+        Assert.Equal(new[] { 2027, 2028 }, result.UpdatedYears);
+        Assert.True(store.CalendarExceptions.ContainsKey(new DateOnly(2028, 1, 3)));
+        Assert.Equal(new[] { 2027, 2028 }, state.State.Years.Select(y => y.Year));
+        Assert.Contains("2026", state.State.LastError);
+        Assert.Contains(log.Lines, l => l.Contains("2026") && l.Contains("模擬 commit 失敗"));
+    }
+
+    [Fact]
+    public async Task Run_ExceptionMidLoop_DiscardsTheWholeYear()
+    {
+        var store = new InMemoryStore();
+        var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
+        var (service, _, state, _, scopes) = BuildStaging(store, source);
+        // 2028 依序 upsert 1/1、1/3、2/5；第三筆丟例外，前兩筆已暫存
+        scopes.ThrowOnUpsert = new DateOnly(2028, 2, 5);
+
+        var result = await service.RunAsync();
+
+        Assert.Equal(YearSyncOutcome.Failed, result.Years[2028]);
+        Assert.DoesNotContain(store.CalendarExceptions.Keys, d => d.Year == 2028);
+        Assert.Equal(YearSyncOutcome.Updated, result.Years[2027]);
+        Assert.True(store.CalendarExceptions.ContainsKey(new DateOnly(2027, 1, 1)));
+        Assert.Equal(new[] { 2027 }, state.State.Years.Select(y => y.Year));
+    }
+
+    [Fact]
+    public async Task Run_WeekendOffDayWithoutRemark_KeepsExistingWeekendPublicHoliday()
+    {
+        var store = new InMemoryStore();
+        var saturday = new DateOnly(2028, 1, 1); // 週六，內建是週末國定假日
+        store.CalendarExceptions[saturday] = Exception(saturday, "元旦");
+        // 來源漏填這天的備註（旗標 2、備註空），另有 1/3 補假
+        var source = new FakeSource("official", false, y => Official(y, y == 2028
+            ? new() { [saturday] = (2, ""), [new DateOnly(2028, 1, 3)] = (2, "補假") }
+            : NewYearOnly(y)));
+        var (service, _, _, _) = Build(store, source);
+
+        await service.RunAsync();
+
+        Assert.True(store.CalendarExceptions[saturday].Day.IsPublicHoliday);
+        Assert.True(store.CalendarExceptions.ContainsKey(new DateOnly(2028, 1, 3)));
+    }
+
+    [Fact]
+    public async Task Run_FallbackSourceNeverDeletesRows()
+    {
+        var store = new InMemoryStore();
+        var stale = new DateOnly(2028, 6, 6);
+        store.CalendarExceptions[stale] = Exception(stale, "過期的");
+        var primary = new FakeSource("official", false, _ => throw new HttpRequestException("連不上"));
+        var mirror = new FakeSource("mirror", true, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
+        var (service, _, _, _) = Build(store, primary, mirror);
+
+        await service.RunAsync();
+
+        Assert.True(store.CalendarExceptions.ContainsKey(stale));
+        Assert.True(store.CalendarExceptions.ContainsKey(new DateOnly(2028, 1, 3)));
+    }
+
+    [Fact]
+    public async Task Run_PrimaryHasNoDataForThisYearOrEarlier_IsAFailureAndUsesMirror()
+    {
+        var store = new InMemoryStore();
+        store.CalendarExceptions[new DateOnly(2026, 5, 1)] = Exception(new DateOnly(2026, 5, 1), "勞動節");
+        // 今年（2027）以及已有資料的 2026：主來源說「沒有」，不可能是尚未公告
+        var primary = new FakeSource("official", false, y => y <= 2027
+            ? throw new CalendarSyncException(CalendarSyncFailure.NotPublished, "metadata 沒有")
+            : Official(y, Holidays2028()));
+        var mirror = new FakeSource("mirror", true, y => Official(y, NewYearOnly(y)));
+        var (service, _, state, log) = Build(store, primary, mirror);
+
+        var result = await service.RunAsync();
+
+        Assert.Contains(2027, mirror.Calls);
+        Assert.Contains(2026, mirror.Calls);
+        Assert.Equal(YearSyncOutcome.Updated, result.Years[2027]);
+        Assert.Equal("mirror", state.State.Years.Single(y => y.Year == 2027).Source);
+        Assert.Contains(log.Lines, l => l.Contains("official 尚未公告"));
+    }
+
+    [Fact]
+    public async Task Run_PrimaryHasNoDataAndNoMirror_RecordsLastError()
+    {
+        var primary = new FakeSource("official", false, y => y <= 2027
+            ? throw new CalendarSyncException(CalendarSyncFailure.NotPublished, "metadata 沒有")
+            : Official(y, Holidays2028()));
+        var (service, _, state, _) = Build(sources: primary);
+
+        var result = await service.RunAsync();
+
+        Assert.Equal(YearSyncOutcome.Failed, result.Years[2027]);
+        Assert.Contains("2027", state.State.LastError);
+    }
+
+    [Fact]
+    public async Task Run_FailureKind_UnreachableOnlyWhenEveryAttemptWasANetworkError()
+    {
+        static FakeSource Down(string name, bool fallback, Exception ex) => new(name, fallback, _ => throw ex);
+
+        var allDown = Build(sources: new ICalendarSource[]
+        {
+            Down("official", false, new HttpRequestException("dns")),
+            Down("mirror", true, new TaskCanceledException("timeout")),
+        });
+        Assert.Equal(CalendarSyncFailureKind.Unreachable, (await allDown.Service.RunAsync()).FailureKind);
+
+        var mirrorBadData = Build(sources: new ICalendarSource[]
+        {
+            Down("official", false, new HttpRequestException("dns")),
+            Down("mirror", true, new CalendarSyncException(CalendarSyncFailure.Failed, "格式不符")),
+        });
+        Assert.Equal(CalendarSyncFailureKind.Failed, (await mirrorBadData.Service.RunAsync()).FailureKind);
+
+        var http503 = Build(sources: Down("official", false, new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 503")));
+        Assert.Equal(CalendarSyncFailureKind.Failed, (await http503.Service.RunAsync()).FailureKind);
+
+        var ok = Build(sources: new FakeSource("official", false, y => Official(y, NewYearOnly(y))));
+        Assert.Null((await ok.Service.RunAsync()).FailureKind);
+    }
+
+    [Fact]
+    public async Task Run_ChangesInsidePublishedMonths_AreReportedAndLogged()
+    {
+        var store = new InMemoryStore().WithPublished(new YearMonth(2028, 1)).WithDraft(new YearMonth(2028, 2));
+        var source = new FakeSource("official", false, y => Official(y, y == 2028 ? Holidays2028() : NewYearOnly(y)));
+        var (service, _, _, log) = Build(store, source);
+
+        var result = await service.RunAsync();
+
+        // 2028-01（已發布）有變動；2028-02（草稿）的補班日不算
+        Assert.Equal(new[] { "2028-01" }, result.AffectedPublishedMonths);
+        Assert.Contains(log.Lines, l => l.Contains("2028-01") && l.Contains("已發布"));
     }
 
     [Fact]

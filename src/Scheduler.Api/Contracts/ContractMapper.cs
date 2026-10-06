@@ -184,6 +184,13 @@ internal static class ContractMapper
             v.Running,
             v.FinishedAt,
             v.UpdatedYears,
+            v.AffectedPublishedMonths,
+            v.FailureKind switch
+            {
+                CalendarSyncFailureKind.Unreachable => "unreachable",
+                CalendarSyncFailureKind.Failed => "failed",
+                _ => null,
+            },
             v.LastSuccessAt,
             v.LastError,
             v.Years.Select(y => new CalendarSyncedYearDto(y.Year, y.Source, y.SyncedAt)).ToArray());

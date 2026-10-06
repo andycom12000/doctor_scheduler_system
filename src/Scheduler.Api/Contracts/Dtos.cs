@@ -191,6 +191,8 @@ public sealed record CalendarSyncStatusDto(
     bool Running,
     DateTimeOffset? FinishedAt,
     IReadOnlyList<int> UpdatedYears,
+    IReadOnlyList<string> AffectedPublishedMonths,
+    string? FailureKind,
     DateTimeOffset? LastSuccessAt,
     string? LastError,
     IReadOnlyList<CalendarSyncedYearDto> Years);

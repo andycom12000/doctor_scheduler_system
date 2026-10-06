@@ -126,6 +126,7 @@ public static class ApiHost
             app.Services, options.SeedReferenceRoster, cancellationToken, options.RosterFilePath);
 
         app.UseSchedulerErrors();
+        app.UseCalendarSyncGuard();
         app.MapReadEndpoints();
         app.MapWriteEndpoints();
         app.MapSolverEndpoints();
@@ -140,7 +141,9 @@ public static class ApiHost
     /// </summary>
     private static void AddCalendarSync(IServiceCollection services, ApiHostOptions options)
     {
-        services.AddScoped<CalendarSyncService>();
+        services.AddSingleton<ICalendarSyncScopeFactory, ServiceProviderCalendarSyncScopeFactory>();
+        services.AddSingleton<CalendarSyncService>();
+        services.AddSingleton<CalendarSyncRunner>();
         services.AddScoped<CalendarSyncQueries>();
         services.AddSingleton(new CalendarSyncProgress(options.CalendarAutoSync));
         services.AddSingleton<ICalendarSyncLog>(sp => new FileCalendarSyncLog(

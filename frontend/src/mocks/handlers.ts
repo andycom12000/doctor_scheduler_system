@@ -50,7 +50,7 @@ import {
 import { store, type SolverJobState } from './store'
 
 /**
- * Mock 端點，與 api-contract.yaml 的 43 個操作一一對應，依契約的 tag 分段。
+ * Mock 端點，與 api-contract.yaml 的 44 個操作一一對應，依契約的 tag 分段。
  *
  * **SSE 備註**：`/solver-jobs/{jobId}/stream` 用 `ReadableStream` 模擬
  * `text/event-stream`，本機瀏覽器測試沒問題；但 MSW 對 `EventSource` 攔截的
@@ -804,18 +804,9 @@ const settingsHandlers = [
 
   // 自動更新在 mock 裡永遠是「沒開」：前端輪詢一次就結束，不會出現 toast。
   // 字面路徑要排在 :year 前面。
-  http.get('/api/calendars/sync-status', () => {
-    const response: CalendarSyncStatus = {
-      enabled: false,
-      running: false,
-      finishedAt: null,
-      updatedYears: [],
-      lastSuccessAt: null,
-      lastError: null,
-      years: [],
-    }
-    return HttpResponse.json(response)
-  }),
+  // 重試端點同樣冪等：沒開自動更新就只回目前狀態。
+  http.get('/api/calendars/sync-status', () => HttpResponse.json(mockCalendarSyncStatus())),
+  http.post('/api/calendars/sync', () => HttpResponse.json(mockCalendarSyncStatus())),
 
   http.get('/api/calendars/:year', ({ params }) => {
     const year = Number(params.year)
@@ -949,6 +940,21 @@ const staffHandlers = [
     return HttpResponse.json(staff)
   }),
 ]
+
+/** mock 的行事曆自動更新永遠是「沒開」：前端查一次就解鎖，不會出現遮罩或 toast。 */
+function mockCalendarSyncStatus(): CalendarSyncStatus {
+  return {
+    enabled: false,
+    running: false,
+    finishedAt: null,
+    updatedYears: [],
+    affectedPublishedMonths: [],
+    failureKind: null,
+    lastSuccessAt: null,
+    lastError: null,
+    years: [],
+  }
+}
 
 export const handlers = [
   ...healthHandlers,

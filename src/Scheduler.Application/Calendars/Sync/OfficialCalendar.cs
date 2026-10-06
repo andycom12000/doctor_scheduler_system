@@ -50,7 +50,7 @@ public static class OfficialCalendar
         try
         {
             return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
-                .GetString(bytes).TrimStart('﻿');
+                .GetString(bytes).TrimStart('\uFEFF');
         }
         catch (DecoderFallbackException)
         {
@@ -62,7 +62,7 @@ public static class OfficialCalendar
     /// <summary>CSV：<c>西元日期,星期,是否放假,備註</c>，第一列是表頭。</summary>
     public static IReadOnlyList<OfficialDay> ParseCsv(string text, int year)
     {
-        var lines = text.Split('\n').Select(l => l.Trim('\r', ' ', '﻿')).Where(l => l.Length > 0).ToList();
+        var lines = text.Split('\n').Select(l => l.Trim('\r', ' ', '\uFEFF')).Where(l => l.Length > 0).ToList();
         if (lines.Count < 2)
         {
             throw Bad($"CSV 沒有資料列（{lines.Count} 列）");

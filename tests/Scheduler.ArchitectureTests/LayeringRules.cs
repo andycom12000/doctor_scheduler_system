@@ -113,6 +113,14 @@ public class LayeringRules
     }
 
     [Fact]
+    public void Application_零_PackageReference()
+    {
+        // CLAUDE.md：Application 零套件相依（Big5 解碼等需求用 shared framework 內建的 BCL，不加套件）
+        var packages = PackageReferences("src/Scheduler.Application/Scheduler.Application.csproj");
+        Assert.True(packages.Length == 0, $"Scheduler.Application 宣告了套件：{string.Join(", ", packages)}");
+    }
+
+    [Fact]
     public void Application_編譯後不得帶入_EF_Core()
     {
         var offenders = ReferencedNames(Application)

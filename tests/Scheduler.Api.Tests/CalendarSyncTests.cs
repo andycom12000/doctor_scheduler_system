@@ -272,15 +272,18 @@ public sealed class CalendarSyncTests
 
         public Task<JsonNode> GetStatusAsync() => GetAsync("/api/calendars/sync-status", "getCalendarSyncStatus");
 
-        /// <summary>等背景工作結束（上限 10 秒，逾時視為測試失敗而不是卡死）。</summary>
+        /// <summary>
+        /// 等背景工作結束（上限 10 秒，逾時視為測試失敗而不是卡死）。等待期間只看記憶體內的進度、不打端點：
+        /// 測試共用同一條 SqliteConnection，worker 還在寫入時不要同時從另一條路徑讀。
+        /// </summary>
         public async Task<JsonNode> WaitUntilFinishedAsync()
         {
+            var progress = App.Services.GetRequiredService<CalendarSyncProgress>();
             for (var i = 0; i < 200; i++)
             {
-                var json = await GetStatusAsync();
-                if (!json["running"]!.GetValue<bool>())
+                if (!progress.Snapshot().Running)
                 {
-                    return json;
+                    return await GetStatusAsync();
                 }
 
                 await Task.Delay(50);
@@ -312,13 +315,15 @@ public sealed class CalendarSyncTests
                 // 固定「今天」是 2027-10-06：同步今年 2027、明年 2028
                 services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTime()));
                 services.Replace(ServiceDescriptor.Singleton<ICalendarSyncLog>(log));
-                if (sources.Count > 0)
+                // 開了自動更新就一律先拿掉真來源：測試絕不連外網，沒給假來源就是「沒有來源」
+                if (autoSync)
                 {
                     services.RemoveAll<ICalendarSource>();
-                    foreach (var s in sources)
-                    {
-                        services.AddSingleton(s);
-                    }
+                }
+
+                foreach (var s in sources)
+                {
+                    services.AddSingleton(s);
                 }
             }));
         await app.StartAsync();
@@ -401,6 +406,158 @@ public sealed class CalendarSyncTests
         Assert.DoesNotContain(calendar["days"]!.AsArray(), d => d!["isPublicHoliday"]!.GetValue<bool>());
     }
 
+    // ---- 同步期間鎖住寫入、失敗分類、重試（#112 追加）----
+
+    private sealed class GatedSource : ICalendarSource
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
+
+        public string Name => "official";
+        public bool IsFallback => false;
+        public int Calls => Volatile.Read(ref _calls);
+        public void Release() => _gate.TrySetResult();
+
+        public async Task<IReadOnlyList<OfficialDay>> FetchYearAsync(int year, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _calls);
+            await _gate.Task.WaitAsync(cancellationToken);
+            return Official2028(year);
+        }
+    }
+
+    private static async Task<(HttpStatusCode Status, JsonNode Body)> SendAsync(TestHostHandle host, HttpMethod method, string path, string? body = null)
+    {
+        using var client = host.App.GetTestClient();
+        using var request = new HttpRequestMessage(method, path);
+        if (body is not null)
+        {
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+        }
+
+        using var response = await client.SendAsync(request);
+        return (response.StatusCode, JsonNode.Parse(await response.Content.ReadAsStringAsync())!);
+    }
+
+    [Fact]
+    public async Task 同步執行中_寫入端點回409_讀取照常_結束後解鎖()
+    {
+        var source = new GatedSource();
+        await using var host = await HostAsync(true, new ICalendarSource[] { source });
+
+        // 啟動一開始就是 running：沒有「閒置」的空檔
+        var running = await host.GetStatusAsync();
+        Assert.True(running["running"]!.GetValue<bool>());
+        Assert.Null(running["failureKind"]);
+
+        var (status, body) = await SendAsync(host, HttpMethod.Patch, "/api/calendars/2028/2028-02-05", """{"isHoliday":true}""");
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.Equal("CALENDAR_SYNC_IN_PROGRESS", body["error"]!["code"]!.GetValue<string>());
+        Assert.Empty(ContractSchema.Current.ValidateComponent("ErrorResponse", body));
+
+        // 其他寫入端點同樣被擋，讀取照常
+        Assert.Equal(HttpStatusCode.Conflict, (await SendAsync(host, HttpMethod.Put, "/api/blocked-days/2026-10/s-r1/2026-10-05")).Status);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(host, HttpMethod.Get, "/api/calendars/2026")).Status);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(host, HttpMethod.Get, "/api/staff")).Status);
+
+        source.Release();
+        await host.WaitUntilFinishedAsync();
+
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await SendAsync(host, HttpMethod.Patch, "/api/calendars/2028/2028-02-05", """{"isHoliday":true,"isMakeUpWorkday":false}""")).Status);
+    }
+
+    [Fact]
+    public async Task 重試端點冪等_同步中重複觸發不另起一輪_回目前狀態()
+    {
+        var source = new GatedSource();
+        await using var host = await HostAsync(true, new ICalendarSource[] { source });
+        await Task.Delay(100); // 讓啟動那一輪卡在 gate 上
+
+        for (var i = 0; i < 3; i++)
+        {
+            var (status, body) = await SendAsync(host, HttpMethod.Post, "/api/calendars/sync");
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Empty(ContractSchema.Current.Validate("startCalendarSync", 200, body));
+            Assert.True(body["running"]!.GetValue<bool>());
+        }
+
+        source.Release();
+        await host.WaitUntilFinishedAsync();
+        // 只有啟動那一輪：三年（2026、2027、2028）各抓一次，重複觸發沒有多開
+        Assert.Equal(3, source.Calls);
+    }
+
+    [Fact]
+    public async Task 沒開自動更新_重試端點不起任何同步_回enabled_false()
+    {
+        await using var host = await HostAsync(false, new List<ICalendarSource>());
+
+        var (status, body) = await SendAsync(host, HttpMethod.Post, "/api/calendars/sync");
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.False(body["enabled"]!.GetValue<bool>());
+        Assert.False(body["running"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task 完全連不上網_failureKind是unreachable_且寫入解鎖()
+    {
+        var sources = new ICalendarSource[]
+        {
+            new DelegateSource("official", false, _ => throw new HttpRequestException("name resolution failed")),
+            new DelegateSource("mirror", true, _ => throw new TaskCanceledException("逾時")),
+        };
+        await using var host = await HostAsync(true, sources);
+
+        var status = await host.WaitUntilFinishedAsync();
+
+        Assert.Equal("unreachable", status["failureKind"]!.GetValue<string>());
+        Assert.False(status["running"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(host, HttpMethod.Patch, "/api/calendars/2028/2028-02-05", """{"isHoliday":true}""")).Status);
+    }
+
+    [Fact]
+    public async Task 連得上但失敗_failureKind是failed()
+    {
+        // 主來源連不上、備援連得上但資料壞：整體是「連得上但失敗」，只能重試
+        var sources = new ICalendarSource[]
+        {
+            new DelegateSource("official", false, _ => throw new HttpRequestException("連不上")),
+            new DelegateSource("mirror", true, _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "格式不符")),
+        };
+        await using var host = await HostAsync(true, sources);
+        Assert.Equal("failed", (await host.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
+
+        // 主來源 HTTP 5xx（有回應）也是 failed
+        await using var host2 = await HostAsync(true, new ICalendarSource[]
+        {
+            new DelegateSource("official", false, _ => throw new CalendarSyncException(CalendarSyncFailure.Failed, "HTTP 503")),
+        });
+        Assert.Equal("failed", (await host2.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task 重試_上一輪失敗後可再跑一輪_成功就清掉failureKind()
+    {
+        var fail = true;
+        var flaky = new DelegateSource("official", false, y => fail
+            ? throw new HttpRequestException("斷線")
+            : Official2028(y));
+        await using var host = await HostAsync(true, new ICalendarSource[] { flaky });
+        Assert.Equal("unreachable", (await host.WaitUntilFinishedAsync())["failureKind"]!.GetValue<string>());
+
+        fail = false;
+        var (_, started) = await SendAsync(host, HttpMethod.Post, "/api/calendars/sync");
+        Assert.True(started["running"]!.GetValue<bool>()); // 回應當下就是 running，前端不會看到空檔
+        Assert.Null(started["failureKind"]);
+
+        var done = await host.WaitUntilFinishedAsync();
+        Assert.Null(done["failureKind"]);
+        Assert.Equal(new[] { 2028 }, done["updatedYears"]!.AsArray().Select(n => n!.GetValue<int>()));
+    }
+
     [Fact]
     public async Task 使用者覆寫的日子不被自動更新蓋掉()
     {
@@ -417,8 +574,7 @@ public sealed class CalendarSyncTests
             Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
         }
 
-        using var scope = host.App.Services.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<CalendarSyncService>().RunAsync();
+        var result = await host.App.Services.GetRequiredService<CalendarSyncService>().RunAsync();
 
         Assert.Empty(result.UpdatedYears);
         var calendar = await host.GetAsync("/api/calendars/2028", "getCalendar");

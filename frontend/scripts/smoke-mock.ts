@@ -128,8 +128,18 @@ async function main() {
       assert(typeof body.enabled === 'boolean' && typeof body.running === 'boolean', 'sync-status enabled／running 是 boolean')
       assert(Array.isArray(body.updatedYears) && Array.isArray(body.years), 'sync-status updatedYears／years 是陣列')
       // 真後端可能已同步過（years 非空）；欄位齊全即可，null 欄位要明確輸出
-      for (const key of ['finishedAt', 'lastSuccessAt', 'lastError']) {
+      for (const key of ['finishedAt', 'lastSuccessAt', 'lastError', 'failureKind']) {
         assert(key in body, `sync-status 有 ${key} 欄位（可為 null）`)
+      }
+      assert(Array.isArray(body.affectedPublishedMonths), 'sync-status affectedPublishedMonths 是陣列')
+
+      // 重試端點：冪等，沒開自動更新時只回目前狀態（打真後端不會真的去連外網，smoke 的後端是關閉自動更新啟動的才安全，
+      // 所以只有 enabled=false 時才打）
+      if (body.enabled === false) {
+        const retry = await fetch(`${BASE}/calendars/sync`, { method: 'POST' })
+        assert(retry.status === 200, 'POST /calendars/sync → 200')
+        const retried = await retry.json()
+        assert(retried.enabled === false && retried.running === false, '沒開自動更新時 POST /calendars/sync 不啟動同步')
       }
     }
 

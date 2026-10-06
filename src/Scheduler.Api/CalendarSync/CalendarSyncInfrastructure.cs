@@ -1,5 +1,6 @@
 using System.Net;
 using Scheduler.Application.Calendars.Sync;
+using Scheduler.Application.Persistence;
 
 namespace Scheduler.Api.CalendarSync;
 
@@ -134,40 +135,115 @@ internal sealed class FileCalendarSyncLog : ICalendarSyncLog
 /// </summary>
 internal sealed class CalendarSyncWorker : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopes;
-    private readonly CalendarSyncProgress _progress;
-    private readonly ICalendarSyncLog _log;
-    private readonly TimeProvider _time;
+    private readonly CalendarSyncRunner _runner;
 
-    public CalendarSyncWorker(IServiceScopeFactory scopes, CalendarSyncProgress progress, ICalendarSyncLog log, TimeProvider time)
+    public CalendarSyncWorker(CalendarSyncRunner runner)
     {
-        _scopes = scopes;
-        _progress = progress;
-        _log = log;
-        _time = time;
+        _runner = runner;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // 讓出執行緒：host 啟動流程不等網路。啟動那一輪的 running 狀態在 CalendarSyncProgress 建構時就已成立，
+        // 前端不會在這裡之前看到「閒置」。
+        await Task.Yield();
+        await _runner.RunAsync(stoppingToken);
+    }
+}
+
+/// <summary>
+/// 跑一輪同步並把結果寫進 <see cref="CalendarSyncProgress"/>。啟動（<see cref="CalendarSyncWorker"/>）與
+/// 使用者按「重試」（<c>POST /api/calendars/sync</c>）共用；任何例外都吞掉並寫紀錄，背景工作絕不讓 process 崩潰。
+/// </summary>
+internal sealed class CalendarSyncRunner
+{
+    private readonly CalendarSyncService _service;
+    private readonly CalendarSyncProgress _progress;
+    private readonly ICalendarSyncLog _log;
+    private readonly TimeProvider _time;
+    private readonly IHostApplicationLifetime _lifetime;
+
+    public CalendarSyncRunner(
+        CalendarSyncService service, CalendarSyncProgress progress, ICalendarSyncLog log, TimeProvider time, IHostApplicationLifetime lifetime)
+    {
+        _service = service;
+        _progress = progress;
+        _log = log;
+        _time = time;
+        _lifetime = lifetime;
+    }
+
+    /// <summary>
+    /// 重試：沒開、或已經在跑就什麼都不做（冪等，回 false）；否則先把狀態標成 running 再在背景開跑，
+    /// 所以呼叫端緊接著讀到的狀態一定是 running。
+    /// </summary>
+    public bool StartIfIdle()
+    {
+        if (!_progress.TryBegin())
+        {
+            return false;
+        }
+
+        _ = Task.Run(() => RunAsync(_lifetime.ApplicationStopping));
+        return true;
+    }
+
+    public async Task RunAsync(CancellationToken stoppingToken)
+    {
         IReadOnlyList<int> updated = Array.Empty<int>();
+        IReadOnlyList<string> affected = Array.Empty<string>();
+        CalendarSyncFailureKind? failure = null;
         try
         {
-            // 讓出執行緒：host 啟動流程不等網路
-            await Task.Yield();
-            using var scope = _scopes.CreateScope();
-            var result = await scope.ServiceProvider.GetRequiredService<CalendarSyncService>().RunAsync(stoppingToken);
+            var result = await _service.RunAsync(stoppingToken);
             updated = result.UpdatedYears;
+            affected = result.AffectedPublishedMonths;
+            failure = result.FailureKind;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
+            failure = CalendarSyncFailureKind.Failed;
             _log.Write($"同步中止：{ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
-            _progress.Finish(_time.GetUtcNow(), updated);
+            _progress.Finish(_time.GetUtcNow(), updated, affected, failure);
         }
+    }
+}
+
+/// <summary><see cref="ICalendarSyncScopeFactory"/> 的 DI 版：每次 <c>Create</c> 開一個新的 DI scope（新的 DbContext），用完就丟。</summary>
+internal sealed class ServiceProviderCalendarSyncScopeFactory : ICalendarSyncScopeFactory
+{
+    private readonly IServiceScopeFactory _scopes;
+
+    public ServiceProviderCalendarSyncScopeFactory(IServiceScopeFactory scopes)
+    {
+        _scopes = scopes;
+    }
+
+    public ICalendarSyncScope Create() => new Scope(_scopes.CreateScope());
+
+    private sealed class Scope : ICalendarSyncScope
+    {
+        private readonly IServiceScope _scope;
+
+        public Scope(IServiceScope scope)
+        {
+            _scope = scope;
+        }
+
+        public ICalendarRepository Calendar => _scope.ServiceProvider.GetRequiredService<ICalendarRepository>();
+
+        public ICalendarSyncStateRepository State => _scope.ServiceProvider.GetRequiredService<ICalendarSyncStateRepository>();
+
+        public IScheduleRepository Schedules => _scope.ServiceProvider.GetRequiredService<IScheduleRepository>();
+
+        public IUnitOfWork UnitOfWork => _scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        public void Dispose() => _scope.Dispose();
     }
 }

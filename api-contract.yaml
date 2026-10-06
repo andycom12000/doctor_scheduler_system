@@ -955,9 +955,25 @@ paths:
         `finishedAt`、`updatedYears` 只描述**本次程式執行**的那一輪；`lastSuccessAt`、`lastError`、
         `years` 跨啟動保存。同步失敗（斷網、逾時、格式不符）一律安靜，原因寫在程式旁的
         `data/calendar-sync.log`，`lastError` 只放一句摘要。
+
+        **同步執行中（`running`）所有寫入端點回 `409 CALENDAR_SYNC_IN_PROGRESS`，讀取照常**；
+        前端在這段期間以全畫面遮罩鎖住操作，失敗時依 `failureKind` 決定只能重試或可略過。
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarSyncStatus' }
+    post:
+      tags: [settings]
+      operationId: startCalendarSync
+      summary: 重試行事曆自動更新
+      description: |
+        立即在背景再跑一輪同步，回傳目前狀態（此時 `running` 為 true）。**冪等**：沒開自動更新
+        （`enabled: false`）或已經在跑時不另起一輪，直接回目前狀態。此端點不受同步執行中的 409 擋。
+      responses:
+        '200':
+          description: 目前狀態
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CalendarSyncStatus' }
@@ -1236,6 +1252,7 @@ components:
         - STAFF_HAS_DUTIES               # 已有值班紀錄者不可硬刪
         - SOLVER_BUSY                    # 已有求解工作在執行中
         - SOLVER_FAILED
+        - CALENDAR_SYNC_IN_PROGRESS      # 行事曆自動更新執行中：所有寫入端點暫時回 409，讀取照常
 
     Severity:
       type: string
@@ -2060,7 +2077,7 @@ components:
 
     CalendarSyncStatus:
       type: object
-      required: [enabled, running, finishedAt, updatedYears, lastSuccessAt, lastError, years]
+      required: [enabled, running, finishedAt, updatedYears, affectedPublishedMonths, failureKind, lastSuccessAt, lastError, years]
       properties:
         enabled: { type: boolean, description: 這次執行有沒有開自動更新 }
         running: { type: boolean, description: 背景工作是否還沒結束 }
@@ -2072,6 +2089,17 @@ components:
           type: array
           items: { type: integer }
           description: 本次執行實際寫入了變動的年份，遞增排序
+        affectedPublishedMonths:
+          type: array
+          items: { type: string, pattern: '^\d{4}-\d{2}$' }
+          description: 本次執行的變動落在哪些**已發布**月份（yyyy-MM，遞增）；那些月份的額度點數可能改變。前端 toast 多帶一句提醒
+        failureKind:
+          type: [string, 'null']
+          enum: [unreachable, failed, null]
+          description: |
+            本次執行這一輪同步失敗的性質；`running` 為 true 或沒有失敗時為 null。
+            `unreachable` = 完全連不上網（主來源與備援都是網路層錯誤：DNS、逾時、TLS、proxy），
+            前端可讓使用者「先用現有資料」繼續；`failed` = 連得上但中途失敗（驗證不過、寫入失敗…），只能重試。
         lastSuccessAt:
           type: [string, 'null']
           format: date-time
