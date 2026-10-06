@@ -156,8 +156,7 @@ const currentName = computed(() => route.name?.toString())
 
 /* 窄視窗先讓出版本號，導覽不能被擠掉 */
 @media (max-width: 900px) {
-  .shell__version,
-  .shell__tag {
+  .shell__badge {
     display: none;
   }
 
